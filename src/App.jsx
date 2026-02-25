@@ -1,5 +1,8 @@
+// ==========================================
+// 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
+// ==========================================
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
@@ -8,7 +11,8 @@ import {
   updateDoc, 
   deleteDoc, 
   doc,
-  increment 
+  increment,
+  enableIndexedDbPersistence // ดึงเครื่องมือเปิดระบบ Cache (โหลดไว/ทำงานออฟไลน์ได้)
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -29,10 +33,12 @@ import {
   User,
   Download,
   History,
-  BarChart3 // เพิ่มไอคอนกราฟสำหรับหน้าสรุปยอดขาย
+  BarChart3 
 } from 'lucide-react';
 
-// --- FIREBASE CONFIGURATION ---
+// ==========================================
+// 🔥 2. ตั้งค่าการเชื่อมต่อฐานข้อมูล (Firebase Setup)
+// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyCgC0ikl147mwcC1-J36Qg27SPUNSz8Afw",
   authDomain: "the-royal-queen.firebaseapp.com",
@@ -42,60 +48,109 @@ const firebaseConfig = {
   appId: "1:1070880208582:web:9530fdad63bab3454149c7"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// ป้องกันการเชื่อมต่อซ้ำซ้อน (Initialize Firebase)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
+// เปิดใช้งานโหมดออฟไลน์ (Offline Cache) เพื่อให้ระบบโหลดเร็วและคีย์ข้อมูลตอนเน็ตหลุดได้
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    console.warn("ไม่สามารถเปิดใช้งาน Cache ได้:", err.message);
+  });
+} catch (e) {
+  console.warn("Persistence error:", e);
+}
+
+
+// ==========================================
+// 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
+// ==========================================
 export default function App() {
+  // ตรวจสอบว่าเข้าใช้งานผ่านลิงก์ของผู้บริหารหรือไม่ (?view=dashboard)
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
 
-  // --- STATE MANAGEMENT ---
-  const [loggedInUser, setLoggedInUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('sales');
+  // --- 🗄️ 3.1 การจัดการตัวแปรสถานะ (State Management) ---
+  const [loggedInUser, setLoggedInUser] = useState(null); // เก็บข้อมูลคนที่ล็อกอิน
+  const [activeTab, setActiveTab] = useState('sales');    // เก็บสถานะว่าเปิดหน้าเมนูไหนอยู่
+  
+  // ตัวแปรสำหรับเก็บข้อมูลจากฐานข้อมูล
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [users, setUsers] = useState([]);
+  
+  // ตัวแปรสำหรับจัดการสถานะการโหลดข้อมูลและแจ้งเตือน Error
   const [isLoading, setIsLoading] = useState(true);
   const [isUsersLoaded, setIsUsersLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
-  // --- CONNECT TO FIREBASE ---
+  // --- 🔄 3.2 เชื่อมต่อและดึงข้อมูลแบบ Real-time (Firebase Subscription) ---
   useEffect(() => {
+    // ดักจับกรณีโหลดข้อมูลนานเกิน 10 วินาที
+    const connectionTimeout = setTimeout(() => {
+      if (!isUsersLoaded || isLoading) {
+        setLoadError("การเชื่อมต่อใช้เวลานานผิดปกติ กรุณาตรวจสอบอินเทอร์เน็ตหรือรีเฟรชหน้าจอใหม่");
+      }
+    }, 10000);
+
+    // ดึงข้อมูล "บัญชีผู้ใช้งาน"
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       if (snapshot.empty) {
+        // หากไม่มีข้อมูลเลย ให้สร้างบัญชีตั้งต้น
         addDoc(collection(db, "users"), { username: 'admin', password: '123456', role: 'admin' });
         addDoc(collection(db, "users"), { username: 'user', password: '123456', role: 'staff' });
       } else {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUsers(usersData);
         setIsUsersLoaded(true);
+        setLoadError('');
       }
+    }, (error) => {
+      console.error("Users Error:", error);
+      setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้: " + error.message);
+      setIsUsersLoaded(true);
     });
 
+    // ดึงข้อมูล "สินค้า"
     const unsubscribeProducts = onSnapshot(collection(db, "products"), (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProducts(productsData);
+    }, (error) => {
+      console.error("Products Error:", error);
+      setLoadError("ไม่สามารถดึงข้อมูลสินค้าได้");
     });
 
+    // ดึงข้อมูล "ยอดขาย"
     const unsubscribeSales = onSnapshot(collection(db, "sales"), (snapshot) => {
       const salesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSales(salesData);
       setIsLoading(false);
+      setLoadError('');
+    }, (error) => {
+      console.error("Sales Error:", error);
+      setLoadError("ไม่สามารถดึงข้อมูลยอดขายได้: " + error.message);
+      setIsLoading(false);
     });
 
+    // คืนค่า (Cleanup) เมื่อออกจากหน้าเว็บ
     return () => {
+      clearTimeout(connectionTimeout);
       unsubscribeUsers();
       unsubscribeProducts();
       unsubscribeSales();
     };
   }, []);
 
-  // --- HELPER FUNCTIONS ---
+  // --- 🛠️ 3.3 ฟังก์ชันช่วยเหลือ (Helper Functions) ---
+  
+  // แปลงตัวเลขเป็นรูปแบบเงินบาท
   const formatMoney = (amount) => {
     return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(amount);
   };
 
+  // ค้นหาสินค้าจากไอดี
   const getProduct = (id) => products.find(p => p.id === id);
 
+  // ฟังก์ชันดาวน์โหลดไฟล์ CSV
   const downloadCSV = (data, filename) => {
     const csvRows = [];
     if (data.length === 0) return;
@@ -122,6 +177,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // ดึงยอดขายออกเป็นไฟล์
   const exportSalesReport = () => {
     if (sales.length === 0) return;
     const reportData = sales.map(s => {
@@ -138,6 +194,7 @@ export default function App() {
     downloadCSV(reportData, `ยอดขาย_TheRoyalQueen_${new Date().toLocaleDateString()}.csv`);
   };
 
+  // ดึงรายการสินค้าออกเป็นไฟล์
   const exportProductsReport = () => {
     if (products.length === 0) return;
     const reportData = products.map(p => ({
@@ -150,8 +207,12 @@ export default function App() {
     downloadCSV(reportData, `รายการสินค้า_TheRoyalQueen_${new Date().toLocaleDateString()}.csv`);
   };
 
-  // --- VIEWS ---
 
+  // ==========================================
+  // 🖥️ 4. ส่วนแสดงผลหน้าจอต่างๆ (Views / Pages)
+  // ==========================================
+
+  // 👤 [View 1] หน้าเข้าสู่ระบบ (Login)
   const LoginView = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -204,12 +265,12 @@ export default function App() {
     );
   };
 
+  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard)
   const DashboardView = () => {
     const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA')); 
     const [filterMonth, setFilterMonth] = useState(new Date().toLocaleDateString('en-CA').substring(0, 7)); 
     const [filterProductId, setFilterProductId] = useState('all');
 
-    // กรองยอดขายรายวัน
     const todaySales = sales.filter(s => {
       const saleDateLocal = new Date(s.date).toLocaleDateString('en-CA');
       const isDateMatch = saleDateLocal === filterDate;
@@ -217,7 +278,6 @@ export default function App() {
       return isDateMatch && isProductMatch;
     });
 
-    // กรองยอดขายรายเดือน
     const monthSales = sales.filter(s => {
       const saleMonthLocal = new Date(s.date).toLocaleDateString('en-CA').substring(0, 7);
       const isMonthMatch = saleMonthLocal === filterMonth;
@@ -225,7 +285,6 @@ export default function App() {
       return isMonthMatch && isProductMatch;
     });
 
-    // คำนวณ: รายวัน (ยอดขาย, ต้นทุน, กำไร)
     const todayTotal = todaySales.reduce((sum, s) => sum + s.total, 0);
     const todayCost = todaySales.reduce((sum, s) => {
       const p = getProduct(s.productId);
@@ -233,7 +292,6 @@ export default function App() {
     }, 0);
     const todayProfit = todayTotal - todayCost;
 
-    // คำนวณ: รายเดือน (ยอดขาย, ต้นทุน, กำไร)
     const monthTotal = monthSales.reduce((sum, s) => sum + s.total, 0);
     const monthCost = monthSales.reduce((sum, s) => {
       const p = getProduct(s.productId);
@@ -241,8 +299,6 @@ export default function App() {
     }, 0);
     const monthProfit = monthTotal - monthCost;
 
-    // คำนวณ: ภาพรวมทั้งหมดตั้งแต่เปิดร้าน (ยอดขาย, ต้นทุน, กำไร)
-    // กรองตามสินค้าที่เลือกด้วย เพื่อให้ดูภาพรวมของสินค้านั้นๆ ได้
     const allTimeFilteredSales = sales.filter(s => filterProductId === 'all' || s.productId === filterProductId);
     const allTimeTotal = allTimeFilteredSales.reduce((sum, s) => sum + s.total, 0);
     const allTimeCost = allTimeFilteredSales.reduce((sum, s) => {
@@ -251,7 +307,6 @@ export default function App() {
     }, 0);
     const allTimeProfit = allTimeTotal - allTimeCost;
 
-    // คำนวณสินค้าขายดี เฉพาะในเดือนและสินค้าที่เลือก
     const productSalesCount = {};
     monthSales.forEach(s => {
       productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + s.quantity;
@@ -322,10 +377,7 @@ export default function App() {
           </div>
         </div>
         
-        {/* กล่องแสดง สรุปยอดขาย ต้นทุน กำไร */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* 1. รายวัน */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
             <div className="flex items-center space-x-3 mb-4">
@@ -342,7 +394,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* 2. รายเดือน */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
             <div className="flex items-center space-x-3 mb-4">
@@ -360,7 +411,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. ภาพรวมทั้งหมด (All-time) */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden bg-gradient-to-br from-white to-gray-50">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
             <div className="flex items-center space-x-3 mb-4">
@@ -377,7 +427,6 @@ export default function App() {
               <div className="text-xs text-right text-gray-400 font-medium">({allTimeFilteredSales.length} ออเดอร์)</div>
             </div>
           </div>
-
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -407,14 +456,13 @@ export default function App() {
     );
   };
 
-  // --- SALES HISTORY VIEW ---
+  // 🕒 [View 3] หน้าประวัติการขาย และแก้ไขออเดอร์ (Sales History)
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '' });
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // ฟังก์ชันแปลงเวลาให้อยู่ในรูปแบบที่ input type="datetime-local" รองรับ
     const formatForInput = (isoString) => {
       if (!isoString) return '';
       const d = new Date(isoString);
@@ -452,7 +500,6 @@ export default function App() {
         if (!newProductData) throw new Error("ไม่พบข้อมูลสินค้าใหม่");
         if (newQty < 1) throw new Error("จำนวนต้องมากกว่า 0");
 
-        // ตรวจสอบความถูกต้องของวันที่ใหม่
         const parsedDate = new Date(editForm.date);
         if (isNaN(parsedDate.getTime())) throw new Error("รูปแบบวันที่ไม่ถูกต้อง");
         const newDateIso = parsedDate.toISOString();
@@ -473,7 +520,7 @@ export default function App() {
           productId: newProductId,
           quantity: newQty,
           total: newTotal,
-          date: newDateIso // อัปเดตวันที่และเวลาใหม่ลงฐานข้อมูล
+          date: newDateIso
         });
 
         setIsEditing(null);
@@ -581,7 +628,7 @@ export default function App() {
                             setEditForm({
                               productId: sale.productId, 
                               quantity: sale.quantity,
-                              date: formatForInput(sale.date) // ดึงเวลาเดิมมาแสดงให้แก้
+                              date: formatForInput(sale.date)
                             }); 
                           }} 
                           className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition"
@@ -609,6 +656,7 @@ export default function App() {
     );
   };
 
+  // 📦 [View 4] หน้าจัดการข้อมูลสินค้า (Products)
   const ProductsView = () => {
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
@@ -680,6 +728,7 @@ export default function App() {
     );
   };
 
+  // 📋 [View 5] หน้าจัดการสต๊อกสินค้า (Stock)
   const StockView = () => {
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
@@ -715,6 +764,7 @@ export default function App() {
     );
   };
 
+  // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบ (Users Management)
   const UsersManagementView = () => {
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff' });
@@ -791,6 +841,7 @@ export default function App() {
     );
   };
 
+  // 🛒 [View 7] หน้าคีย์ยอดขาย POS (Sales POS)
   const SalesView = () => {
     const [selectedProduct, setSelectedProduct] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -798,7 +849,6 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // ดึงรายการขายล่าสุดของวันนี้มาแสดงให้พนักงานทวนสอบ
     const recentSales = sales
       .filter(s => new Date(s.date).toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA'))
       .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -809,8 +859,10 @@ export default function App() {
       if (!selectedProduct) return;
       const product = getProduct(selectedProduct);
       if ((product.stock || 0) < quantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
+      
       setIsProcessing(true);
       try {
+        // เมื่อมี Offline Persistence ฟังก์ชัน addDoc จะเสร็จทันทีแม้เน็ตหลุด (ส่งขึ้น Cloud ภายหลังเมื่อต่อเน็ต)
         await addDoc(collection(db, "sales"), { 
           productId: selectedProduct, 
           quantity, 
@@ -823,9 +875,15 @@ export default function App() {
           stock: increment(-quantity) 
         });
         
-        setSelectedProduct(''); setQuantity(1); setIsError(false); setMessage('บันทึกสำเร็จ');
+        setSelectedProduct(''); 
+        setQuantity(1); 
+        setIsError(false); 
+        setMessage('บันทึกสำเร็จ');
         setTimeout(() => setMessage(''), 3000);
-      } catch (err) { setMessage(err.message); setIsError(true); }
+      } catch (err) { 
+        setMessage(err.message); 
+        setIsError(true); 
+      }
       setIsProcessing(false);
     };
 
@@ -841,7 +899,6 @@ export default function App() {
           </form>
         </div>
 
-        {/* ตารางแสดงรายการขายล่าสุดของวันนี้ สำหรับพนักงาน */}
         <div className="mt-8">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -877,15 +934,28 @@ export default function App() {
     );
   };
 
+
+  // ==========================================
+  // 🎨 5. โครงสร้างหน้าจอหลัก (Main Layout Render)
+  // ==========================================
+
+  // ระหว่างโหลด ให้โชว์หน้า Loading (หากโหลดไม่ขึ้นจะโชว์ Error)
   if (!isUsersLoaded || isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-4 font-sans">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-4 font-sans px-4 text-center">
         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
         <p className="text-gray-500 font-medium">กำลังเตรียมระบบ The Royal Queen...</p>
+        {loadError && (
+          <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg max-w-sm border border-red-100">
+            <p className="font-bold mb-1">พบปัญหาการเชื่อมต่อ</p>
+            <p className="text-sm">{loadError}</p>
+          </div>
+        )}
       </div>
     );
   }
 
+  // หากเข้าด้วยลิงก์ผู้บริหาร จะแสดงหน้า Dashboard เท่านั้น โดยไม่ต้อง Login
   if (isExecutiveView) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
@@ -899,10 +969,14 @@ export default function App() {
     );
   }
 
+  // หากยังไม่ได้ Login ให้โชว์หน้า Login
   if (!loggedInUser) return <LoginView />;
 
+  // หน้าต่างระบบหลักเมื่อ Login สำเร็จ (มีแถบเมนูซ้ายมือ)
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
+      
+      {/* แถบเมนูด้านซ้าย (Sidebar) */}
       <div className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex-shrink-0">
         <div className="p-6"><h1 className="text-xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2"><ShoppingCart className="text-blue-600" /><span>The Royal Queen</span></h1></div>
         <nav className="px-4 pb-6 space-y-1 flex md:flex-col overflow-x-auto md:overflow-visible">
@@ -921,6 +995,7 @@ export default function App() {
         </nav>
       </div>
 
+      {/* พื้นที่แสดงผลด้านขวา (Main Content Area) */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-white h-16 border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
           <div className="text-gray-500 font-medium hidden md:block">
@@ -936,12 +1011,13 @@ export default function App() {
               <span className="font-medium">{loggedInUser.username}</span>
               <span className="text-gray-400">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span>
             </div>
-            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"><LogOut size={18} /></button>
+            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="ออกจากระบบ"><LogOut size={18} /></button>
           </div>
         </header>
 
         <main className="flex-1 overflow-auto p-6 md:p-8">
           <div className="max-w-5xl mx-auto">
+            {/* สลับการแสดงผลหน้าต่างๆ ตามเมนูที่เลือก */}
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'products' && loggedInUser.role === 'admin' && <ProductsView />}
             {activeTab === 'stock' && loggedInUser.role === 'admin' && <StockView />}
