@@ -12,9 +12,9 @@ import {
   deleteDoc, 
   doc,
   increment,
-  initializeFirestore,           // เครื่องมือเชื่อมต่อฐานข้อมูลเวอร์ชันใหม่
-  persistentLocalCache,          // ระบบแคช (Cache) ให้โหลดไว
-  persistentMultipleTabManager   // ระบบจัดการให้เปิดได้หลายแท็บ/หลายเครื่องไม่รวน
+  initializeFirestore,           
+  persistentLocalCache,          
+  persistentMultipleTabManager   
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -54,15 +54,15 @@ const firebaseConfig = {
 let app;
 let db;
 
-if (!getApps().length) {
+try {
+  app = getApp();
+  db = getFirestore(app);
+} catch (e) {
   app = initializeApp(firebaseConfig);
   // เปิดระบบ Offline และให้รองรับการซิงค์ข้อมูลหลายๆ เครื่องพร้อมกัน
   db = initializeFirestore(app, {
     localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
   });
-} else {
-  app = getApp();
-  db = getFirestore(app);
 }
 
 // ==========================================
@@ -73,8 +73,8 @@ export default function App() {
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
 
   // --- 🗄️ 3.1 การจัดการตัวแปรสถานะ (State Management) ---
-  const [loggedInUser, setLoggedInUser] = useState(null); // เก็บข้อมูลคนที่ล็อกอิน
-  const [activeTab, setActiveTab] = useState('sales');    // เก็บสถานะว่าเปิดหน้าเมนูไหนอยู่
+  const [loggedInUser, setLoggedInUser] = useState(null); 
+  const [activeTab, setActiveTab] = useState('sales');    
   
   // ตัวแปรสำหรับเก็บข้อมูลจากฐานข้อมูล
   const [products, setProducts] = useState([]);
@@ -865,7 +865,6 @@ export default function App() {
       
       setIsProcessing(true);
       try {
-        // เมื่อมี Offline Persistence ฟังก์ชัน addDoc จะเสร็จทันทีแม้เน็ตหลุด (ส่งขึ้น Cloud ภายหลังเมื่อต่อเน็ต)
         await addDoc(collection(db, "sales"), { 
           productId: selectedProduct, 
           quantity, 
