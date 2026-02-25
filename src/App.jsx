@@ -12,7 +12,7 @@ import {
   deleteDoc, 
   doc,
   increment,
-  setDoc // เพิ่มคำสั่ง setDoc เข้ามาเพื่อแก้ปัญหาข้อมูลซ้อน
+  setDoc
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -36,8 +36,9 @@ import {
   BarChart3,
   CalendarDays,
   ShieldCheck,
-  Search, // นำเข้าไอคอนค้นหา
-  ArrowUpDown // นำเข้าไอคอนจัดเรียง
+  Search,
+  ArrowUpDown,
+  Store // นำเข้าไอคอนร้านค้า
 } from 'lucide-react';
 
 // ==========================================
@@ -55,13 +56,16 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
-// ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน (Staff Default Permissions)
+// ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน
 const defaultPermissions = {
   dashboard: false,
   products: false,
   stock: false,
   history: false
 };
+
+// ตัวเลือกช่องทางการขาย (ร้านค้า)
+const STORE_OPTIONS = ['Shopee(หลัก)', 'Shopee(รอง)', 'Lazada(หลัก)', 'Lazada(รอง)'];
 
 // ==========================================
 // 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
@@ -220,7 +224,7 @@ export default function App() {
     );
   };
 
-  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard)
+  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard) รูปแบบใหม่ (เข้าใจง่าย & ย้อนหลังได้)
   const DashboardView = () => {
     const [timeframe, setTimeframe] = useState('monthly'); 
     const currentDateStr = new Date().toLocaleDateString('en-CA');
@@ -228,6 +232,7 @@ export default function App() {
     const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7)); 
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
     const [filterProductId, setFilterProductId] = useState('all');
+    const [filterStore, setFilterStore] = useState('all'); // State สำหรับกรองร้านค้า
 
     const currentYearNum = new Date().getFullYear();
     const yearOptions = Array.from({length: 8}, (_, i) => currentYearNum - 5 + i);
@@ -246,9 +251,11 @@ export default function App() {
         else if (timeframe === 'all') isTimeMatch = true;
 
         const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
-        return isTimeMatch && isProductMatch;
+        const isStoreMatch = filterStore === 'all' || s.store === filterStore;
+
+        return isTimeMatch && isProductMatch && isStoreMatch;
       });
-    }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId]);
+    }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0;
     filteredSales.forEach(s => {
@@ -280,13 +287,16 @@ export default function App() {
       else timeLabel = `ภาพรวมทั้งหมด (สะสม)`;
 
       const productLabel = filterProductId === 'all' ? 'ทุกสินค้า' : (getProduct(filterProductId)?.name || 'ไม่ทราบชื่อ');
+      const storeLabel = filterStore === 'all' ? 'ทุกร้านค้า' : filterStore;
+
       const csvRows = [];
       csvRows.push(['รายงานสรุปยอดขาย - The Royal Queen']);
       csvRows.push(['ช่วงเวลา:', timeLabel]);
+      csvRows.push(['ร้านค้า:', storeLabel]);
       csvRows.push(['สินค้าที่เลือก:', productLabel]);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]); 
-      csvRows.push(['วันที่-เวลา', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'จำนวน', 'ต้นทุนรวม', 'ยอดรวมสุทธิ', 'กำไร', 'ผู้ขาย']);
+      csvRows.push(['วันที่-เวลา', 'ร้านค้า', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'จำนวน', 'ต้นทุนรวม', 'ยอดรวมสุทธิ', 'กำไร', 'ผู้ทำรายการ']);
 
       filteredSales.forEach(s => {
         const p = getProduct(s.productId);
@@ -294,11 +304,11 @@ export default function App() {
         const price = p ? p.price : 0;
         const rowCost = cost * s.quantity;
         const rowProfit = s.total - rowCost;
-        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, price, s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
+        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, price, s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
 
       csvRows.push([]);
-      csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', totalQty, totalCost, totalRevenue, totalProfit, '']);
+      csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', totalQty, totalCost, totalRevenue, totalProfit, '']);
       const csvString = csvRows.map(row => row.join(',')).join('\n');
       const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -320,10 +330,20 @@ export default function App() {
             <h2 className="text-base md:text-xl lg:text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
+            {/* กรองร้านค้า */}
+            <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
+               <span className="text-xs text-gray-500 font-medium">ร้านค้า:</span>
+               <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700">
+                 <option value="all">ทุกร้านค้า</option>
+                 {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+               </select>
+            </div>
+            {/* กรองสินค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">สินค้า:</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
+            {/* กรองเวลา */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ดูแบบ:</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสมทั้งหมด</option></select>
@@ -373,7 +393,7 @@ export default function App() {
           <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
             <CalendarDays size={18} className="text-gray-400"/>
             <h3 className="text-sm md:text-lg font-semibold text-gray-800">
-              สินค้าขายดี (ตามช่วงเวลาที่เลือก)
+              สินค้าขายดี (ตามเงื่อนไขที่เลือก)
             </h3>
           </div>
           <div className="p-4 md:p-6">
@@ -404,7 +424,7 @@ export default function App() {
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '' });
+    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '' });
     const [isProcessing, setIsProcessing] = useState(false);
 
     const formatForInput = (isoString) => {
@@ -464,7 +484,8 @@ export default function App() {
           productId: newProductId,
           quantity: newQty,
           total: newTotal,
-          date: newDateIso
+          date: newDateIso,
+          store: editForm.store || STORE_OPTIONS[0] // บันทึกร้านค้าใหม่
         });
 
         setIsEditing(null);
@@ -493,10 +514,11 @@ export default function App() {
         </div>
 
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
                 <th className="p-3 md:p-4 font-medium whitespace-nowrap">เวลาที่ขาย</th>
+                <th className="p-3 md:p-4 font-medium whitespace-nowrap">ร้านค้า</th>
                 <th className="p-3 md:p-4 font-medium">สินค้า</th>
                 <th className="p-3 md:p-4 font-medium text-center">จำนวน</th>
                 <th className="p-3 md:p-4 font-medium text-right">ยอดรวม</th>
@@ -518,6 +540,22 @@ export default function App() {
                       />
                     ) : (
                       new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})
+                    )}
+                  </td>
+                  <td className="p-3 md:p-4 whitespace-nowrap">
+                    {isEditing === sale.id ? (
+                      <select 
+                        value={editForm.store} 
+                        onChange={e => setEditForm({...editForm, store: e.target.value})} 
+                        className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs"
+                        disabled={isProcessing}
+                      >
+                        {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${sale.store?.includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {sale.store || '-'}
+                      </span>
                     )}
                   </td>
                   <td className="p-3 md:p-4 min-w-[150px]">
@@ -572,7 +610,8 @@ export default function App() {
                             setEditForm({
                               productId: sale.productId, 
                               quantity: sale.quantity,
-                              date: formatForInput(sale.date)
+                              date: formatForInput(sale.date),
+                              store: sale.store || STORE_OPTIONS[0]
                             }); 
                           }} 
                           className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
@@ -591,7 +630,7 @@ export default function App() {
                 </tr>
               ))}
               {filteredSales.length === 0 && (
-                <tr><td colSpan="6" className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่มีรายการขายในวันที่เลือก</td></tr>
+                <tr><td colSpan="7" className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่มีรายการขายในวันที่เลือก</td></tr>
               )}
             </tbody>
           </table>
@@ -607,18 +646,14 @@ export default function App() {
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     
-    // State สำหรับการค้นหาและจัดเรียง
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
 
-    // กรองและจัดเรียงข้อมูลสินค้า
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
-
       if (searchTerm) {
         result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
       }
-
       result.sort((a, b) => {
         if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
         if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
@@ -627,7 +662,6 @@ export default function App() {
         if (sortBy === 'stock_desc') return (b.stock || 0) - (a.stock || 0);
         return 0;
       });
-
       return result;
     }, [products, searchTerm, sortBy]);
 
@@ -682,7 +716,6 @@ export default function App() {
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
-          
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการข้อมูลสินค้า</h2>
             <div className="flex space-x-2 w-full sm:w-auto">
@@ -690,26 +723,14 @@ export default function App() {
               {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>}
             </div>
           </div>
-
-          {/* ส่วนค้นหาและจัดเรียง */}
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
             <div className="relative flex-1 sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="ค้นหาสินค้า..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+              <input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
             <div className="flex items-center space-x-2 w-full sm:w-auto">
               <div className="bg-gray-50 p-2 rounded-lg border border-gray-200"><ArrowUpDown size={16} className="text-gray-500" /></div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-              >
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                 <option value="name_asc">ชื่อ (ก - ฮ)</option>
                 <option value="name_desc">ชื่อ (ฮ - ก)</option>
                 <option value="price_desc">ราคาขาย (มากไปน้อย)</option>
@@ -717,7 +738,6 @@ export default function App() {
               </select>
             </div>
           </div>
-
         </div>
         
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -774,18 +794,14 @@ export default function App() {
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
     
-    // State สำหรับการค้นหาและจัดเรียง
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
 
-    // กรองและจัดเรียงข้อมูลสินค้า
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
-
       if (searchTerm) {
         result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
       }
-
       result.sort((a, b) => {
         if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
         if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
@@ -793,7 +809,6 @@ export default function App() {
         if (sortBy === 'stock_asc') return (a.stock || 0) - (b.stock || 0);
         return 0;
       });
-
       return result;
     }, [products, searchTerm, sortBy]);
 
@@ -809,26 +824,14 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
           </div>
-
-          {/* ส่วนค้นหาและจัดเรียง */}
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
             <div className="relative flex-1 sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="ค้นหาสินค้า..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+              <input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
             <div className="flex items-center space-x-2 w-full sm:w-auto">
               <div className="bg-gray-50 p-2 rounded-lg border border-gray-200"><ArrowUpDown size={16} className="text-gray-500" /></div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-              >
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                 <option value="name_asc">ชื่อ (ก - ฮ)</option>
                 <option value="name_desc">ชื่อ (ฮ - ก)</option>
                 <option value="stock_asc">จำนวนสต๊อก (น้อยไปมาก)</option>
@@ -1041,8 +1044,9 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS)
+  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS) พร้อมเลือกร้านค้า
   const SalesView = () => {
+    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]); // เก็บค่าร้านค้าที่เลือก (ค่าเริ่มต้นคืออันแรก)
     const [selectedProduct, setSelectedProduct] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [message, setMessage] = useState('');
@@ -1056,13 +1060,15 @@ export default function App() {
 
     const handleCheckout = async (e) => {
       e.preventDefault();
-      if (!selectedProduct) return;
+      if (!selectedProduct || !selectedStore) return;
+      
       const product = getProduct(selectedProduct);
       if ((product.stock || 0) < quantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
       
       setIsProcessing(true);
       try {
         await addDoc(collection(db, "sales"), { 
+          store: selectedStore, // บันทึกร้านค้าด้วย
           productId: selectedProduct, 
           quantity, 
           total: product.price * quantity, 
@@ -1090,29 +1096,65 @@ export default function App() {
       <div className="space-y-4 md:space-y-6 max-w-2xl mx-auto animate-in fade-in duration-300">
         <h2 className="text-lg md:text-2xl font-bold text-gray-800">ข้อมูลการขาย (POS)</h2>
         <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
-          <form onSubmit={handleCheckout} className="space-y-4 md:space-y-6">
+          <form onSubmit={handleCheckout} className="space-y-5 md:space-y-6">
             {message && <div className={`p-3 md:p-4 rounded-lg text-xs md:text-sm font-medium ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
+            
+            {/* 1. ส่วนเลือกร้านค้า */}
             <div>
-              <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700">เลือกสินค้า</label>
+              <label className="block text-xs md:text-sm font-bold mb-2 md:mb-3 text-gray-700 flex items-center">
+                <Store size={16} className="mr-1.5 text-blue-600" /> เลือกร้านค้า (Channel)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
+                {STORE_OPTIONS.map(store => (
+                  <button
+                    key={store}
+                    type="button"
+                    onClick={() => setSelectedStore(store)}
+                    className={`flex items-center justify-center py-2.5 px-2 rounded-lg border text-xs md:text-sm font-bold transition-all duration-200 ${
+                      selectedStore === store 
+                        ? (store.includes('Shopee') 
+                            ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/30 ring-2 ring-orange-500/50 ring-offset-1' 
+                            : 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/30 ring-2 ring-blue-600/50 ring-offset-1') 
+                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
+                    }`}
+                  >
+                    {store}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* เส้นคั่น */}
+            <div className="border-b border-dashed border-gray-200"></div>
+
+            {/* 2. เลือกสินค้า */}
+            <div>
+              <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                <Package size={16} className="mr-1.5 text-blue-600" /> เลือกสินค้า
+              </label>
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg bg-white text-sm md:text-base focus:ring-2 focus:ring-blue-500 outline-none" required disabled={isProcessing}>
-                <option value="" disabled>-- เลือกสินค้า --</option>
+                <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
                 {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) === 0}>{p.name} ({p.price} ฿) - เหลือ {p.stock || 0}</option>)}
               </select>
             </div>
+            
+            {/* 3. เลือกจำนวน */}
             <div>
-              <label className="block text-xs md:text-sm font-medium mb-1.5 md:mb-2 text-gray-700">จำนวน</label>
+              <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700">จำนวนชิ้น</label>
               <div className="flex items-center space-x-3 md:space-x-4">
                 <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">-</button>
-                <input type="number" value={quantity} readOnly className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-medium" />
+                <input type="number" value={quantity} readOnly className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-bold" />
                 <button type="button" onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">+</button>
               </div>
             </div>
-            <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-end space-y-4 sm:space-y-0">
-              <div>
-                <p className="text-xs md:text-sm text-gray-500 font-medium">ยอดรวมทั้งหมด</p>
-                <p className="text-2xl md:text-3xl font-bold text-blue-600">{formatMoney(selectedProduct ? getProduct(selectedProduct).price * quantity : 0)}</p>
+
+            {/* ส่วนสรุปและปุ่มบันทึก */}
+            <div className="pt-5 mt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center space-y-4 sm:space-y-0">
+              <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-50 w-full sm:w-auto">
+                <p className="text-[10px] md:text-xs text-blue-600 font-bold uppercase tracking-wide">ยอดรวมสุทธิ</p>
+                <p className="text-2xl md:text-3xl font-black text-blue-700">{formatMoney(selectedProduct ? getProduct(selectedProduct).price * quantity : 0)}</p>
               </div>
-              <button type="submit" disabled={!selectedProduct || isProcessing} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 md:px-8 md:py-3 rounded-lg text-sm md:text-base font-medium transition disabled:bg-gray-300 shadow-sm">
+              <button type="submit" disabled={!selectedProduct || !selectedStore || isProcessing} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 md:px-8 md:py-4 rounded-xl text-sm md:text-base font-bold transition disabled:bg-gray-300 shadow-md hover:shadow-lg active:scale-95 flex justify-center">
                 บันทึกการขาย
               </button>
             </div>
@@ -1120,12 +1162,13 @@ export default function App() {
         </div>
 
         <div className="mt-6 md:mt-8">
-          <h3 className="text-sm md:text-lg font-semibold text-gray-800 mb-3 md:mb-4">รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
+          <h3 className="text-sm md:text-lg font-bold text-gray-800 mb-3 md:mb-4 flex items-center"><History size={18} className="mr-2 text-gray-400"/> รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
           <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[400px]">
+            <table className="w-full text-left border-collapse min-w-[500px]">
               <thead>
                 <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
                   <th className="p-3 md:p-4 font-medium">เวลา</th>
+                  <th className="p-3 md:p-4 font-medium">ร้านค้า</th>
                   <th className="p-3 md:p-4 font-medium">สินค้า</th>
                   <th className="p-3 md:p-4 font-medium text-center">จำนวน</th>
                   <th className="p-3 md:p-4 font-medium text-right">ยอดรวม</th>
@@ -1133,18 +1176,23 @@ export default function App() {
               </thead>
               <tbody className="text-xs md:text-sm">
                 {recentSales.map(sale => (
-                  <tr key={sale.id} className="border-b border-gray-50">
+                  <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="p-3 md:p-4 text-[10px] md:text-xs text-gray-500 whitespace-nowrap">{new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td className="p-3 md:p-4 whitespace-nowrap">
+                       <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${sale.store?.includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                         {sale.store || '-'}
+                       </span>
+                    </td>
                     <td className="p-3 md:p-4 font-medium text-gray-800">
                       {getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}
                       {sale.soldBy && <span className="block text-[10px] text-gray-400 font-normal mt-0.5">โดย: {sale.soldBy}</span>}
                     </td>
-                    <td className="p-3 md:p-4 text-center">{sale.quantity}</td>
-                    <td className="p-3 md:p-4 text-right text-blue-600 font-medium whitespace-nowrap">{formatMoney(sale.total)}</td>
+                    <td className="p-3 md:p-4 text-center font-bold text-gray-600">{sale.quantity}</td>
+                    <td className="p-3 md:p-4 text-right text-blue-600 font-bold whitespace-nowrap">{formatMoney(sale.total)}</td>
                   </tr>
                 ))}
                 {recentSales.length === 0 && (
-                  <tr><td colSpan="4" className="p-4 md:p-6 text-center text-gray-500 text-xs md:text-sm">ยังไม่มีการขายในวันนี้</td></tr>
+                  <tr><td colSpan="5" className="p-6 md:p-8 text-center text-gray-500 text-xs md:text-sm">ยังไม่มีการขายในวันนี้</td></tr>
                 )}
               </tbody>
             </table>
