@@ -12,7 +12,9 @@ import {
   deleteDoc, 
   doc,
   increment,
-  enableIndexedDbPersistence // ดึงเครื่องมือเปิดระบบ Cache (โหลดไว/ทำงานออฟไลน์ได้)
+  initializeFirestore,           // เครื่องมือเชื่อมต่อฐานข้อมูลเวอร์ชันใหม่
+  persistentLocalCache,          // ระบบแคช (Cache) ให้โหลดไว
+  persistentMultipleTabManager   // ระบบจัดการให้เปิดได้หลายแท็บ/หลายเครื่องไม่รวน
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -48,19 +50,20 @@ const firebaseConfig = {
   appId: "1:1070880208582:web:9530fdad63bab3454149c7"
 };
 
-// ป้องกันการเชื่อมต่อซ้ำซ้อน (Initialize Firebase)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(app);
+// ป้องกันการเชื่อมต่อซ้ำซ้อน และตั้งค่า Offline Mode ให้เสถียรที่สุด
+let app;
+let db;
 
-// เปิดใช้งานโหมดออฟไลน์ (Offline Cache) เพื่อให้ระบบโหลดเร็วและคีย์ข้อมูลตอนเน็ตหลุดได้
-try {
-  enableIndexedDbPersistence(db).catch((err) => {
-    console.warn("ไม่สามารถเปิดใช้งาน Cache ได้:", err.message);
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+  // เปิดระบบ Offline และให้รองรับการซิงค์ข้อมูลหลายๆ เครื่องพร้อมกัน
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
   });
-} catch (e) {
-  console.warn("Persistence error:", e);
+} else {
+  app = getApp();
+  db = getFirestore(app);
 }
-
 
 // ==========================================
 // 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
@@ -106,7 +109,7 @@ export default function App() {
       }
     }, (error) => {
       console.error("Users Error:", error);
-      setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้: " + error.message);
+      setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้ (อาจเกิดจาก Rules ของ Firebase ยังไม่ถูกตั้งเป็น true)");
       setIsUsersLoaded(true);
     });
 
@@ -116,7 +119,7 @@ export default function App() {
       setProducts(productsData);
     }, (error) => {
       console.error("Products Error:", error);
-      setLoadError("ไม่สามารถดึงข้อมูลสินค้าได้");
+      setLoadError("ไม่สามารถดึงข้อมูลสินค้าได้ (ตรวจสอบ Firebase Rules)");
     });
 
     // ดึงข้อมูล "ยอดขาย"
@@ -127,7 +130,7 @@ export default function App() {
       setLoadError('');
     }, (error) => {
       console.error("Sales Error:", error);
-      setLoadError("ไม่สามารถดึงข้อมูลยอดขายได้: " + error.message);
+      setLoadError("ไม่สามารถดึงข้อมูลยอดขายได้ (ตรวจสอบ Firebase Rules)");
       setIsLoading(false);
     });
 
