@@ -33,7 +33,8 @@ import {
   Download,
   History,
   BarChart3,
-  CalendarDays
+  CalendarDays,
+  ShieldCheck // ไอคอนสำหรับสิทธิ์
 } from 'lucide-react';
 
 // ==========================================
@@ -50,6 +51,14 @@ const firebaseConfig = {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
+
+// ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน (Staff Default Permissions)
+const defaultPermissions = {
+  dashboard: false,
+  products: false,
+  stock: false,
+  history: false
+};
 
 // ==========================================
 // 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
@@ -79,8 +88,8 @@ export default function App() {
 
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       if (snapshot.empty) {
-        addDoc(collection(db, "users"), { username: 'admin', password: '123456', role: 'admin' });
-        addDoc(collection(db, "users"), { username: 'user', password: '123456', role: 'staff' });
+        addDoc(collection(db, "users"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
+        addDoc(collection(db, "users"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
       } else {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUsers(usersData);
@@ -118,13 +127,40 @@ export default function App() {
     };
   }, []);
 
-  // --- 🛠️ 3.3 ฟังก์ชันช่วยเหลือ (Helper Functions) ---
+  // อัปเดตสิทธิ์การใช้งานแบบ Real-time (ถ้า Admin แก้สิทธิ์ให้ผู้ใช้ที่ล็อกอินอยู่ เมนูจะเปลี่ยนทันที)
+  useEffect(() => {
+    if (loggedInUser) {
+      const updatedUser = users.find(u => u.id === loggedInUser.id);
+      if (updatedUser) {
+        // อัปเดตข้อมูลผู้ใช้ใน State
+        setLoggedInUser(updatedUser);
+        // ถ้าโดนตัดสิทธิ์หน้าที่เปิดอยู่ ให้เด้งกลับไปหน้า POS
+        if (activeTab !== 'sales' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
+          setActiveTab('sales');
+        }
+      } else {
+        // โดนลบ User ทิ้ง บังคับเตะออก
+        setLoggedInUser(null);
+      }
+    }
+  }, [users]); // ทำงานเมื่อมีข้อมูล Users อัปเดต
+
+
+  // --- 🛠️ 3.3 ฟังก์ชันตรวจสอบสิทธิ์และเครื่องมือเสริม ---
+  
+  // เช็คว่า User ปัจจุบันมีสิทธิ์เข้าเมนูนั้นๆ หรือไม่
+  const canAccess = (tabName) => {
+    if (!loggedInUser) return false;
+    if (loggedInUser.role === 'admin') return true; // Admin เข้าได้ทุกอย่าง
+    if (tabName === 'sales') return true; // ทุกคนเข้าหน้าขายได้
+    return !!loggedInUser.permissions?.[tabName]; // เช็คสิทธิ์ที่ Admin ติ๊กให้
+  };
+
   const formatMoney = (amount) => {
     return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(amount);
   };
 
   const getProduct = (id) => products.find(p => p.id === id);
-
 
   // ==========================================
   // 🖥️ 4. ส่วนแสดงผลหน้าจอต่างๆ (Views / Pages)
@@ -141,7 +177,9 @@ export default function App() {
       const foundUser = users.find(u => u.username === username && u.password === password);
       if (foundUser) {
         setLoggedInUser(foundUser);
-        setActiveTab('dashboard'); 
+        // ถ้าเป็น Admin หรือมีสิทธิ์ดู Dashboard ให้เด้งไปหน้า Dashboard นอกนั้นไปหน้า POS
+        const startTab = foundUser.role === 'admin' || foundUser.permissions?.dashboard ? 'dashboard' : 'sales';
+        setActiveTab(startTab); 
         setError('');
       } else {
         setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
@@ -150,33 +188,53 @@ export default function App() {
 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-6 md:p-8 space-y-6 md:space-y-8">
-          <div className="text-center space-y-2">
-            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
-              <Lock size={28} />
+        <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
+          <div className="text-center space-y-3">
+            <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-blue-50">
+              <Lock size={32} strokeWidth={2} />
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">The Royal Queen</h1>
-            <p className="text-sm md:text-base text-gray-500">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">The Royal Queen</h1>
+            <p className="text-sm md:text-base text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-5">
-            {error && <div className="bg-red-50 text-red-600 p-2 md:p-3 rounded-lg text-xs md:text-sm text-center font-medium">{error}</div>}
-            <div className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm text-center font-bold">{error}</div>}
+            <div className="space-y-5">
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้งาน</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">ชื่อผู้ใช้งาน</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User size={16} className="text-gray-400" /></div>
-                  <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-9 p-2 md:p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" placeholder="admin หรือ user" required />
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <User size={18} className="text-gray-400" />
+                  </div>
+                  <input 
+                    type="text" 
+                    value={username} 
+                    onChange={(e) => setUsername(e.target.value)} 
+                    className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" 
+                    placeholder="admin หรือ user" 
+                    required 
+                  />
                 </div>
               </div>
               <div>
-                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">รหัสผ่าน</label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock size={16} className="text-gray-400" /></div>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-9 p-2 md:p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" placeholder="••••••" required />
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock size={18} className="text-gray-400" />
+                  </div>
+                  <input 
+                    type="password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" 
+                    placeholder="••••••" 
+                    required 
+                  />
                 </div>
               </div>
             </div>
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 md:p-3 rounded-xl text-sm md:text-base font-medium transition-colors shadow-sm">เข้าสู่ระบบ</button>
+            <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3.5 rounded-xl text-base font-bold transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0">
+              เข้าสู่ระบบ
+            </button>
           </form>
         </div>
       </div>
@@ -185,21 +243,16 @@ export default function App() {
 
   // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard) รูปแบบใหม่ (เข้าใจง่าย & ย้อนหลังได้)
   const DashboardView = () => {
-    // กำหนดค่าตัวเลือกช่วงเวลา (วัน, เดือน, ปี, ทั้งหมด)
     const [timeframe, setTimeframe] = useState('monthly'); 
-    
-    // ค่าเริ่มต้นของตัวกรองเวลา
     const currentDateStr = new Date().toLocaleDateString('en-CA');
     const [filterDate, setFilterDate] = useState(currentDateStr); 
     const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7)); 
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
     const [filterProductId, setFilterProductId] = useState('all');
 
-    // สร้างลิสต์รายปีสำหรับ Dropdown (ย้อนหลัง 5 ปี และล่วงหน้า 2 ปี)
     const currentYearNum = new Date().getFullYear();
     const yearOptions = Array.from({length: 8}, (_, i) => currentYearNum - 5 + i);
 
-    // กรองข้อมูลยอดขายทั้งหมด ตามเงื่อนไขเวลาและสินค้าที่เลือก
     const filteredSales = useMemo(() => {
       return sales.filter(s => {
         const dateObj = new Date(s.date);
@@ -207,28 +260,20 @@ export default function App() {
         const saleMonthLocal = saleDateLocal.substring(0, 7);
         const saleYearLocal = dateObj.getFullYear().toString();
 
-        // กรองตามช่วงเวลา
         let isTimeMatch = false;
         if (timeframe === 'daily') isTimeMatch = (saleDateLocal === filterDate);
         else if (timeframe === 'monthly') isTimeMatch = (saleMonthLocal === filterMonth);
         else if (timeframe === 'yearly') isTimeMatch = (saleYearLocal === filterYear);
         else if (timeframe === 'all') isTimeMatch = true;
 
-        // กรองตามสินค้า
         const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
-        
         return isTimeMatch && isProductMatch;
       });
     }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId]);
 
-    // คำนวณสรุปยอด (จำนวนชิ้น, ยอดขาย, ต้นทุน, กำไร)
-    let totalQty = 0;
-    let totalRevenue = 0;
-    let totalCost = 0;
-
+    let totalQty = 0; let totalRevenue = 0; let totalCost = 0;
     filteredSales.forEach(s => {
-      totalQty += s.quantity;
-      totalRevenue += s.total;
+      totalQty += s.quantity; totalRevenue += s.total;
       const p = getProduct(s.productId);
       totalCost += p ? (p.cost * s.quantity) : 0;
     });
@@ -236,7 +281,6 @@ export default function App() {
     const totalProfit = totalRevenue - totalCost;
     const totalOrders = filteredSales.length;
 
-    // คำนวณสินค้าขายดีเฉพาะในช่วงเวลาที่เลือก
     const productSalesCount = {};
     filteredSales.forEach(s => {
       productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + s.quantity;
@@ -248,14 +292,8 @@ export default function App() {
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
 
-    // ฟังก์ชันส่งออก Excel สำหรับ Dashboard (พร้อมข้อมูลสรุปด้านล่างสุด)
     const exportDashboardToExcel = () => {
-      if (filteredSales.length === 0) {
-        alert("ไม่มีข้อมูลในเงื่อนไขที่เลือก");
-        return;
-      }
-
-      // สร้างชื่อสำหรับระบุในรายงาน
+      if (filteredSales.length === 0) { alert("ไม่มีข้อมูลในเงื่อนไขที่เลือก"); return; }
       let timeLabel = '';
       if (timeframe === 'daily') timeLabel = `ประจำวันที่ ${filterDate}`;
       else if (timeframe === 'monthly') timeLabel = `ประจำเดือน ${filterMonth}`;
@@ -263,43 +301,25 @@ export default function App() {
       else timeLabel = `ภาพรวมทั้งหมด (สะสม)`;
 
       const productLabel = filterProductId === 'all' ? 'ทุกสินค้า' : (getProduct(filterProductId)?.name || 'ไม่ทราบชื่อ');
-
       const csvRows = [];
-      // ส่วนหัวรายงาน
       csvRows.push(['รายงานสรุปยอดขาย - The Royal Queen']);
       csvRows.push(['ช่วงเวลา:', timeLabel]);
       csvRows.push(['สินค้าที่เลือก:', productLabel]);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
-      csvRows.push([]); // บรรทัดว่าง
-      
-      // หัวคอลัมน์ตาราง
+      csvRows.push([]); 
       csvRows.push(['วันที่-เวลา', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'จำนวน', 'ต้นทุนรวม', 'ยอดรวมสุทธิ', 'กำไร', 'ผู้ขาย']);
 
-      // ข้อมูลทีละรายการ
       filteredSales.forEach(s => {
         const p = getProduct(s.productId);
         const cost = p ? p.cost : 0;
         const price = p ? p.price : 0;
         const rowCost = cost * s.quantity;
         const rowProfit = s.total - rowCost;
-
-        csvRows.push([
-          `"${new Date(s.date).toLocaleString('th-TH')}"`,
-          `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`,
-          cost,
-          price,
-          s.quantity,
-          rowCost,
-          s.total,
-          rowProfit,
-          `"${s.soldBy || '-'}"`
-        ]);
+        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, price, s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
 
-      csvRows.push([]); // บรรทัดว่างก่อนสรุป
-      // แถวสรุปผล (Total Row)
+      csvRows.push([]);
       csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', totalQty, totalCost, totalRevenue, totalProfit, '']);
-
       const csvString = csvRows.map(row => row.join(',')).join('\n');
       const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -313,83 +333,34 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
-        
-        {/* หัวกระดาษ และ ตัวกรอง */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          
           <div className="flex items-center space-x-2 md:space-x-3">
             <div className="bg-gradient-to-br from-blue-500 to-purple-600 p-2 md:p-2.5 rounded-lg md:rounded-xl shadow-md text-white">
               <BarChart3 size={20} strokeWidth={2.5} className="md:w-6 md:h-6" />
             </div>
             <h2 className="text-base md:text-xl lg:text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย</h2>
           </div>
-          
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
-            
-            {/* 1. เลือกสินค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">สินค้า:</span>
-               <select 
-                  value={filterProductId} 
-                  onChange={e => setFilterProductId(e.target.value)} 
-                  className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"
-               >
-                 <option value="all">ดูทั้งหมด</option>
-                 {products.map(p => (
-                   <option key={p.id} value={p.id}>{p.name}</option>
-                 ))}
-               </select>
+               <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
-
-            {/* 2. เลือกโหมดเวลา */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ดูแบบ:</span>
-               <select 
-                  value={timeframe} 
-                  onChange={e => setTimeframe(e.target.value)} 
-                  className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"
-               >
-                 <option value="daily">รายวัน</option>
-                 <option value="monthly">รายเดือน</option>
-                 <option value="yearly">รายปี</option>
-                 <option value="all">ยอดรวมสะสมทั้งหมด</option>
-               </select>
+               <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสมทั้งหมด</option></select>
             </div>
-            
-            {/* 3. เครื่องมือเลือกวัน/เดือน/ปี (เปลี่ยนตามโหมดที่เลือก) */}
             {timeframe !== 'all' && (
               <div className="flex items-center space-x-1.5 md:space-x-2 bg-blue-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-blue-100">
-                {timeframe === 'daily' && (
-                  <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />
-                )}
-                {timeframe === 'monthly' && (
-                  <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />
-                )}
-                {timeframe === 'yearly' && (
-                  <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">
-                    {yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}
-                  </select>
-                )}
+                {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+                {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+                {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
               </div>
             )}
-            
-            {/* ปุ่มส่งออก Excel */}
-            {(loggedInUser?.role === 'admin' || isExecutiveView) && (
-              <button 
-                onClick={exportDashboardToExcel}
-                className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"
-              >
-                <Download size={14} className="md:w-4 md:h-4" />
-                <span>ส่งออกรายงาน Excel</span>
-              </button>
-            )}
+            <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออกรายงาน Excel</span></button>
           </div>
         </div>
         
-        {/* การ์ดสรุปยอด (เปลี่ยนตามช่วงเวลาที่กรอง) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
-          
-          {/* 1. ยอดขายรวม */}
           <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
             <div className="flex items-center space-x-2.5 mb-2">
@@ -399,8 +370,6 @@ export default function App() {
             <p className="text-2xl md:text-3xl font-extrabold text-gray-800 ml-1 mt-3">{formatMoney(totalRevenue)}</p>
             <p className="text-xs text-gray-400 mt-2 ml-1">จากทั้งหมด {totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
           </div>
-
-          {/* 2. ต้นทุนรวม */}
           <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
             <div className="flex items-center space-x-2.5 mb-2">
@@ -410,8 +379,6 @@ export default function App() {
             <p className="text-2xl md:text-3xl font-extrabold text-gray-800 ml-1 mt-3">{formatMoney(totalCost)}</p>
             <p className="text-xs text-gray-400 mt-2 ml-1">คำนวณจากต้นทุนของสินค้าที่ขายไป</p>
           </div>
-
-          {/* 3. กำไรสุทธิ */}
           <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
             <div className="flex items-center space-x-2.5 mb-2">
@@ -421,10 +388,8 @@ export default function App() {
             <p className="text-2xl md:text-4xl font-extrabold text-green-600 ml-1 mt-2">{formatMoney(totalProfit)}</p>
             <p className="text-xs text-green-600/70 mt-2 ml-1 font-medium">หลังหักต้นทุนเรียบร้อยแล้ว</p>
           </div>
-
         </div>
 
-        {/* ตารางสินค้าขายดี */}
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
             <CalendarDays size={18} className="text-gray-400"/>
@@ -663,45 +628,20 @@ export default function App() {
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // ฟังก์ชันส่งออก Excel แบบสรุปสต๊อกทั้งหมด
     const exportProductsReport = () => {
       if (products.length === 0) return;
       const csvRows = [];
-      
       csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Royal Queen']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
-      
       csvRows.push(['ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
       
-      let sumStock = 0;
-      let sumCostValue = 0;
-      let sumSaleValue = 0;
-      let sumExpectedProfit = 0;
-
+      let sumStock = 0; let sumCostValue = 0; let sumSaleValue = 0; let sumExpectedProfit = 0;
       products.forEach(p => {
-        const stock = p.stock || 0;
-        const costVal = stock * p.cost;
-        const saleVal = stock * p.price;
-        const profitVal = saleVal - costVal;
-        
-        sumStock += stock;
-        sumCostValue += costVal;
-        sumSaleValue += saleVal;
-        sumExpectedProfit += profitVal;
-
-        csvRows.push([
-          `"${p.name}"`,
-          p.cost,
-          p.price,
-          p.price - p.cost,
-          stock,
-          costVal,
-          saleVal,
-          profitVal
-        ]);
+        const stock = p.stock || 0; const costVal = stock * p.cost; const saleVal = stock * p.price; const profitVal = saleVal - costVal;
+        sumStock += stock; sumCostValue += costVal; sumSaleValue += saleVal; sumExpectedProfit += profitVal;
+        csvRows.push([`"${p.name}"`, p.cost, p.price, p.price - p.cost, stock, costVal, saleVal, profitVal]);
       });
-
       csvRows.push([]);
       csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
 
@@ -840,19 +780,27 @@ export default function App() {
     );
   };
 
-  // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบ (Users Management)
+  // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบและกำหนดสิทธิ์ (Users Management)
   const UsersManagementView = () => {
     const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff' });
+    const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    const handlePermissionChange = (perm) => {
+      setEditForm(prev => ({
+        ...prev,
+        permissions: { ...prev.permissions, [perm]: !prev.permissions[perm] }
+      }));
+    };
 
     const handleSave = async (id) => {
       setIsProcessing(true);
       try {
         await updateDoc(doc(db, "users", id), { 
           password: editForm.password, 
-          role: editForm.role 
+          role: editForm.role,
+          permissions: editForm.permissions || defaultPermissions
         });
         setIsEditing(null);
       } catch (error) { alert("Error: " + error.message); }
@@ -861,73 +809,127 @@ export default function App() {
 
     const handleAdd = async () => {
       if (users.find(u => u.username === editForm.username)) { alert('ชื่อนี้มีอยู่แล้ว'); return; }
-      await addDoc(collection(db, "users"), { ...editForm });
-      setIsAdding(false);
-      setEditForm({ username: '', password: '', role: 'staff' });
+      setIsProcessing(true);
+      try {
+        await addDoc(collection(db, "users"), { 
+          username: editForm.username,
+          password: editForm.password,
+          role: editForm.role,
+          permissions: editForm.permissions || defaultPermissions
+        });
+        setIsAdding(false);
+        setEditForm({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
+      } catch(error) { alert("Error: " + error.message); }
+      setIsProcessing(false);
     };
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
-          <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการผู้ใช้งาน</h2>
-          {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff'}); }} className="bg-blue-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm w-full sm:w-auto justify-center"><Plus size={16} /><span>เพิ่มผู้ใช้</span></button>}
+          <div>
+            <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการผู้ใช้งานและสิทธิ์</h2>
+            <p className="text-xs md:text-sm text-gray-500 mt-1">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงเมนูต่างๆ ของพนักงาน</p>
+          </div>
+          {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm w-full sm:w-auto justify-center"><Plus size={16} /><span>เพิ่มผู้ใช้</span></button>}
         </div>
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[500px]">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
                 <th className="p-3 md:p-4 font-medium">Username</th>
                 <th className="p-3 md:p-4 font-medium">รหัสผ่าน</th>
-                <th className="p-3 md:p-4 font-medium">ระดับสิทธิ์</th>
+                <th className="p-3 md:p-4 font-medium">ระดับสิทธิ์ (Role)</th>
+                <th className="p-3 md:p-4 font-medium">สิทธิ์การเข้าถึง (Permissions)</th>
                 <th className="p-3 md:p-4 font-medium text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="text-xs md:text-sm">
               {isAdding && (
-                <tr className="bg-blue-50/50">
-                  <td className="p-2 md:p-4"><input className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} /></td>
-                  <td className="p-2 md:p-4"><input className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} /></td>
-                  <td className="p-2 md:p-4"><select className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}><option value="staff">Staff</option><option value="admin">Admin</option></select></td>
-                  <td className="p-2 md:p-4 text-right whitespace-nowrap">
-                    <button onClick={handleAdd} className="text-green-600 p-1 md:p-1.5"><Save size={16} /></button>
-                    <button onClick={() => setIsAdding(false)} className="text-red-600 p-1 md:p-1.5"><X size={16} /></button>
+                <tr className="bg-blue-50/50 align-top">
+                  <td className="p-3 md:p-4"><input className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
+                  <td className="p-3 md:p-4"><input className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} /></td>
+                  <td className="p-3 md:p-4">
+                    <select className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}>
+                      <option value="staff">พนักงาน (Staff)</option>
+                      <option value="admin">ผู้ดูแล (Admin)</option>
+                    </select>
+                  </td>
+                  <td className="p-3 md:p-4">
+                    {editForm.role === 'admin' ? (
+                      <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">เข้าถึงได้ทุกเมนู (Admin)</span>
+                    ) : (
+                      <div className="flex flex-col space-y-1.5">
+                        <span className="text-gray-500 font-medium flex items-center"><ShieldCheck size={14} className="mr-1"/>เลือกเมนูที่อนุญาต:</span>
+                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>แดชบอร์ด</span></label>
+                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.products} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสินค้า</span></label>
+                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสต๊อก</span></label>
+                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.history} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>ประวัติการขาย (แก้/ลบ)</span></label>
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-3 md:p-4 text-right whitespace-nowrap">
+                    <button onClick={handleAdd} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md"><Save size={18} /></button>
+                    <button onClick={() => setIsAdding(false)} disabled={isProcessing} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md"><X size={18} /></button>
                   </td>
                 </tr>
               )}
+
               {users.map(u => (
-                <tr key={u.id} className="border-b hover:bg-gray-50">
-                  <td className="p-3 md:p-4 font-medium text-gray-800">{u.username}</td>
-                  <td className="p-3 md:p-4">
+                <tr key={u.id} className="border-b hover:bg-gray-50 align-top">
+                  <td className="p-3 md:p-4 font-bold text-gray-800 pt-5">{u.username}</td>
+                  <td className="p-3 md:p-4 pt-4">
                     {isEditing === u.id ? (
-                      <input 
-                        className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm" 
-                        value={editForm.password} 
-                        onChange={e => setEditForm({...editForm, password: e.target.value})} 
-                      />
+                      <input className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} />
                     ) : (
                       <span className="text-gray-400 tracking-widest text-xs md:text-sm">••••••</span>
                     )}
                   </td>
-                  <td className="p-3 md:p-4">
+                  <td className="p-3 md:p-4 pt-4">
                     {isEditing === u.id ? (
-                      <select className="p-1.5 md:p-2 border rounded text-xs md:text-sm" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}>
-                        <option value="staff">Staff</option>
-                        <option value="admin">Admin</option>
+                      <select className="p-1.5 md:p-2 border rounded w-full text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}>
+                        <option value="staff">พนักงาน (Staff)</option>
+                        <option value="admin">ผู้ดูแล (Admin)</option>
                       </select>
                     ) : (
                       <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>{u.role.toUpperCase()}</span>
                     )}
                   </td>
-                  <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
+                  <td className="p-3 md:p-4">
+                    {isEditing === u.id ? (
+                      editForm.role === 'admin' ? (
+                        <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded text-xs mt-2 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>
+                      ) : (
+                        <div className="flex flex-col space-y-1.5">
+                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>แดชบอร์ด</span></label>
+                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสินค้า</span></label>
+                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสต๊อก</span></label>
+                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>ประวัติการขาย (แก้/ลบ)</span></label>
+                        </div>
+                      )
+                    ) : (
+                      u.role === 'admin' ? (
+                        <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded text-xs mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">ขาย (POS)</span>
+                          {u.permissions?.dashboard && <span className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] px-2 py-0.5 rounded-full">แดชบอร์ด</span>}
+                          {u.permissions?.products && <span className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] px-2 py-0.5 rounded-full">จัดสินค้า</span>}
+                          {u.permissions?.stock && <span className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] px-2 py-0.5 rounded-full">จัดสต๊อก</span>}
+                          {u.permissions?.history && <span className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] px-2 py-0.5 rounded-full">ประวัติ</span>}
+                        </div>
+                      )
+                    )}
+                  </td>
+                  <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap pt-4">
                     {isEditing === u.id ? (
                       <>
-                        <button onClick={() => handleSave(u.id)} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md"><Save size={16} /></button>
-                        <button onClick={() => setIsEditing(null)} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md"><X size={16} /></button>
+                        <button onClick={() => handleSave(u.id)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md"><Save size={18} /></button>
+                        <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md"><X size={18} /></button>
                       </>
                     ) : (
                       <>
-                        <button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md"><Edit2 size={16} /></button>
-                        <button onClick={async () => { if(confirm('ลบผู้ใช้?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={16} /></button>
+                        <button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role, permissions: u.permissions || defaultPermissions}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md"><Edit2 size={18} /></button>
+                        <button onClick={async () => { if(confirm('ลบผู้ใช้นี้ออกจากระบบ?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={18} /></button>
                       </>
                     )}
                   </td>
@@ -1058,7 +1060,6 @@ export default function App() {
   // 🎨 5. โครงสร้างหน้าจอหลัก (Main Layout Render)
   // ==========================================
 
-  // ระหว่างโหลด ให้โชว์หน้า Loading (หากโหลดไม่ขึ้นจะโชว์ Error)
   if (!isUsersLoaded || isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-4 font-sans px-4 text-center">
@@ -1074,7 +1075,6 @@ export default function App() {
     );
   }
 
-  // หากเข้าด้วยลิงก์ผู้บริหาร จะแสดงหน้า Dashboard เท่านั้น โดยไม่ต้อง Login
   if (isExecutiveView) {
     return (
       <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans">
@@ -1088,14 +1088,12 @@ export default function App() {
     );
   }
 
-  // หากยังไม่ได้ Login ให้โชว์หน้า Login
   if (!loggedInUser) return <LoginView />;
 
-  // หน้าต่างระบบหลักเมื่อ Login สำเร็จ (มีแถบเมนูซ้ายมือ)
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
       
-      {/* แถบเมนูด้านซ้าย (Sidebar) */}
+      {/* แถบเมนูด้านซ้าย (Sidebar) - สลับเมนูตามสิทธิ์การเข้าถึง */}
       <div className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex-shrink-0 z-10">
         <div className="p-4 md:p-6 flex items-center justify-center md:justify-start">
           <h1 className="text-lg md:text-xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
@@ -1104,20 +1102,13 @@ export default function App() {
           </h1>
         </div>
         
-        {/* เมนูนำทาง (ปรับให้เป็นแนวนอนบนมือถือ และปัดซ้ายขวาได้) */}
         <nav className="px-2 md:px-4 pb-2 md:pb-6 space-x-1 md:space-x-0 md:space-y-1 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
-          <button onClick={() => setActiveTab('dashboard')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><LayoutDashboard size={18} className="md:w-5 md:h-5" /><span>แดชบอร์ด</span></button>
-          
-          {loggedInUser.role === 'admin' && (
-            <>
-              <button onClick={() => setActiveTab('products')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Package size={18} className="md:w-5 md:h-5" /><span>จัดการสินค้า</span></button>
-              <button onClick={() => setActiveTab('stock')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'stock' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Boxes size={18} className="md:w-5 md:h-5" /><span>สต๊อกสินค้า</span></button>
-              <button onClick={() => setActiveTab('users')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Users size={18} className="md:w-5 md:h-5" /><span>จัดการผู้ใช้</span></button>
-              <button onClick={() => setActiveTab('history')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'history' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><History size={18} className="md:w-5 md:h-5" /><span>ประวัติการขาย</span></button>
-            </>
-          )}
-          
-          <button onClick={() => setActiveTab('sales')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'sales' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><ShoppingCart size={18} className="md:w-5 md:h-5" /><span>คีย์ยอดขาย (POS)</span></button>
+          {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><LayoutDashboard size={18} className="md:w-5 md:h-5" /><span>แดชบอร์ด</span></button>}
+          {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Package size={18} className="md:w-5 md:h-5" /><span>จัดการสินค้า</span></button>}
+          {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'stock' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Boxes size={18} className="md:w-5 md:h-5" /><span>สต๊อกสินค้า</span></button>}
+          {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Users size={18} className="md:w-5 md:h-5" /><span>จัดการผู้ใช้</span></button>}
+          {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'history' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><History size={18} className="md:w-5 md:h-5" /><span>ประวัติการขาย</span></button>}
+          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'sales' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><ShoppingCart size={18} className="md:w-5 md:h-5" /><span>คีย์ยอดขาย (POS)</span></button>}
         </nav>
       </div>
 
@@ -1128,7 +1119,7 @@ export default function App() {
             {activeTab === 'dashboard' ? 'ระบบภาพรวม' : 
              activeTab === 'products' ? 'ตั้งค่าฐานข้อมูลสินค้า' : 
              activeTab === 'stock' ? 'ระบบคลังสินค้า' : 
-             activeTab === 'users' ? 'ตั้งค่าบัญชีผู้ใช้' : 
+             activeTab === 'users' ? 'ตั้งค่าบัญชีและสิทธิ์พนักงาน' : 
              activeTab === 'history' ? 'ประวัติการทำรายการ' : 'แคชเชียร์ (POS)'}
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
@@ -1146,13 +1137,12 @@ export default function App() {
 
         <main className="flex-1 overflow-auto p-3 md:p-6 lg:p-8 bg-slate-50/50 pb-20 md:pb-8">
           <div className="max-w-5xl mx-auto">
-            {/* สลับการแสดงผลหน้าต่างๆ ตามเมนูที่เลือก */}
-            {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'products' && loggedInUser.role === 'admin' && <ProductsView />}
-            {activeTab === 'stock' && loggedInUser.role === 'admin' && <StockView />}
-            {activeTab === 'users' && loggedInUser.role === 'admin' && <UsersManagementView />}
-            {activeTab === 'history' && loggedInUser.role === 'admin' && <SalesHistoryView />}
-            {activeTab === 'sales' && <SalesView />}
+            {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
+            {activeTab === 'products' && canAccess('products') && <ProductsView />}
+            {activeTab === 'stock' && canAccess('stock') && <StockView />}
+            {activeTab === 'users' && canAccess('users') && <UsersManagementView />}
+            {activeTab === 'history' && canAccess('history') && <SalesHistoryView />}
+            {activeTab === 'sales' && canAccess('sales') && <SalesView />}
           </div>
         </main>
       </div>
