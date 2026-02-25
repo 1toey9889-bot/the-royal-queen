@@ -77,7 +77,7 @@ export default function App() {
 
   // --- 🗄️ 3.1 การจัดการตัวแปรสถานะ (State Management) ---
   const [loggedInUser, setLoggedInUser] = useState(null); 
-  const [activeTab, setActiveTab] = useState('sales');    
+  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -166,11 +166,33 @@ export default function App() {
 
   const getProduct = (id) => products.find(p => p.id === id);
 
-  // ฟังก์ชันจัดการวันที่ให้ตรงกับ Timezone ท้องถิ่น (แก้ปัญหาเหลื่อมวัน)
   const getLocalISODate = (dateString) => {
     const d = dateString ? new Date(dateString) : new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().split('T')[0];
+  };
+
+  // ฟังก์ชันดาวน์โหลด Excel รองรับ iOS และ Android อย่างสมบูรณ์
+  const downloadMobileSafeCSV = (csvString, filename) => {
+    const universalBOM = "\uFEFF";
+    const finalCSV = universalBOM + csvString;
+    const blob = new Blob([finalCSV], { type: 'text/csv;charset=utf-8;' });
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    
+    // ทริกเกอร์การคลิกอย่างปลอดภัย
+    link.click();
+    
+    // ป้องกันปัญหาเบราว์เซอร์ลบไฟล์ก่อนโหลดเสร็จ
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   // ==========================================
@@ -277,7 +299,6 @@ export default function App() {
       const cost = p ? (p.cost * s.quantity) : 0;
       totalCost += cost;
       
-      // ดึงกำไรสุทธิ และ รายได้เข้าบัญชี (รองรับข้อมูลเก่าที่ไม่มีค่าด้วย)
       totalNetIncome += (s.netIncome !== undefined) ? s.netIncome : s.total;
       totalProfit += (s.netProfit !== undefined) ? s.netProfit : (s.total - cost);
     });
@@ -330,14 +351,7 @@ export default function App() {
       csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', totalQty, totalCost, totalRevenue, totalNetIncome, totalProfit, '']);
       
       const csvString = csvRows.map(row => row.join(',')).join('\n');
-      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `รายงานยอดขาย_${timeLabel}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadMobileSafeCSV(csvString, `รายงานยอดขาย_${timeLabel}.csv`);
     };
 
     return (
@@ -715,14 +729,7 @@ export default function App() {
       csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
 
       const csvString = csvRows.map(row => row.join(',')).join('\n');
-      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `สรุปสต๊อกสินค้า_${getLocalISODate()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadMobileSafeCSV(csvString, `สรุปข้อมูลสินค้าและมูลค่าสต๊อก_${getLocalISODate()}.csv`);
     };
 
     const handleSave = async (id) => {
@@ -849,12 +856,32 @@ export default function App() {
       setEditingStockId(null);
     };
 
+    const exportStockReport = () => {
+      if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
+      
+      const csvRows = [];
+      csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Royal Queen']);
+      csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
+      csvRows.push([]);
+      csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
+      
+      filteredAndSortedProducts.forEach((p, index) => {
+        csvRows.push([index + 1, `"${p.name}"`, p.stock || 0]);
+      });
+      
+      const csvString = csvRows.map(row => row.join(',')).join('\n');
+      downloadMobileSafeCSV(csvString, `รายงานจำนวนสต๊อกคงเหลือ_${getLocalISODate()}.csv`);
+    };
+
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         
         <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
+            <button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium">
+              <Download size={16} /><span>ส่งออกสต๊อก (Excel)</span>
+            </button>
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
             <div className="relative flex-1 sm:max-w-xs">
@@ -1396,14 +1423,33 @@ export default function App() {
     );
   }
 
+  // หน้าต่างสำหรับผู้บริหาร (เข้าผ่าน URL ?view=dashboard)
   if (isExecutiveView) {
     return (
-      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans">
-        <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2"><ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" /><span>The Royal Queen - ผู้บริหาร</span></h1>
+      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans flex flex-col">
+        <div className="max-w-5xl mx-auto w-full space-y-4 md:space-y-6">
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
+              <ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" />
+              <span>The Royal Queen - ผู้บริหาร</span>
+            </h1>
+            <div className="flex space-x-2 w-full sm:w-auto">
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                แดชบอร์ด
+              </button>
+              <button 
+                onClick={() => setActiveTab('stock')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                ดูสต๊อกสินค้า
+              </button>
+            </div>
           </div>
-          <DashboardView />
+          {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'stock' && <StockView />}
         </div>
       </div>
     );
