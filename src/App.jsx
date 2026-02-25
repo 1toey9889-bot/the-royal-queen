@@ -11,7 +11,8 @@ import {
   updateDoc, 
   deleteDoc, 
   doc,
-  increment
+  increment,
+  setDoc // เพิ่มคำสั่ง setDoc เข้ามาเพื่อแก้ปัญหาข้อมูลซ้อน
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -88,8 +89,10 @@ export default function App() {
 
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       if (snapshot.empty) {
-        addDoc(collection(db, "users"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
-        addDoc(collection(db, "users"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
+        // แก้ปัญหา User เบิ้ล: เปลี่ยนจาก addDoc (สุ่ม ID) เป็น setDoc (ล็อก ID ตายตัว)
+        // ทำให้เวลาระบบรันซ้ำ มันจะแค่เซฟทับตัวเดิม ไม่สร้างบรรทัดใหม่เพิ่มครับ
+        setDoc(doc(db, "users", "default_admin"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
+        setDoc(doc(db, "users", "default_user"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
       } else {
         const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUsers(usersData);
