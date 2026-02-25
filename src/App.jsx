@@ -11,10 +11,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc,
-  increment,
-  initializeFirestore,           
-  persistentLocalCache,          
-  persistentMultipleTabManager   
+  increment
 } from "firebase/firestore";
 import { 
   LayoutDashboard, 
@@ -50,20 +47,9 @@ const firebaseConfig = {
   appId: "1:1070880208582:web:9530fdad63bab3454149c7"
 };
 
-// ป้องกันการเชื่อมต่อซ้ำซ้อน และตั้งค่า Offline Mode ให้เสถียรที่สุด
-let app;
-let db;
-
-try {
-  app = getApp();
-  db = getFirestore(app);
-} catch (e) {
-  app = initializeApp(firebaseConfig);
-  // เปิดระบบ Offline และให้รองรับการซิงค์ข้อมูลหลายๆ เครื่องพร้อมกัน
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
-  });
-}
+// ใช้การเชื่อมต่อแบบมาตรฐานที่เสถียรที่สุด (ปิด Offline Cache เพื่อแก้ปัญหาข้อมูลไม่ซิงค์)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
 
 // ==========================================
 // 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
