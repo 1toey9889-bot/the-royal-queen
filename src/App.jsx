@@ -1041,7 +1041,7 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] หน้าคีย์ยอดขาย POS (Sales POS)
+  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS)
   const SalesView = () => {
     const [selectedProduct, setSelectedProduct] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -1088,7 +1088,7 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 max-w-2xl mx-auto animate-in fade-in duration-300">
-        <h2 className="text-lg md:text-2xl font-bold text-gray-800">คีย์ข้อมูลการขาย (POS)</h2>
+        <h2 className="text-lg md:text-2xl font-bold text-gray-800">ข้อมูลการขาย (POS)</h2>
         <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
           <form onSubmit={handleCheckout} className="space-y-4 md:space-y-6">
             {message && <div className={`p-3 md:p-4 rounded-lg text-xs md:text-sm font-medium ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
@@ -1207,7 +1207,7 @@ export default function App() {
           {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'stock' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Boxes size={18} className="md:w-5 md:h-5" /><span>สต๊อกสินค้า</span></button>}
           {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Users size={18} className="md:w-5 md:h-5" /><span>จัดการผู้ใช้</span></button>}
           {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'history' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><History size={18} className="md:w-5 md:h-5" /><span>ประวัติการขาย</span></button>}
-          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'sales' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><ShoppingCart size={18} className="md:w-5 md:h-5" /><span>คีย์ยอดขาย (POS)</span></button>}
+          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'sales' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><ShoppingCart size={18} className="md:w-5 md:h-5" /><span>ข้อมูลการขาย (POS)</span></button>}
         </nav>
       </div>
 
@@ -1219,7 +1219,7 @@ export default function App() {
              activeTab === 'products' ? 'ตั้งค่าฐานข้อมูลสินค้า' : 
              activeTab === 'stock' ? 'ระบบคลังสินค้า' : 
              activeTab === 'users' ? 'ตั้งค่าบัญชีและสิทธิ์พนักงาน' : 
-             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'แคชเชียร์ (POS)'}
+             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'ข้อมูลการขาย (POS)'}
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm text-gray-600 bg-gray-50 py-1 md:py-1.5 px-2 md:px-3 rounded-full border border-gray-100">
