@@ -35,7 +35,9 @@ import {
   History,
   BarChart3,
   CalendarDays,
-  ShieldCheck // ไอคอนสำหรับสิทธิ์
+  ShieldCheck,
+  Search, // นำเข้าไอคอนค้นหา
+  ArrowUpDown // นำเข้าไอคอนจัดเรียง
 } from 'lucide-react';
 
 // ==========================================
@@ -89,8 +91,6 @@ export default function App() {
 
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       if (snapshot.empty) {
-        // แก้ปัญหา User เบิ้ล: เปลี่ยนจาก addDoc (สุ่ม ID) เป็น setDoc (ล็อก ID ตายตัว)
-        // ทำให้เวลาระบบรันซ้ำ มันจะแค่เซฟทับตัวเดิม ไม่สร้างบรรทัดใหม่เพิ่มครับ
         setDoc(doc(db, "users", "default_admin"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
         setDoc(doc(db, "users", "default_user"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
       } else {
@@ -130,33 +130,26 @@ export default function App() {
     };
   }, []);
 
-  // อัปเดตสิทธิ์การใช้งานแบบ Real-time (ถ้า Admin แก้สิทธิ์ให้ผู้ใช้ที่ล็อกอินอยู่ เมนูจะเปลี่ยนทันที)
   useEffect(() => {
     if (loggedInUser) {
       const updatedUser = users.find(u => u.id === loggedInUser.id);
       if (updatedUser) {
-        // อัปเดตข้อมูลผู้ใช้ใน State
         setLoggedInUser(updatedUser);
-        // ถ้าโดนตัดสิทธิ์หน้าที่เปิดอยู่ ให้เด้งกลับไปหน้า POS
         if (activeTab !== 'sales' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
           setActiveTab('sales');
         }
       } else {
-        // โดนลบ User ทิ้ง บังคับเตะออก
         setLoggedInUser(null);
       }
     }
-  }, [users]); // ทำงานเมื่อมีข้อมูล Users อัปเดต
-
+  }, [users]);
 
   // --- 🛠️ 3.3 ฟังก์ชันตรวจสอบสิทธิ์และเครื่องมือเสริม ---
-  
-  // เช็คว่า User ปัจจุบันมีสิทธิ์เข้าเมนูนั้นๆ หรือไม่
   const canAccess = (tabName) => {
     if (!loggedInUser) return false;
-    if (loggedInUser.role === 'admin') return true; // Admin เข้าได้ทุกอย่าง
-    if (tabName === 'sales') return true; // ทุกคนเข้าหน้าขายได้
-    return !!loggedInUser.permissions?.[tabName]; // เช็คสิทธิ์ที่ Admin ติ๊กให้
+    if (loggedInUser.role === 'admin') return true; 
+    if (tabName === 'sales') return true; 
+    return !!loggedInUser.permissions?.[tabName]; 
   };
 
   const formatMoney = (amount) => {
@@ -180,7 +173,6 @@ export default function App() {
       const foundUser = users.find(u => u.username === username && u.password === password);
       if (foundUser) {
         setLoggedInUser(foundUser);
-        // ถ้าเป็น Admin หรือมีสิทธิ์ดู Dashboard ให้เด้งไปหน้า Dashboard นอกนั้นไปหน้า POS
         const startTab = foundUser.role === 'admin' || foundUser.permissions?.dashboard ? 'dashboard' : 'sales';
         setActiveTab(startTab); 
         setError('');
@@ -208,14 +200,7 @@ export default function App() {
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <User size={18} className="text-gray-400" />
                   </div>
-                  <input 
-                    type="text" 
-                    value={username} 
-                    onChange={(e) => setUsername(e.target.value)} 
-                    className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" 
-                    placeholder="admin หรือ user" 
-                    required 
-                  />
+                  <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" placeholder="admin หรือ user" required />
                 </div>
               </div>
               <div>
@@ -224,27 +209,18 @@ export default function App() {
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Lock size={18} className="text-gray-400" />
                   </div>
-                  <input 
-                    type="password" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" 
-                    placeholder="••••••" 
-                    required 
-                  />
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-gray-50 hover:bg-white focus:bg-white" placeholder="••••••" required />
                 </div>
               </div>
             </div>
-            <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3.5 rounded-xl text-base font-bold transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0">
-              เข้าสู่ระบบ
-            </button>
+            <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3.5 rounded-xl text-base font-bold transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
         </div>
       </div>
     );
   };
 
-  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard) รูปแบบใหม่ (เข้าใจง่าย & ย้อนหลังได้)
+  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard)
   const DashboardView = () => {
     const [timeframe, setTimeframe] = useState('monthly'); 
     const currentDateStr = new Date().toLocaleDateString('en-CA');
@@ -630,6 +606,30 @@ export default function App() {
     const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    
+    // State สำหรับการค้นหาและจัดเรียง
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState('name_asc');
+
+    // กรองและจัดเรียงข้อมูลสินค้า
+    const filteredAndSortedProducts = useMemo(() => {
+      let result = [...products];
+
+      if (searchTerm) {
+        result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      }
+
+      result.sort((a, b) => {
+        if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
+        if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
+        if (sortBy === 'price_desc') return (b.price || 0) - (a.price || 0);
+        if (sortBy === 'price_asc') return (a.price || 0) - (b.price || 0);
+        if (sortBy === 'stock_desc') return (b.stock || 0) - (a.stock || 0);
+        return 0;
+      });
+
+      return result;
+    }, [products, searchTerm, sortBy]);
 
     const exportProductsReport = () => {
       if (products.length === 0) return;
@@ -637,16 +637,16 @@ export default function App() {
       csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Royal Queen']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
-      csvRows.push(['ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
+      csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
       
       let sumStock = 0; let sumCostValue = 0; let sumSaleValue = 0; let sumExpectedProfit = 0;
-      products.forEach(p => {
+      filteredAndSortedProducts.forEach((p, index) => {
         const stock = p.stock || 0; const costVal = stock * p.cost; const saleVal = stock * p.price; const profitVal = saleVal - costVal;
         sumStock += stock; sumCostValue += costVal; sumSaleValue += saleVal; sumExpectedProfit += profitVal;
-        csvRows.push([`"${p.name}"`, p.cost, p.price, p.price - p.cost, stock, costVal, saleVal, profitVal]);
+        csvRows.push([index + 1, `"${p.name}"`, p.cost, p.price, p.price - p.cost, stock, costVal, saleVal, profitVal]);
       });
       csvRows.push([]);
-      csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
+      csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
 
       const csvString = csvRows.map(row => row.join(',')).join('\n');
       const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
@@ -681,18 +681,50 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0 bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการข้อมูลสินค้า</h2>
-          <div className="flex space-x-2 md:space-x-3 w-full sm:w-auto">
-            <button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium"><Download size={16} /><span>ส่งออกสต๊อก (Excel)</span></button>
-            {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>}
+        <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
+          
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+            <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการข้อมูลสินค้า</h2>
+            <div className="flex space-x-2 w-full sm:w-auto">
+              <button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium"><Download size={16} /><span>ส่งออก Excel</span></button>
+              {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>}
+            </div>
           </div>
+
+          {/* ส่วนค้นหาและจัดเรียง */}
+          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="ค้นหาสินค้า..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <div className="bg-gray-50 p-2 rounded-lg border border-gray-200"><ArrowUpDown size={16} className="text-gray-500" /></div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                <option value="name_asc">ชื่อ (ก - ฮ)</option>
+                <option value="name_desc">ชื่อ (ฮ - ก)</option>
+                <option value="price_desc">ราคาขาย (มากไปน้อย)</option>
+                <option value="price_asc">ราคาขาย (น้อยไปมาก)</option>
+              </select>
+            </div>
+          </div>
+
         </div>
         
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[500px]">
+          <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
+                <th className="p-3 md:p-4 font-medium text-center w-16">ลำดับ</th>
                 <th className="p-3 md:p-4 font-medium">ชื่อสินค้า</th>
                 <th className="p-3 md:p-4 font-medium">ราคาคลินิก</th>
                 <th className="p-3 md:p-4 font-medium">ราคาขาย</th>
@@ -701,32 +733,34 @@ export default function App() {
             </thead>
             <tbody className="text-xs md:text-sm">
               {isAdding && (
-                <tr className="border-b border-gray-50 bg-blue-50/50">
-                  <td className="p-2 md:p-4"><input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" placeholder="ชื่อสินค้า..." value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></td>
-                  <td className="p-2 md:p-4"><input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" placeholder="ราคาคลินิก..." value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /></td>
-                  <td className="p-2 md:p-4"><input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" placeholder="ราคาขาย..." value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /></td>
+                <tr className="border-b border-blue-100 bg-blue-50/50">
+                  <td className="p-3 md:p-4 text-center text-blue-400 font-bold">*</td>
+                  <td className="p-2 md:p-4"><input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ชื่อสินค้า..." value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></td>
+                  <td className="p-2 md:p-4"><input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ราคาคลินิก..." value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /></td>
+                  <td className="p-2 md:p-4"><input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ราคาขาย..." value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /></td>
                   <td className="p-2 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
-                    <button onClick={handleAdd} className="text-green-600 p-1 md:p-1.5"><Save size={16} /></button>
-                    <button onClick={() => setIsAdding(false)} className="text-red-600 p-1 md:p-1.5"><X size={16} /></button>
+                    <button onClick={handleAdd} className="text-green-600 bg-green-100 p-1.5 md:p-2 rounded-md hover:bg-green-200 transition"><Save size={16} /></button>
+                    <button onClick={() => setIsAdding(false)} className="text-red-600 bg-red-100 p-1.5 md:p-2 rounded-md hover:bg-red-200 transition"><X size={16} /></button>
                   </td>
                 </tr>
               )}
-              {products.map(product => (
+              {filteredAndSortedProducts.map((product, index) => (
                 <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-gray-800">{product.name}</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600">{product.cost} ฿</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">{product.price} ฿</span>}</td>
+                  <td className="p-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
+                  <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-gray-800">{product.name}</span>}</td>
+                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-medium">{product.cost} ฿</span>}</td>
+                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">{product.price} ฿</span>}</td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
                     {isEditing === product.id ? (
-                      <><button onClick={() => handleSave(product.id)} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md"><Save size={16} /></button><button onClick={() => setIsEditing(null)} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md"><X size={16} /></button></>
+                      <><button onClick={() => handleSave(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setIsEditing(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
                     ) : (
-                      <><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md"><Edit2 size={16} /></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) await deleteDoc(doc(db, "products", product.id)); }} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md"><Trash2 size={16} /></button></>
+                      <><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) await deleteDoc(doc(db, "products", product.id)); }} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md transition"><Trash2 size={16} /></button></>
                     )}
                   </td>
                 </tr>
               ))}
-              {products.length === 0 && !isAdding && (
-                <tr><td colSpan="4" className="text-center p-6 text-gray-500 text-xs md:text-sm">ไม่มีข้อมูลสินค้า</td></tr>
+              {filteredAndSortedProducts.length === 0 && !isAdding && (
+                <tr><td colSpan="5" className="text-center p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
               )}
             </tbody>
           </table>
@@ -739,6 +773,30 @@ export default function App() {
   const StockView = () => {
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
+    
+    // State สำหรับการค้นหาและจัดเรียง
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState('name_asc');
+
+    // กรองและจัดเรียงข้อมูลสินค้า
+    const filteredAndSortedProducts = useMemo(() => {
+      let result = [...products];
+
+      if (searchTerm) {
+        result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      }
+
+      result.sort((a, b) => {
+        if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
+        if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
+        if (sortBy === 'stock_desc') return (b.stock || 0) - (a.stock || 0);
+        if (sortBy === 'stock_asc') return (a.stock || 0) - (b.stock || 0);
+        return 0;
+      });
+
+      return result;
+    }, [products, searchTerm, sortBy]);
+
     const handleSaveStock = async (id) => {
       await updateDoc(doc(db, "products", id), { stock: Number(newStock) });
       setEditingStockId(null);
@@ -746,36 +804,74 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
-        <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
+        
+        <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+            <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
+          </div>
+
+          {/* ส่วนค้นหาและจัดเรียง */}
+          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="ค้นหาสินค้า..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <div className="bg-gray-50 p-2 rounded-lg border border-gray-200"><ArrowUpDown size={16} className="text-gray-500" /></div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full sm:w-auto border border-gray-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                <option value="name_asc">ชื่อ (ก - ฮ)</option>
+                <option value="name_desc">ชื่อ (ฮ - ก)</option>
+                <option value="stock_asc">จำนวนสต๊อก (น้อยไปมาก)</option>
+                <option value="stock_desc">จำนวนสต๊อก (มากไปน้อย)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[400px]">
+          <table className="w-full text-left border-collapse min-w-[500px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
+                <th className="p-3 md:p-4 font-medium text-center w-16">ลำดับ</th>
                 <th className="p-3 md:p-4 font-medium">ชื่อสินค้า</th>
                 <th className="p-3 md:p-4 font-medium text-center">คงเหลือ</th>
                 <th className="p-3 md:p-4 font-medium text-right">อัปเดต</th>
               </tr>
             </thead>
             <tbody className="text-xs md:text-sm">
-              {products.map(product => (
+              {filteredAndSortedProducts.map((product, index) => (
                 <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="p-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
                   <td className="p-3 md:p-4 font-medium text-gray-800">{product.name}</td>
                   <td className="p-3 md:p-4 text-center">
                     {editingStockId === product.id ? (
-                      <input type="number" className="w-16 md:w-20 p-1.5 md:p-2 border rounded text-center text-xs md:text-sm" value={newStock} onChange={e => setNewStock(e.target.value)} /> 
+                      <input type="number" className="w-16 md:w-20 p-1.5 md:p-2 border rounded text-center text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} /> 
                     ) : (
                       <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${product.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{product.stock || 0} ชิ้น</span>
                     )}
                   </td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2">
                     {editingStockId === product.id ? (
-                      <><button onClick={() => handleSaveStock(product.id)} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md"><Save size={16} /></button><button onClick={() => setEditingStockId(null)} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md"><X size={16} /></button></>
+                      <><button onClick={() => handleSaveStock(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setEditingStockId(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
                     ) : (
-                      <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md"><Edit2 size={16} /></button>
+                      <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button>
                     )}
                   </td>
                 </tr>
               ))}
+              {filteredAndSortedProducts.length === 0 && (
+                <tr><td colSpan="4" className="text-center p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
+              )}
             </tbody>
           </table>
         </div>
