@@ -38,7 +38,8 @@ import {
   ShieldCheck,
   Search,
   ArrowUpDown,
-  Store // นำเข้าไอคอนร้านค้า
+  Store,
+  Calculator // นำเข้าไอคอนเครื่องคิดเลข
 } from 'lucide-react';
 
 // ==========================================
@@ -1044,14 +1045,38 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS) พร้อมเลือกร้านค้า
+  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS) พร้อมเลือกร้านค้าและเครื่องคิดเลข
   const SalesView = () => {
-    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]); // เก็บค่าร้านค้าที่เลือก (ค่าเริ่มต้นคืออันแรก)
+    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
     const [selectedProduct, setSelectedProduct] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // --- ส่วนสถานะสำหรับเครื่องมือคำนวณ (Calculator State) ---
+    const posTotal = selectedProduct ? getProduct(selectedProduct).price * quantity : 0;
+    const [calcBasePrice, setCalcBasePrice] = useState('');
+    const [calcTxFeePct, setCalcTxFeePct] = useState(3.21);
+    const [calcCommFeePct, setCalcCommFeePct] = useState(7.49);
+    const [calcServiceFeePct, setCalcServiceFeePct] = useState(7.49);
+    const [calcManualFee, setCalcManualFee] = useState(0);
+
+    // ซิงค์ยอดขายตั้งต้นในเครื่องคิดเลข ให้ตรงกับยอด POS เสมอเมื่อมีการเปลี่ยนแปลง
+    useEffect(() => {
+      setCalcBasePrice(posTotal > 0 ? posTotal.toString() : '');
+    }, [posTotal]);
+
+    // สูตรคำนวณต่างๆ
+    const baseVal = parseFloat(calcBasePrice) || 0;
+    const txFeeAmt = (baseVal * (parseFloat(calcTxFeePct) || 0)) / 100;
+    const commFeeAmt = (baseVal * (parseFloat(calcCommFeePct) || 0)) / 100;
+    const serviceFeeAmt = (baseVal * (parseFloat(calcServiceFeePct) || 0)) / 100;
+    const manualFeeAmt = parseFloat(calcManualFee) || 0;
+    
+    const totalDeductions = txFeeAmt + commFeeAmt + serviceFeeAmt + manualFeeAmt;
+    const netIncome = baseVal - totalDeductions;
+    // ----------------------------------------------------
 
     const recentSales = sales
       .filter(s => new Date(s.date).toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA'))
@@ -1068,7 +1093,7 @@ export default function App() {
       setIsProcessing(true);
       try {
         await addDoc(collection(db, "sales"), { 
-          store: selectedStore, // บันทึกร้านค้าด้วย
+          store: selectedStore,
           productId: selectedProduct, 
           quantity, 
           total: product.price * quantity, 
@@ -1093,75 +1118,135 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 max-w-2xl mx-auto animate-in fade-in duration-300">
-        <h2 className="text-lg md:text-2xl font-bold text-gray-800">ข้อมูลการขาย (POS)</h2>
-        <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100">
-          <form onSubmit={handleCheckout} className="space-y-5 md:space-y-6">
-            {message && <div className={`p-3 md:p-4 rounded-lg text-xs md:text-sm font-medium ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
-            
-            {/* 1. ส่วนเลือกร้านค้า */}
-            <div>
-              <label className="block text-xs md:text-sm font-bold mb-2 md:mb-3 text-gray-700 flex items-center">
-                <Store size={16} className="mr-1.5 text-blue-600" /> เลือกร้านค้า (Channel)
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
-                {STORE_OPTIONS.map(store => (
-                  <button
-                    key={store}
-                    type="button"
-                    onClick={() => setSelectedStore(store)}
-                    className={`flex items-center justify-center py-2.5 px-2 rounded-lg border text-xs md:text-sm font-bold transition-all duration-200 ${
-                      selectedStore === store 
-                        ? (store.includes('Shopee') 
-                            ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/30 ring-2 ring-orange-500/50 ring-offset-1' 
-                            : 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/30 ring-2 ring-blue-600/50 ring-offset-1') 
-                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
-                    }`}
-                  >
-                    {store}
-                  </button>
-                ))}
+      <div className="space-y-6 md:space-y-8 max-w-3xl mx-auto animate-in fade-in duration-300">
+        
+        {/* 1. ส่วนบันทึกการขาย (POS) */}
+        <div>
+          <h2 className="text-lg md:text-2xl font-bold text-gray-800 mb-4">ข้อมูลการขาย (POS)</h2>
+          <div className="bg-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-gray-100">
+            <form onSubmit={handleCheckout} className="space-y-5 md:space-y-6">
+              {message && <div className={`p-3 md:p-4 rounded-lg text-xs md:text-sm font-medium ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
+              
+              <div>
+                <label className="block text-xs md:text-sm font-bold mb-2 md:mb-3 text-gray-700 flex items-center">
+                  <Store size={16} className="mr-1.5 text-blue-600" /> เลือกร้านค้า (Channel)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
+                  {STORE_OPTIONS.map(store => (
+                    <button
+                      key={store}
+                      type="button"
+                      onClick={() => setSelectedStore(store)}
+                      className={`flex items-center justify-center py-2.5 px-2 rounded-lg border text-xs md:text-sm font-bold transition-all duration-200 ${
+                        selectedStore === store 
+                          ? (store.includes('Shopee') 
+                              ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/30 ring-2 ring-orange-500/50 ring-offset-1' 
+                              : 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/30 ring-2 ring-blue-600/50 ring-offset-1') 
+                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
+                      }`}
+                    >
+                      {store}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* เส้นคั่น */}
-            <div className="border-b border-dashed border-gray-200"></div>
+              <div className="border-b border-dashed border-gray-200"></div>
 
-            {/* 2. เลือกสินค้า */}
-            <div>
-              <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700 flex items-center">
-                <Package size={16} className="mr-1.5 text-blue-600" /> เลือกสินค้า
-              </label>
-              <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg bg-white text-sm md:text-base focus:ring-2 focus:ring-blue-500 outline-none" required disabled={isProcessing}>
-                <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
-                {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) === 0}>{p.name} ({p.price} ฿) - เหลือ {p.stock || 0}</option>)}
-              </select>
-            </div>
-            
-            {/* 3. เลือกจำนวน */}
-            <div>
-              <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700">จำนวนชิ้น</label>
-              <div className="flex items-center space-x-3 md:space-x-4">
-                <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">-</button>
-                <input type="number" value={quantity} readOnly className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-bold" />
-                <button type="button" onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">+</button>
+              <div>
+                <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700 flex items-center">
+                  <Package size={16} className="mr-1.5 text-blue-600" /> เลือกสินค้า
+                </label>
+                <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg bg-white text-sm md:text-base focus:ring-2 focus:ring-blue-500 outline-none" required disabled={isProcessing}>
+                  <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
+                  {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) === 0}>{p.name} ({p.price} ฿) - เหลือ {p.stock || 0}</option>)}
+                </select>
               </div>
-            </div>
-
-            {/* ส่วนสรุปและปุ่มบันทึก */}
-            <div className="pt-5 mt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center space-y-4 sm:space-y-0">
-              <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-50 w-full sm:w-auto">
-                <p className="text-[10px] md:text-xs text-blue-600 font-bold uppercase tracking-wide">ยอดรวมสุทธิ</p>
-                <p className="text-2xl md:text-3xl font-black text-blue-700">{formatMoney(selectedProduct ? getProduct(selectedProduct).price * quantity : 0)}</p>
+              
+              <div>
+                <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700">จำนวนชิ้น</label>
+                <div className="flex items-center space-x-3 md:space-x-4">
+                  <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">-</button>
+                  <input type="number" value={quantity} readOnly className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-bold" />
+                  <button type="button" onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">+</button>
+                </div>
               </div>
-              <button type="submit" disabled={!selectedProduct || !selectedStore || isProcessing} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 md:px-8 md:py-4 rounded-xl text-sm md:text-base font-bold transition disabled:bg-gray-300 shadow-md hover:shadow-lg active:scale-95 flex justify-center">
-                บันทึกการขาย
-              </button>
-            </div>
-          </form>
+
+              <div className="pt-5 mt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center space-y-4 sm:space-y-0">
+                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-50 w-full sm:w-auto">
+                  <p className="text-[10px] md:text-xs text-blue-600 font-bold uppercase tracking-wide">ยอดรวม</p>
+                  <p className="text-2xl md:text-3xl font-black text-blue-700">{formatMoney(posTotal)}</p>
+                </div>
+                <button type="submit" disabled={!selectedProduct || !selectedStore || isProcessing} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 md:px-8 md:py-4 rounded-xl text-sm md:text-base font-bold transition disabled:bg-gray-300 shadow-md hover:shadow-lg active:scale-95 flex justify-center">
+                  บันทึกการขาย
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
 
-        <div className="mt-6 md:mt-8">
+        {/* 2. ส่วนเครื่องมือคำนวณ (Calculator) */}
+        <div className="bg-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-gray-100">
+          <h3 className="text-sm md:text-lg font-bold text-gray-800 mb-4 md:mb-5 flex items-center border-b border-gray-100 pb-3">
+            <Calculator size={20} className="mr-2 text-purple-600"/>
+            เครื่องมือคำนวณรายรับสุทธิ (E-Commerce)
+          </h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            {/* ฝั่งซ้าย: กล่องกรอกข้อมูล */}
+            <div className="space-y-4">
+              <div>
+                 <label className="block text-xs font-bold text-gray-700 mb-1.5">ยอดขายตั้งต้น (บาท)</label>
+                 <input 
+                   type="number" 
+                   value={calcBasePrice} 
+                   onChange={(e)=>setCalcBasePrice(e.target.value)} 
+                   placeholder="เช่น 3750"
+                   className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-purple-50/30 font-semibold" 
+                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3 md:gap-4">
+                 <div>
+                   <label className="block text-[10px] md:text-xs font-bold text-gray-700 mb-1.5">1. ค่าธุรกรรม (%)</label>
+                   <input type="number" step="0.01" value={calcTxFeePct} onChange={(e)=>setCalcTxFeePct(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                 </div>
+                 <div>
+                   <label className="block text-[10px] md:text-xs font-bold text-gray-700 mb-1.5">2. ค่าคอมมิชชั่น (%)</label>
+                   <input type="number" step="0.01" value={calcCommFeePct} onChange={(e)=>setCalcCommFeePct(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                 </div>
+                 <div>
+                   <label className="block text-[10px] md:text-xs font-bold text-gray-700 mb-1.5">3. ค่าบริการ (%)</label>
+                   <input type="number" step="0.01" value={calcServiceFeePct} onChange={(e)=>setCalcServiceFeePct(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                 </div>
+                 <div>
+                   <label className="block text-[10px] md:text-xs font-bold text-gray-700 mb-1.5">4. หักเพิ่มเติม (บาท)</label>
+                   <input type="number" value={calcManualFee} onChange={(e)=>setCalcManualFee(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="เช่น 100" />
+                 </div>
+              </div>
+            </div>
+
+            {/* ฝั่งขวา: กล่องสรุปยอด */}
+            <div className="bg-slate-50 p-4 md:p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
+               <div>
+                 <h4 className="text-xs md:text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2">สรุปรายการหัก</h4>
+                 <div className="space-y-2.5 text-xs md:text-sm font-medium">
+                    <div className="flex justify-between text-slate-600"><span>ยอดขายตั้งต้น</span> <span>{formatMoney(baseVal)}</span></div>
+                    <div className="flex justify-between text-red-500"><span>- ค่าธุรกรรม ({calcTxFeePct || 0}%)</span> <span>-{formatMoney(txFeeAmt)}</span></div>
+                    <div className="flex justify-between text-red-500"><span>- ค่าคอมมิชชั่น ({calcCommFeePct || 0}%)</span> <span>-{formatMoney(commFeeAmt)}</span></div>
+                    <div className="flex justify-between text-red-500"><span>- ค่าบริการ ({calcServiceFeePct || 0}%)</span> <span>-{formatMoney(serviceFeeAmt)}</span></div>
+                    {manualFeeAmt > 0 && <div className="flex justify-between text-red-500"><span>- หักเพิ่มเติม (แมนนวล)</span> <span>-{formatMoney(manualFeeAmt)}</span></div>}
+                 </div>
+               </div>
+               <div className="mt-4 pt-3 border-t border-slate-200 flex justify-between items-end">
+                  <span className="font-bold text-green-700 text-sm md:text-base">รายได้สุทธิ</span>
+                  <span className="font-black text-2xl md:text-3xl text-green-600">{formatMoney(netIncome)}</span>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. ตารางรายการล่าสุด */}
+        <div>
           <h3 className="text-sm md:text-lg font-bold text-gray-800 mb-3 md:mb-4 flex items-center"><History size={18} className="mr-2 text-gray-400"/> รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
           <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[500px]">
