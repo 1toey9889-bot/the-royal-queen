@@ -28,7 +28,8 @@ import {
   Lock,
   User,
   Download,
-  History // เพิ่มไอคอน History สำหรับหน้าประวัติการขาย
+  History,
+  BarChart3 // เพิ่มไอคอนกราฟสำหรับหน้าสรุปยอดขาย
 } from 'lucide-react';
 
 // --- FIREBASE CONFIGURATION ---
@@ -204,23 +205,53 @@ export default function App() {
   };
 
   const DashboardView = () => {
-    // เพิ่ม State สำหรับเลือกวันที่และเดือน เพื่อดูย้อนหลัง
-    const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA')); // รูปแบบ YYYY-MM-DD
-    const [filterMonth, setFilterMonth] = useState(new Date().toLocaleDateString('en-CA').substring(0, 7)); // รูปแบบ YYYY-MM
+    const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA')); 
+    const [filterMonth, setFilterMonth] = useState(new Date().toLocaleDateString('en-CA').substring(0, 7)); 
+    const [filterProductId, setFilterProductId] = useState('all');
 
+    // กรองยอดขายรายวัน
     const todaySales = sales.filter(s => {
       const saleDateLocal = new Date(s.date).toLocaleDateString('en-CA');
-      return saleDateLocal === filterDate;
+      const isDateMatch = saleDateLocal === filterDate;
+      const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
+      return isDateMatch && isProductMatch;
     });
-    const todayTotal = todaySales.reduce((sum, s) => sum + s.total, 0);
 
+    // กรองยอดขายรายเดือน
     const monthSales = sales.filter(s => {
       const saleMonthLocal = new Date(s.date).toLocaleDateString('en-CA').substring(0, 7);
-      return saleMonthLocal === filterMonth;
+      const isMonthMatch = saleMonthLocal === filterMonth;
+      const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
+      return isMonthMatch && isProductMatch;
     });
-    const monthTotal = monthSales.reduce((sum, s) => sum + s.total, 0);
 
-    // คำนวณสินค้าขายดี เฉพาะในเดือนที่เลือก
+    // คำนวณ: รายวัน (ยอดขาย, ต้นทุน, กำไร)
+    const todayTotal = todaySales.reduce((sum, s) => sum + s.total, 0);
+    const todayCost = todaySales.reduce((sum, s) => {
+      const p = getProduct(s.productId);
+      return sum + (p ? p.cost * s.quantity : 0);
+    }, 0);
+    const todayProfit = todayTotal - todayCost;
+
+    // คำนวณ: รายเดือน (ยอดขาย, ต้นทุน, กำไร)
+    const monthTotal = monthSales.reduce((sum, s) => sum + s.total, 0);
+    const monthCost = monthSales.reduce((sum, s) => {
+      const p = getProduct(s.productId);
+      return sum + (p ? p.cost * s.quantity : 0);
+    }, 0);
+    const monthProfit = monthTotal - monthCost;
+
+    // คำนวณ: ภาพรวมทั้งหมดตั้งแต่เปิดร้าน (ยอดขาย, ต้นทุน, กำไร)
+    // กรองตามสินค้าที่เลือกด้วย เพื่อให้ดูภาพรวมของสินค้านั้นๆ ได้
+    const allTimeFilteredSales = sales.filter(s => filterProductId === 'all' || s.productId === filterProductId);
+    const allTimeTotal = allTimeFilteredSales.reduce((sum, s) => sum + s.total, 0);
+    const allTimeCost = allTimeFilteredSales.reduce((sum, s) => {
+      const p = getProduct(s.productId);
+      return sum + (p ? p.cost * s.quantity : 0);
+    }, 0);
+    const allTimeProfit = allTimeTotal - allTimeCost;
+
+    // คำนวณสินค้าขายดี เฉพาะในเดือนและสินค้าที่เลือก
     const productSalesCount = {};
     monthSales.forEach(s => {
       productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + s.quantity;
@@ -235,10 +266,29 @@ export default function App() {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-          <h2 className="text-2xl font-bold text-gray-800">สรุปภาพรวม (Dashboard)</h2>
+          
+          <div className="flex items-center space-x-3">
+            <div className="bg-gradient-to-br from-blue-500 to-purple-600 p-2.5 rounded-xl shadow-md text-white">
+              <BarChart3 size={24} strokeWidth={2.5} />
+            </div>
+            <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย (The Royal Queen)</h2>
+          </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* ตัวกรองรายวัน */}
+            <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
+               <span className="text-sm text-gray-500 font-medium">สินค้า:</span>
+               <select 
+                  value={filterProductId} 
+                  onChange={e => setFilterProductId(e.target.value)} 
+                  className="border-none focus:ring-0 text-sm bg-transparent cursor-pointer outline-none"
+               >
+                 <option value="all">ดูทั้งหมดทุกสินค้า</option>
+                 {products.map(p => (
+                   <option key={p.id} value={p.id}>{p.name}</option>
+                 ))}
+               </select>
+            </div>
+            
             <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
                <span className="text-sm text-gray-500 font-medium">รายวัน:</span>
                <input 
@@ -248,7 +298,7 @@ export default function App() {
                   className="border-none focus:ring-0 text-sm bg-transparent cursor-pointer outline-none" 
                />
             </div>
-            {/* ตัวกรองรายเดือน */}
+
             <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
                <span className="text-sm text-gray-500 font-medium">รายเดือน:</span>
                <input 
@@ -265,38 +315,77 @@ export default function App() {
                 className="flex items-center space-x-2 bg-blue-50 text-blue-600 border border-blue-100 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors shadow-sm ml-auto"
               >
                 <Download size={18} />
-                <span>ส่งออกยอดขายทั้งหมด</span>
+                <span className="hidden lg:inline">ส่งออกยอดขายทั้งหมด</span>
+                <span className="lg:hidden">ส่งออก</span>
               </button>
             )}
           </div>
         </div>
         
+        {/* กล่องแสดง สรุปยอดขาย ต้นทุน กำไร */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><DollarSign size={24} /></div>
-            <div>
-              <p className="text-sm text-gray-500">ยอดขายวันที่เลือก</p>
-              <p className="text-2xl font-bold text-gray-800">{formatMoney(todayTotal)}</p>
+          
+          {/* 1. รายวัน */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Calendar size={20} /></div>
+              <h3 className="font-bold text-gray-800">วันที่เลือก</h3>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-gray-600"><span className="text-sm">ยอดขาย</span><span className="font-medium">{formatMoney(todayTotal)}</span></div>
+              <div className="flex justify-between text-gray-500"><span className="text-sm">หักต้นทุน</span><span>{formatMoney(todayCost)}</span></div>
+              <div className="pt-3 mt-1 border-t border-gray-100 flex justify-between items-end">
+                <span className="font-bold text-green-600">กำไร</span>
+                <span className="font-bold text-xl text-green-600">{formatMoney(todayProfit)}</span>
+              </div>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div className="p-3 bg-green-100 text-green-600 rounded-lg"><Calendar size={24} /></div>
-            <div>
-              <p className="text-sm text-gray-500">ยอดขายเดือนที่เลือก</p>
-              <p className="text-2xl font-bold text-gray-800">{formatMoney(monthTotal)}</p>
+
+          {/* 2. รายเดือน */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><TrendingUp size={20} /></div>
+              <h3 className="font-bold text-gray-800">เดือนที่เลือก</h3>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-gray-600"><span className="text-sm">ยอดขาย</span><span className="font-medium">{formatMoney(monthTotal)}</span></div>
+              <div className="flex justify-between text-gray-500"><span className="text-sm">หักต้นทุน</span><span>{formatMoney(monthCost)}</span></div>
+              <div className="pt-3 mt-1 border-t border-gray-100 flex justify-between items-end">
+                <span className="font-bold text-green-600">กำไร</span>
+                <span className="font-bold text-xl text-green-600">{formatMoney(monthProfit)}</span>
+              </div>
+              <div className="text-xs text-right text-gray-400 font-medium">({monthSales.length} ออเดอร์)</div>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><TrendingUp size={24} /></div>
-            <div>
-              <p className="text-sm text-gray-500">ออเดอร์ (เดือนที่เลือก)</p>
-              <p className="text-2xl font-bold text-gray-800">{monthSales.length} รายการ</p>
+
+          {/* 3. ภาพรวมทั้งหมด (All-time) */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden bg-gradient-to-br from-white to-gray-50">
+            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-green-50 text-green-600 rounded-lg"><DollarSign size={20} /></div>
+              <h3 className="font-bold text-gray-800">ภาพรวมทั้งหมด (สะสม)</h3>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-gray-600"><span className="text-sm">ยอดขายรวม</span><span className="font-medium">{formatMoney(allTimeTotal)}</span></div>
+              <div className="flex justify-between text-gray-500"><span className="text-sm">ต้นทุนรวม</span><span>{formatMoney(allTimeCost)}</span></div>
+              <div className="pt-3 mt-1 border-t border-gray-200 flex justify-between items-end">
+                <span className="font-bold text-green-600">กำไรสุทธิ</span>
+                <span className="font-bold text-xl text-green-600">{formatMoney(allTimeProfit)}</span>
+              </div>
+              <div className="text-xs text-right text-gray-400 font-medium">({allTimeFilteredSales.length} ออเดอร์)</div>
             </div>
           </div>
+
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100"><h3 className="text-lg font-semibold text-gray-800">สินค้าขายดี ประจำเดือนที่เลือก (Top 5)</h3></div>
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {filterProductId === 'all' ? 'สินค้าขายดี ประจำเดือนที่เลือก (Top 5)' : 'สรุปยอดขายสินค้าที่เลือก'}
+            </h3>
+          </div>
           <div className="p-6">
             <div className="space-y-4">
               {topProducts.map((p, index) => (
@@ -304,11 +393,13 @@ export default function App() {
                   <div className="flex items-center space-x-3"><span className="text-gray-400 font-bold w-4">{index + 1}.</span><span className="font-medium text-gray-700">{p.name}</span></div>
                   <div className="flex items-center space-x-4">
                     <span className="text-sm text-gray-500">ขายแล้ว {p.qty} ชิ้น</span>
-                    <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / topProducts[0].qty) * 100}%` }}></div></div>
+                    <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / topProducts[0].qty) * 100}%` }}></div>
+                    </div>
                   </div>
                 </div>
               ))}
-              {topProducts.length === 0 && <p className="text-gray-500 text-center py-4">ไม่มีข้อมูลการขายในเดือนนี้</p>}
+              {topProducts.length === 0 && <p className="text-gray-500 text-center py-4">ไม่มีข้อมูลการขายตามเงื่อนไขที่เลือก</p>}
             </div>
           </div>
         </div>
@@ -316,14 +407,21 @@ export default function App() {
     );
   };
 
-  // --- SALES HISTORY VIEW (แก้ไข/ลบออเดอร์ย้อนหลัง สำหรับ Admin) ---
+  // --- SALES HISTORY VIEW ---
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ productId: '', quantity: 1 });
+    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '' });
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // ดึงเฉพาะรายการขายของวันที่เลือก
+    // ฟังก์ชันแปลงเวลาให้อยู่ในรูปแบบที่ input type="datetime-local" รองรับ
+    const formatForInput = (isoString) => {
+      if (!isoString) return '';
+      const d = new Date(isoString);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    };
+
     const filteredSales = sales
       .filter(s => new Date(s.date).toLocaleDateString('en-CA') === filterDate)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -333,7 +431,6 @@ export default function App() {
       setIsProcessing(true);
       try {
         await deleteDoc(doc(db, "sales", sale.id));
-        // คืนสต๊อกให้สินค้า (เช็คก่อนว่าสินค้านี้ยังไม่ถูกลบออกจากระบบไปแล้ว)
         if (getProduct(sale.productId)) {
           await updateDoc(doc(db, "products", sale.productId), { stock: increment(sale.quantity) });
         }
@@ -355,26 +452,28 @@ export default function App() {
         if (!newProductData) throw new Error("ไม่พบข้อมูลสินค้าใหม่");
         if (newQty < 1) throw new Error("จำนวนต้องมากกว่า 0");
 
+        // ตรวจสอบความถูกต้องของวันที่ใหม่
+        const parsedDate = new Date(editForm.date);
+        if (isNaN(parsedDate.getTime())) throw new Error("รูปแบบวันที่ไม่ถูกต้อง");
+        const newDateIso = parsedDate.toISOString();
+
         const newTotal = newProductData.price * newQty;
 
-        // จัดการสต๊อกอัตโนมัติเมื่อมีการแก้ไข
         if (oldProductId !== newProductId) {
-          // ถ้าเปลี่ยนตัวสินค้า: คืนสต๊อกของเก่า (ถ้าของเก่ายังมีอยู่) แล้วตัดสต๊อกของใหม่
           if (getProduct(oldProductId)) {
             await updateDoc(doc(db, "products", oldProductId), { stock: increment(oldQty) });
           }
           await updateDoc(doc(db, "products", newProductId), { stock: increment(-newQty) });
         } else if (oldQty !== newQty) {
-          // ถ้าสินค้าเดิม แค่เปลี่ยนจำนวน: คำนวณส่วนต่างแล้วอัปเดตสต๊อก
           const diff = newQty - oldQty;
           await updateDoc(doc(db, "products", oldProductId), { stock: increment(-diff) });
         }
 
-        // อัปเดตข้อมูลการขายลง Firebase
         await updateDoc(doc(db, "sales", sale.id), {
           productId: newProductId,
           quantity: newQty,
-          total: newTotal
+          total: newTotal,
+          date: newDateIso // อัปเดตวันที่และเวลาใหม่ลงฐานข้อมูล
         });
 
         setIsEditing(null);
@@ -417,7 +516,19 @@ export default function App() {
             <tbody>
               {filteredSales.map(sale => (
                 <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="p-4 text-sm text-gray-500">{new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})}</td>
+                  <td className="p-4 text-sm text-gray-500">
+                    {isEditing === sale.id ? (
+                      <input 
+                        type="datetime-local" 
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs" 
+                        value={editForm.date} 
+                        onChange={e => setEditForm({...editForm, date: e.target.value})}
+                        disabled={isProcessing}
+                      />
+                    ) : (
+                      new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})
+                    )}
+                  </td>
                   <td className="p-4">
                     {isEditing === sale.id ? (
                       <select 
@@ -465,7 +576,14 @@ export default function App() {
                     ) : (
                       <>
                         <button 
-                          onClick={() => { setIsEditing(sale.id); setEditForm({productId: sale.productId, quantity: sale.quantity}); }} 
+                          onClick={() => { 
+                            setIsEditing(sale.id); 
+                            setEditForm({
+                              productId: sale.productId, 
+                              quantity: sale.quantity,
+                              date: formatForInput(sale.date) // ดึงเวลาเดิมมาแสดงให้แก้
+                            }); 
+                          }} 
                           className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition"
                         >
                           <Edit2 size={18} />
@@ -490,7 +608,6 @@ export default function App() {
       </div>
     );
   };
-
 
   const ProductsView = () => {
     const [isEditing, setIsEditing] = useState(null);
@@ -681,11 +798,16 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // ดึงรายการขายล่าสุดของวันนี้มาแสดงให้พนักงานทวนสอบ
+    const recentSales = sales
+      .filter(s => new Date(s.date).toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA'))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5);
+
     const handleCheckout = async (e) => {
       e.preventDefault();
       if (!selectedProduct) return;
       const product = getProduct(selectedProduct);
-      // อุดรอยรั่ว: ดักจับกรณีค่า stock เป็นค่าว่าง
       if ((product.stock || 0) < quantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
       setIsProcessing(true);
       try {
@@ -717,6 +839,39 @@ export default function App() {
             <div><label className="block text-sm font-medium mb-2">จำนวน</label><div className="flex items-center space-x-4"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-12 h-12 rounded bg-gray-100 font-bold">-</button><input type="number" value={quantity} readOnly className="w-full text-center p-3 border rounded-lg text-lg" /><button type="button" onClick={() => setQuantity(quantity + 1)} className="w-12 h-12 rounded bg-gray-100 font-bold">+</button></div></div>
             <div className="pt-4 border-t flex justify-between items-end"><div><p className="text-sm text-gray-500">ยอดรวม</p><p className="text-3xl font-bold text-blue-600">{formatMoney(selectedProduct ? getProduct(selectedProduct).price * quantity : 0)}</p></div><button type="submit" disabled={!selectedProduct || isProcessing} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition disabled:bg-gray-300">บันทึกการขาย</button></div>
           </form>
+        </div>
+
+        {/* ตารางแสดงรายการขายล่าสุดของวันนี้ สำหรับพนักงาน */}
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-600 border-b border-gray-100">
+                  <th className="p-4 font-medium">เวลา</th>
+                  <th className="p-4 font-medium">สินค้า</th>
+                  <th className="p-4 font-medium text-center">จำนวน</th>
+                  <th className="p-4 font-medium text-right">ยอดรวม</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentSales.map(sale => (
+                  <tr key={sale.id} className="border-b border-gray-50">
+                    <td className="p-4 text-sm text-gray-500">{new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td className="p-4 font-medium">
+                      {getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}
+                      {sale.soldBy && <span className="block text-xs text-gray-400 font-normal">โดย: {sale.soldBy}</span>}
+                    </td>
+                    <td className="p-4 text-center">{sale.quantity}</td>
+                    <td className="p-4 text-right text-blue-600 font-medium">{formatMoney(sale.total)}</td>
+                  </tr>
+                ))}
+                {recentSales.length === 0 && (
+                  <tr><td colSpan="4" className="p-4 text-center text-gray-500">ยังไม่มีการขายในวันนี้</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -751,7 +906,6 @@ export default function App() {
       <div className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex-shrink-0">
         <div className="p-6"><h1 className="text-xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2"><ShoppingCart className="text-blue-600" /><span>The Royal Queen</span></h1></div>
         <nav className="px-4 pb-6 space-y-1 flex md:flex-col overflow-x-auto md:overflow-visible">
-          {/* แดชบอร์ดให้เข้าได้ทุกคน */}
           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center space-x-3 w-full px-4 py-3 rounded-xl transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}><LayoutDashboard size={20} /><span>แดชบอร์ด</span></button>
           
           {loggedInUser.role === 'admin' && (
@@ -759,7 +913,6 @@ export default function App() {
               <button onClick={() => setActiveTab('products')} className={`flex items-center space-x-3 w-full px-4 py-3 rounded-xl transition-colors whitespace-nowrap ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}><Package size={20} /><span>จัดการสินค้า</span></button>
               <button onClick={() => setActiveTab('stock')} className={`flex items-center space-x-3 w-full px-4 py-3 rounded-xl transition-colors whitespace-nowrap ${activeTab === 'stock' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>
               <button onClick={() => setActiveTab('users')} className={`flex items-center space-x-3 w-full px-4 py-3 rounded-xl transition-colors whitespace-nowrap ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}><Users size={20} /><span>จัดการผู้ใช้งาน</span></button>
-              {/* เมนูประวัติการขายสำหรับ Admin เพื่อเข้าไปแก้/ลบออเดอร์ */}
               <button onClick={() => setActiveTab('history')} className={`flex items-center space-x-3 w-full px-4 py-3 rounded-xl transition-colors whitespace-nowrap ${activeTab === 'history' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}><History size={20} /><span>ประวัติการขาย (แก้/ลบ)</span></button>
             </>
           )}
