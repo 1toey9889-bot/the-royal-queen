@@ -24,7 +24,6 @@ import {
   Save, 
   X,
   TrendingUp,
-  Calendar,
   DollarSign,
   Boxes,
   Users,
@@ -38,17 +37,17 @@ import {
   ShieldCheck,
   Search,
   ArrowUpDown,
-  ChevronDown // แก้บั๊กหน้าขาว: เพิ่มไอคอนนี้กลับเข้ามา
+  ChevronDown
 } from 'lucide-react';
 
 // ==========================================
 // 🎨 โลโก้ The Resilient Clinic (วาดด้วย Code ป้องกันรูปหาย 100%)
 // ==========================================
 const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-[#0b132b] flex items-center justify-center overflow-hidden ${className}`}>
+  <div className={`bg-[#0b132b] flex items-center justify-center overflow-hidden rounded-xl shadow-md ${className}`}>
     <svg viewBox="0 0 320 100" className="h-full w-auto py-2" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Lotus Icon */}
-      <g transform="translate(15, 10) scale(0.8)">
+      <g transform="translate(20, 10) scale(0.8)">
         <path d="M50 10 C 50 10, 30 40, 30 65 C 30 80, 40 85, 50 85 C 60 85, 70 80, 70 65 C 70 40, 50 10, 50 10 Z" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
         <circle cx="50" cy="58" r="8" fill="#FFFFFF"/>
         <path d="M 28 50 C 10 50, 5 70, 15 85 C 25 95, 40 85, 40 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
@@ -56,9 +55,9 @@ const ResilientLogo = ({ className = "" }) => (
         <path d="M 12 80 C 30 105, 70 105, 88 80" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
       </g>
       {/* Text */}
-      <text x="115" y="38" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1">THE</text>
-      <text x="113" y="65" fontFamily="Arial, sans-serif" fontSize="28" fontWeight="bold" fill="#D4AF37" letterSpacing="1">RESILIENT</text>
-      <text x="115" y="86" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1.5">CLINIC</text>
+      <text x="120" y="38" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1">THE</text>
+      <text x="118" y="65" fontFamily="Arial, sans-serif" fontSize="28" fontWeight="bold" fill="#D4AF37" letterSpacing="1">RESILIENT</text>
+      <text x="120" y="86" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1.5">CLINIC</text>
     </svg>
   </div>
 );
@@ -249,8 +248,8 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
           <div className="text-center space-y-4">
-            {/* แก้ไขโลโก้ตรงปก */}
-            <ResilientLogo className="mx-auto h-24 md:h-32 rounded-2xl shadow-lg mb-4 w-full max-w-[320px]" />
+            {/* โลโก้ใหม่ ป้องกันรูปหาย */}
+            <ResilientLogo className="mx-auto h-24 md:h-28 w-full max-w-[280px]" />
             <p className="text-sm md:text-base text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -1216,6 +1215,7 @@ export default function App() {
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center justify-center">
+              {/* โลโก้ใหม่ ป้องกันรูปหาย */}
               <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
             </div>
             
@@ -1243,9 +1243,11 @@ export default function App() {
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
             
-            {/* ป้าย Executive View แบบดั้งเดิมที่ขอคืนมา */}
+            {/* ป้าย Executive View แบบดั้งเดิมที่ขอคืนมา (เปลี่ยนไอคอนมงกุฏเป็นแบบ SVG ธรรมดาป้องกันบั๊ก) */}
             <div className="flex items-center space-x-2 text-xs md:text-sm text-yellow-700 bg-gradient-to-r from-yellow-50 to-orange-50 py-1.5 px-3 rounded-full border border-yellow-200 w-max shadow-sm mb-4">
-              <Crown size={14} className="text-yellow-600" fill="currentColor" />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-600">
+                <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14v2H5z"></path>
+              </svg>
               <span className="font-bold">Executive View</span>
             </div>
 
@@ -1268,6 +1270,7 @@ export default function App() {
         {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-4 flex items-center justify-center border-b border-slate-100">
+            {/* โลโก้ใหม่ ป้องกันรูปหาย */}
             <ResilientLogo className="h-16 w-full rounded-lg shadow-sm" />
           </div>
           
