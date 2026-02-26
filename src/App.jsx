@@ -171,10 +171,16 @@ export default function App() {
 
   const getProduct = (id) => products.find(p => p.id === id);
 
+  // ป้องกันแอปพังจากวันที่ผิดพลาดแบบ 100%
   const getLocalISODate = (dateString) => {
-    const d = dateString ? new Date(dateString) : new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
+    try {
+      const d = dateString ? new Date(dateString) : new Date();
+      if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().split('T')[0];
+    } catch (e) {
+      return new Date().toISOString().split('T')[0];
+    }
   };
 
   // ฟังก์ชันดาวน์โหลด Excel รองรับ iOS และ Android
@@ -295,20 +301,20 @@ export default function App() {
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
     
     filteredSales.forEach(s => {
-      totalQty += s.quantity; 
-      totalRevenue += s.total;
+      totalQty += Number(s.quantity) || 0; 
+      totalRevenue += Number(s.total) || 0;
       
       const p = getProduct(s.productId);
-      const cost = p ? (p.cost * s.quantity) : 0;
+      const cost = p ? (Number(p.cost) * (Number(s.quantity) || 0)) : 0;
       totalCost += cost;
-      totalProfit += (s.total - cost);
+      totalProfit += ((Number(s.total) || 0) - cost);
     });
 
     const totalOrders = filteredSales.length;
 
     const productSalesCount = {};
     filteredSales.forEach(s => {
-      productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + s.quantity;
+      productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + (Number(s.quantity) || 0);
     });
     
     const topProducts = Object.entries(productSalesCount)
@@ -339,12 +345,14 @@ export default function App() {
 
       filteredSales.forEach(s => {
         const p = getProduct(s.productId);
-        const cost = p ? p.cost : 0;
-        const actualPricePerUnit = s.quantity > 0 ? (s.total / s.quantity) : (p ? p.price : 0);
-        const rowCost = cost * s.quantity;
-        const rowProfit = s.total - rowCost;
+        const cost = p ? Number(p.cost) : 0;
+        const qty = Number(s.quantity) || 0;
+        const total = Number(s.total) || 0;
+        const actualPricePerUnit = qty > 0 ? (total / qty) : (p ? Number(p.price) : 0);
+        const rowCost = cost * qty;
+        const rowProfit = total - rowCost;
         
-        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, actualPricePerUnit.toFixed(2), s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
+        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, actualPricePerUnit.toFixed(2), qty, rowCost, total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
 
       csvRows.push([]);
@@ -454,14 +462,23 @@ export default function App() {
 
     const formatForInput = (isoString) => {
       if (!isoString) return '';
-      const d = new Date(isoString);
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      return d.toISOString().slice(0, 16);
+      try {
+        const d = new Date(isoString);
+        if (isNaN(d.getTime())) return '';
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 16);
+      } catch (e) {
+        return '';
+      }
     };
 
     const filteredSales = sales
       .filter(s => getLocalISODate(s.date) === filterDate)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+      .sort((a, b) => {
+        const da = new Date(a.date).getTime() || 0;
+        const db = new Date(b.date).getTime() || 0;
+        return db - da;
+      });
 
     const handleDelete = async (sale) => {
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้?\n\n*สต๊อกสินค้าจะถูกคืนกลับอัตโนมัติ*')) return;
@@ -469,7 +486,7 @@ export default function App() {
       try {
         await deleteDoc(doc(db, "sales", sale.id));
         if (getProduct(sale.productId)) {
-          await updateDoc(doc(db, "products", sale.productId), { stock: increment(sale.quantity) });
+          await updateDoc(doc(db, "products", sale.productId), { stock: increment(Number(sale.quantity) || 0) });
         }
       } catch (error) {
         alert("เกิดข้อผิดพลาด: " + error.message);
@@ -480,7 +497,7 @@ export default function App() {
     const handleSaveEdit = async (sale) => {
       setIsProcessing(true);
       try {
-        const oldQty = sale.quantity;
+        const oldQty = Number(sale.quantity) || 0;
         const newQty = Math.max(1, Number(editForm.quantity) || 1);
         const oldProductId = sale.productId;
         const newProductId = editForm.productId;
@@ -488,9 +505,13 @@ export default function App() {
         
         if (!newProductData) throw new Error("ไม่พบข้อมูลสินค้าใหม่");
 
-        const parsedDate = new Date(editForm.date);
-        if (isNaN(parsedDate.getTime())) throw new Error("รูปแบบวันที่ไม่ถูกต้อง");
-        const newDateIso = parsedDate.toISOString();
+        let newDateIso = sale.date;
+        try {
+          const parsedDate = new Date(editForm.date);
+          if (!isNaN(parsedDate.getTime())) {
+            newDateIso = parsedDate.toISOString();
+          }
+        } catch (e) { /* ignore */ }
 
         // คำนวณราคาใหม่ โดยใช้ราคาต่อชิ้นที่ตั้งไว้
         const unitPrice = Number(editForm.customPrice) || 0;
@@ -555,7 +576,17 @@ export default function App() {
             <tbody className="text-xs md:text-sm">
               {filteredSales.map(sale => {
                 const isCurrentRowEditing = isEditing === sale.id;
-                const actualPricePerUnit = sale.quantity > 0 ? (sale.total / sale.quantity) : 0;
+                const safeQty = Number(sale.quantity) || 0;
+                const actualPricePerUnit = safeQty > 0 ? ((Number(sale.total) || 0) / safeQty) : 0;
+                
+                // ตรวจสอบวันทึ่ให้ปลอดภัย
+                let dateDisplay = '-';
+                try {
+                  const d = new Date(sale.date);
+                  if (!isNaN(d.getTime())) {
+                    dateDisplay = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+                  }
+                } catch(e) { }
 
                 return (
                 <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -569,7 +600,7 @@ export default function App() {
                         disabled={isProcessing}
                       />
                     ) : (
-                      new Date(sale.date).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})
+                      dateDisplay
                     )}
                   </td>
                   <td className="p-3 md:p-4 whitespace-nowrap">
@@ -583,7 +614,7 @@ export default function App() {
                         {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     ) : (
-                      <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${sale.store?.includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                      <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${String(sale.store || '').includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
                         {sale.store || '-'}
                       </span>
                     )}
@@ -699,14 +730,14 @@ export default function App() {
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
       if (searchTerm) {
-        result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
       }
       result.sort((a, b) => {
-        if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
-        if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
-        if (sortBy === 'price_desc') return (b.price || 0) - (a.price || 0);
-        if (sortBy === 'price_asc') return (a.price || 0) - (b.price || 0);
-        if (sortBy === 'stock_desc') return (b.stock || 0) - (a.stock || 0);
+        if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
+        if (sortBy === 'name_desc') return String(b.name || '').localeCompare(String(a.name || ''), 'th');
+        if (sortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+        if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
+        if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
         return 0;
       });
       return result;
@@ -722,9 +753,13 @@ export default function App() {
       
       let sumStock = 0; let sumCostValue = 0; let sumSaleValue = 0; let sumExpectedProfit = 0;
       filteredAndSortedProducts.forEach((p, index) => {
-        const stock = p.stock || 0; const costVal = stock * p.cost; const saleVal = stock * p.price; const profitVal = saleVal - costVal;
+        const stock = Number(p.stock) || 0; 
+        const costVal = stock * (Number(p.cost) || 0); 
+        const saleVal = stock * (Number(p.price) || 0); 
+        const profitVal = saleVal - costVal;
+        
         sumStock += stock; sumCostValue += costVal; sumSaleValue += saleVal; sumExpectedProfit += profitVal;
-        csvRows.push([index + 1, `"${p.name}"`, p.cost, p.price, p.price - p.cost, stock, costVal, saleVal, profitVal]);
+        csvRows.push([index + 1, `"${p.name || ''}"`, p.cost || 0, p.price || 0, (Number(p.price) || 0) - (Number(p.cost) || 0), stock, costVal, saleVal, profitVal]);
       });
       csvRows.push([]);
       csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
@@ -841,13 +876,13 @@ export default function App() {
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
       if (searchTerm) {
-        result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
       }
       result.sort((a, b) => {
-        if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'th');
-        if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'th');
-        if (sortBy === 'stock_desc') return (b.stock || 0) - (a.stock || 0);
-        if (sortBy === 'stock_asc') return (a.stock || 0) - (b.stock || 0);
+        if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
+        if (sortBy === 'name_desc') return String(b.name || '').localeCompare(String(a.name || ''), 'th');
+        if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
+        if (sortBy === 'stock_asc') return (Number(a.stock) || 0) - (Number(b.stock) || 0);
         return 0;
       });
       return result;
@@ -874,7 +909,7 @@ export default function App() {
       csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
       
       filteredAndSortedProducts.forEach((p, index) => {
-        csvRows.push([index + 1, `"${p.name}"`, p.stock || 0]);
+        csvRows.push([index + 1, `"${p.name || ''}"`, Number(p.stock) || 0]);
       });
       
       const csvString = csvRows.map(row => row.join(',')).join('\n');
@@ -921,7 +956,9 @@ export default function App() {
                 </tr>
               </thead>
               <tbody className="text-[11px] sm:text-xs md:text-sm">
-                {filteredAndSortedProducts.map((product, index) => (
+                {filteredAndSortedProducts.map((product, index) => {
+                  const stockAmount = Number(product.stock) || 0;
+                  return (
                   <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-3 px-1 sm:px-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
                     <td className="py-3 px-1 sm:px-3 md:p-4 font-medium text-gray-800 break-words">{product.name}</td>
@@ -929,7 +966,7 @@ export default function App() {
                       {editingStockId === product.id ? (
                         <input type="number" className="w-14 sm:w-16 md:w-20 p-1 md:p-1.5 border rounded text-center text-xs focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> 
                       ) : (
-                        <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${product.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{product.stock || 0} ชิ้น</span>
+                        <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${stockAmount <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{stockAmount} ชิ้น</span>
                       )}
                     </td>
                     {!isExecutiveView && (
@@ -937,12 +974,12 @@ export default function App() {
                         {editingStockId === product.id ? (
                           <><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1 md:p-1.5 rounded-md transition"><Save size={14} className="md:w-4 md:h-4"/></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1 md:p-1.5 rounded-md transition"><X size={14} className="md:w-4 md:h-4"/></button></>
                         ) : (
-                          <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1 md:p-1.5 rounded-md transition"><Edit2 size={14} className="md:w-4 md:h-4"/></button>
+                          <button onClick={() => { setEditingStockId(product.id); setNewStock(stockAmount); }} className="text-blue-600 hover:bg-blue-100 p-1 md:p-1.5 rounded-md transition"><Edit2 size={14} className="md:w-4 md:h-4"/></button>
                         )}
                       </td>
                     )}
                   </tr>
-                ))}
+                )})}
                 {filteredAndSortedProducts.length === 0 && (
                   <tr><td colSpan={isExecutiveView ? 3 : 4} className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
                 )}
@@ -1118,6 +1155,257 @@ export default function App() {
     );
   };
 
+  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS)
+  const SalesView = () => {
+    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
+    const [selectedProduct, setSelectedProduct] = useState('');
+    const [customPrice, setCustomPrice] = useState(''); 
+    const [quantity, setQuantity] = useState(1);
+    const [message, setMessage] = useState('');
+    const [isError, setIsError] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    useEffect(() => {
+      if (selectedProduct) {
+        const p = getProduct(selectedProduct);
+        if (p) setCustomPrice(p.price);
+      } else {
+        setCustomPrice('');
+      }
+    }, [selectedProduct, products]);
+
+    const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
+
+    const recentSales = sales
+      .filter(s => getLocalISODate(s.date) === getLocalISODate())
+      .sort((a, b) => {
+         const da = new Date(a.date).getTime() || 0;
+         const db = new Date(b.date).getTime() || 0;
+         return db - da;
+      })
+      .slice(0, 5);
+
+    const handleCheckout = async (e) => {
+      e.preventDefault();
+      const finalQuantity = Number(quantity) || 0;
+      const finalPrice = Number(customPrice) || 0;
+      
+      if (!selectedProduct || !selectedStore) return;
+      if (finalQuantity < 1) { setIsError(true); setMessage('จำนวนต้องมากกว่า 0'); return; }
+      
+      const product = getProduct(selectedProduct);
+      if ((product.stock || 0) < finalQuantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
+      
+      setIsProcessing(true);
+      try {
+        await addDoc(collection(db, "sales"), { 
+          store: selectedStore,
+          productId: selectedProduct, 
+          quantity: finalQuantity, 
+          total: finalPrice * finalQuantity, 
+          date: new Date().toISOString(), 
+          soldBy: loggedInUser?.username || 'unknown'
+        });
+        
+        await updateDoc(doc(db, "products", product.id), { 
+          stock: increment(-finalQuantity) 
+        });
+        
+        setSelectedProduct(''); 
+        setCustomPrice('');
+        setQuantity(1); 
+        setIsError(false); 
+        setMessage('บันทึกสำเร็จ');
+        setTimeout(() => setMessage(''), 3000);
+      } catch (err) { 
+        setMessage(err.message); 
+        setIsError(true); 
+      }
+      setIsProcessing(false);
+    };
+
+    return (
+      <div className="space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+        
+        {/* ส่วนบันทึกการขาย (POS) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="bg-gray-50/50 border-b border-gray-100 px-6 py-4">
+            <h2 className="text-xl font-bold text-gray-800 flex items-center">
+              ข้อมูลการขาย (POS)
+            </h2>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <form onSubmit={handleCheckout} className="space-y-8">
+              {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-center ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
+              
+              {/* 1. เลือกร้านค้า */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  เลือกร้านค้า
+                </label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                  {STORE_OPTIONS.map(store => {
+                    const isSelected = selectedStore === store;
+                    const isShopee = String(store || '').includes('Shopee');
+                    return (
+                      <button
+                        key={store}
+                        type="button"
+                        onClick={() => setSelectedStore(store)}
+                        className={`relative flex items-center justify-center py-3.5 px-3 rounded-xl border-2 font-bold transition-all duration-200 overflow-hidden ${
+                          isSelected 
+                            ? isShopee 
+                                ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm' 
+                                : 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' 
+                            : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {store}
+                        {isSelected && (
+                           <div className={`absolute top-0 right-0 w-4 h-4 rounded-bl-lg ${isShopee ? 'bg-orange-500' : 'bg-blue-600'}`}></div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="border-b border-dashed border-gray-200"></div>
+
+              {/* 2. เลือกสินค้าและรายละเอียด */}
+              <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    เลือกสินค้า
+                  </label>
+                  <select 
+                    value={selectedProduct} 
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      setSelectedProduct(pid);
+                      const p = getProduct(pid);
+                      setCustomPrice(p ? p.price : '');
+                    }} 
+                    className="w-full p-3.5 border border-gray-300 rounded-xl bg-white text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" 
+                    required 
+                    disabled={isProcessing}
+                  >
+                    <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
+                    {products.map(p => <option key={p.id} value={p.id} disabled={(Number(p.stock) || 0) <= 0}>{p.name} (ราคาปกติ: ฿{formatMoney(p.price)}) - เหลือ {Number(p.stock) || 0} ชิ้น</option>)}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      ราคาขาย/ชิ้น
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        value={customPrice} 
+                        onChange={(e) => setCustomPrice(e.target.value)} 
+                        className="w-full pl-4 pr-16 py-3.5 border border-gray-300 rounded-xl text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium bg-white transition-all shadow-sm" 
+                        disabled={!selectedProduct || isProcessing}
+                        placeholder="แก้ไขราคาได้"
+                        required
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">บาท</span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      จำนวนชิ้น
+                    </label>
+                    <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-gray-300">
+                      <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full w-14 bg-gray-50 hover:bg-gray-100 font-bold text-gray-600 transition-colors border-r border-gray-300 focus:outline-none">-</button>
+                      <input 
+                        type="number" 
+                        value={quantity} 
+                        onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))} 
+                        className="h-full w-full text-center text-lg font-bold outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
+                        min="1"
+                      />
+                      <button type="button" onClick={() => setQuantity(Number(quantity || 0) + 1)} className="h-full w-14 bg-gray-50 hover:bg-gray-100 font-bold text-gray-600 transition-colors border-l border-gray-300 focus:outline-none">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. สรุปยอดและบันทึก */}
+              <div className="pt-2">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100/50 p-5 md:p-6 rounded-2xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner">
+                  <div className="text-center md:text-left w-full md:w-auto">
+                    <p className="text-xs font-bold text-blue-600/80 uppercase tracking-wider mb-1">ยอดรวมทั้งหมด</p>
+                    <p className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">฿{formatMoney(posTotal)}</p>
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={!selectedProduct || !selectedStore || isProcessing} 
+                    className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl text-base md:text-lg font-bold transition-all disabled:bg-gray-300 shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0 flex justify-center items-center whitespace-nowrap"
+                  >
+                    บันทึกการขาย
+                  </button>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
+        {/* ตารางรายการล่าสุด */}
+        <div className="pt-4">
+          <h3 className="text-base md:text-lg font-bold text-gray-800 mb-4 flex items-center">
+            รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)
+          </h3>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="bg-gray-50/80 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
+                  <th className="p-4 font-bold">เวลา</th>
+                  <th className="p-4 font-bold">ร้านค้า</th>
+                  <th className="p-4 font-bold">สินค้า</th>
+                  <th className="p-4 font-bold text-center">จำนวน</th>
+                  <th className="p-4 font-bold text-right">ยอดรวม</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs md:text-sm divide-y divide-gray-50">
+                {recentSales.map(sale => {
+                  let timeString = '-';
+                  try {
+                    const d = new Date(sale.date);
+                    if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.';
+                  } catch(e) {}
+                  
+                  return (
+                  <tr key={sale.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="p-4 text-gray-500 whitespace-nowrap font-medium">{timeString}</td>
+                    <td className="p-4 whitespace-nowrap">
+                       <span className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-bold shadow-sm border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                         {sale.store || '-'}
+                       </span>
+                    </td>
+                    <td className="p-4 font-bold text-gray-800">
+                      {getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}
+                      {sale.soldBy && <span className="block text-[10px] text-gray-400 font-normal mt-1 flex items-center"><User size={10} className="mr-1"/> {sale.soldBy}</span>}
+                    </td>
+                    <td className="p-4 text-center font-bold text-gray-700">{sale.quantity}</td>
+                    <td className="p-4 text-right text-blue-600 font-bold whitespace-nowrap text-sm">฿{formatMoney(sale.total)}</td>
+                  </tr>
+                )})}
+                {recentSales.length === 0 && (
+                  <tr><td colSpan="5" className="p-10 text-center text-gray-400 text-sm font-medium">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
   // 🎨 กำหนด Style ของปุ่มเมนูให้ตรงตามดีไซน์ใหม่
   const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base";
   const navItemActiveStyle = "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30";
@@ -1145,30 +1433,45 @@ export default function App() {
   // หน้าต่างสำหรับผู้บริหาร (เข้าผ่าน URL ?view=dashboard)
   if (isExecutiveView) {
     return (
-      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans flex flex-col">
-        <div className="max-w-5xl mx-auto w-full space-y-4 md:space-y-6">
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
-              <ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" />
-              <span>The Royal Queen - ผู้บริหาร</span>
+      <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+        {/* Header ผู้บริหารแบบใหม่ */}
+        <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
+          <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
+            <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
+              <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
+              <span>The Royal Queen</span>
             </h1>
-            <div className="flex space-x-2 w-full sm:w-auto">
+            
+            {/* แท็บเมนูผู้บริหาร */}
+            <div className="flex space-x-2 w-full max-w-sm bg-gray-100 p-1.5 rounded-xl">
               <button 
                 onClick={() => setActiveTab('dashboard')} 
-                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
               >
-                แดชบอร์ด
+                <LayoutDashboard size={18} />
+                <span>Dashboard</span>
               </button>
               <button 
                 onClick={() => setActiveTab('stock')} 
-                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
               >
-                ดูสต๊อกสินค้า
+                <Boxes size={18} />
+                <span>สต๊อกสินค้า</span>
               </button>
             </div>
           </div>
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'stock' && <StockView />}
+        </div>
+
+        {/* Content ผู้บริหาร */}
+        <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
+          <div className="max-w-5xl mx-auto space-y-4">
+            <div className="flex items-center space-x-2 text-xs md:text-sm text-yellow-700 bg-gradient-to-r from-yellow-50 to-orange-50 py-1.5 px-3 rounded-full border border-yellow-200 w-max mb-4 shadow-sm">
+              <Crown size={14} className="text-yellow-600" fill="currentColor" />
+              <span className="font-bold">Executive View</span>
+            </div>
+            {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'stock' && <StockView />}
+          </div>
         </div>
       </div>
     );
@@ -1193,11 +1496,11 @@ export default function App() {
           
           <nav className="px-3 md:px-4 pb-3 md:pb-6 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
             {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={20} /><span>Dashboard</span></button>}
-            {canAccess('products') && !isExecutiveView && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
+            {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
             {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
-            {canAccess('users') && !isExecutiveView && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
-            {canAccess('history') && !isExecutiveView && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
-            {canAccess('sales') && !isExecutiveView && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
+            {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
+            {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
           </nav>
         </div>
       </div>
@@ -1213,26 +1516,15 @@ export default function App() {
              activeTab === 'history' ? 'ประวัติการทำรายการ' : 'ข้อมูลการขาย (POS)'}
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
-            
-            {isExecutiveView ? (
-              <div className="flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm text-gray-600 bg-gray-50 py-1 md:py-1.5 px-2 md:px-3 rounded-full border border-gray-100">
-                <Crown size={14} className="text-yellow-500 md:w-4 md:h-4" fill="currentColor" />
-                <span className="font-bold">Executive View</span>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm text-gray-600 bg-gray-50 py-1 md:py-1.5 px-2 md:px-3 rounded-full border border-gray-100">
-                <User size={14} className="text-blue-500 md:w-4 md:h-4" />
-                <span className="font-bold">{loggedInUser.username}</span>
-                <span className="text-gray-400 font-medium">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span>
-              </div>
-            )}
-            
-            {!isExecutiveView && (
-              <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1 text-red-500 hover:bg-red-50 px-2 py-1.5 md:p-2 rounded-lg transition text-xs md:text-sm font-bold" title="ออกจากระบบ">
-                <LogOut size={16} className="md:w-4 md:h-4"/> 
-                <span className="sm:hidden">ออกระบบ</span>
-              </button>
-            )}
+            <div className="flex items-center space-x-1.5 md:space-x-2 text-xs md:text-sm text-gray-600 bg-gray-50 py-1 md:py-1.5 px-2 md:px-3 rounded-full border border-gray-100">
+              <User size={14} className="text-blue-500 md:w-4 md:h-4" />
+              <span className="font-bold">{loggedInUser.username}</span>
+              <span className="text-gray-400 font-medium">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span>
+            </div>
+            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1 text-red-500 hover:bg-red-50 px-2 py-1.5 md:p-2 rounded-lg transition text-xs md:text-sm font-bold" title="ออกจากระบบ">
+              <LogOut size={16} className="md:w-4 md:h-4"/> 
+              <span className="sm:hidden">ออกระบบ</span>
+            </button>
           </div>
         </header>
 
