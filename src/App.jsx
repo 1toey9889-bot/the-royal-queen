@@ -41,7 +41,8 @@ import {
   Store,
   Tag,
   ShoppingBag,
-  ChevronDown // นำเข้าไอคอนลูกศรชี้ลงเพิ่มเติม
+  ChevronDown, // นำเข้าไอคอนลูกศรชี้ลงเพิ่มเติม
+  Crown // นำเข้าไอคอนมงกุฎสำหรับโลโก้
 } from 'lucide-react';
 
 // ==========================================
@@ -1480,25 +1481,30 @@ export default function App() {
 
   if (!loggedInUser) return <LoginView />;
 
+  // กำหนด Style ของปุ่มเมนูให้ตรงตามดีไซน์ใหม่ เพื่อความสวยงามและเป็นระเบียบ
+  const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base";
+  const navItemActiveStyle = "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30";
+  const navItemInactiveStyle = "text-gray-700 hover:bg-gray-50 hover:text-blue-600 font-medium";
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
       
       {/* แถบเมนูด้านซ้าย (Sidebar) - สลับเมนูตามสิทธิ์การเข้าถึง */}
       <div className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex-shrink-0 z-10">
         <div className="p-4 md:p-6 flex items-center justify-center md:justify-start">
-          <h1 className="text-lg md:text-xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
-            <ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" />
+          <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
+            <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
             <span>The Royal Queen</span>
           </h1>
         </div>
         
-        <nav className="px-2 md:px-4 pb-2 md:pb-6 space-x-1 md:space-x-0 md:space-y-1 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
-          {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><LayoutDashboard size={18} className="md:w-5 md:h-5" /><span>แดชบอร์ด</span></button>}
-          {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Package size={18} className="md:w-5 md:h-5" /><span>จัดการสินค้า</span></button>}
-          {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'stock' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Boxes size={18} className="md:w-5 md:h-5" /><span>สต๊อกสินค้า</span></button>}
-          {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><Users size={18} className="md:w-5 md:h-5" /><span>จัดการผู้ใช้</span></button>}
-          {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'history' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><History size={18} className="md:w-5 md:h-5" /><span>ประวัติการขาย</span></button>}
-          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`snap-start flex-shrink-0 flex items-center space-x-2 md:space-x-3 w-auto md:w-full px-3 py-2.5 md:px-4 md:py-3 rounded-lg md:rounded-xl transition-colors whitespace-nowrap text-xs md:text-sm ${activeTab === 'sales' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}><ShoppingCart size={18} className="md:w-5 md:h-5" /><span>ข้อมูลการขาย (POS)</span></button>}
+        <nav className="px-3 md:px-4 pb-3 md:pb-6 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
+          {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={20} /><span>Dashboard</span></button>}
+          {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
+          {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
+          {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
+          {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
+          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
         </nav>
       </div>
 
