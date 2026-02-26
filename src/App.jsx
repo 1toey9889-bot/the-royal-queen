@@ -38,9 +38,6 @@ import {
   ShieldCheck,
   Search,
   ArrowUpDown,
-  Store,
-  Tag,
-  ShoppingBag,
   ChevronDown,
   Crown
 } from 'lucide-react';
@@ -1244,7 +1241,8 @@ export default function App() {
       <div className="relative space-y-6 md:space-y-8 max-w-3xl mx-auto animate-in fade-in duration-300">
         
         {/* Background Decorative Blur (Premium Feel) */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-100/40 via-purple-50/20 to-blue-50/40 -z-10 rounded-[3rem] blur-3xl pointer-events-none"></div>
+        <div className="absolute inset-0 bg-[#f4f7ff] -z-20 rounded-[3rem]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/60 via-transparent to-transparent -z-10 pointer-events-none"></div>
 
         {/* ส่วนบันทึกการขาย (POS) แบบใหม่ (Premium Clean UI) */}
         <div className="bg-white/95 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white p-6 md:p-10">
@@ -1260,27 +1258,30 @@ export default function App() {
             
             {/* 1. เลือกร้านค้า */}
             <div className="text-center">
-              <label className="block text-sm font-bold text-slate-700 mb-3">
+              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
                 เลือกร้านค้า
               </label>
-              <div className="flex flex-wrap justify-center gap-3">
+              <div className="flex flex-wrap justify-center gap-2 md:gap-3">
                 {STORE_OPTIONS.map(store => {
                   const isSelected = selectedStore === store;
+                  const isShopee = store.includes('Shopee');
                   return (
                     <button
                       key={store}
                       type="button"
                       onClick={() => setSelectedStore(store)}
-                      className={`relative px-5 py-2.5 rounded-xl border text-sm font-bold transition-all duration-300 overflow-hidden ${
+                      className={`relative px-4 py-3 rounded-xl border text-sm font-bold transition-all duration-300 overflow-hidden flex-1 min-w-[120px] max-w-[160px] ${
                         isSelected 
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30 transform scale-105' 
+                          ? isShopee 
+                              ? 'bg-[#f97316] border-[#f97316] text-white shadow-md shadow-orange-500/30 transform scale-105 z-10' 
+                              : 'bg-[#2563eb] border-[#2563eb] text-white shadow-md shadow-blue-600/30 transform scale-105 z-10' 
                           : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
                       {store}
                       {/* เอฟเฟกต์มุมพับ */}
                       {isSelected && (
-                        <div className="absolute top-0 right-0 w-3 h-3 bg-white/20 rounded-bl-lg"></div>
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-white/25 rounded-bl-lg"></div>
                       )}
                     </button>
                   )
@@ -1290,23 +1291,25 @@ export default function App() {
 
             <div className="border-b border-dashed border-slate-200/60 mx-10"></div>
 
-            {/* 2. เลือกสินค้า (Dropdown แบบค้นหาได้) */}
+            {/* 2. เลือกสินค้า (Dropdown แบบค้นหาได้ จัดกึ่งกลาง) */}
             <div className="text-center relative" ref={dropdownRef}>
-              <label className="block text-sm font-bold text-slate-700 mb-3">
+              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
                 เลือกสินค้า
               </label>
               
               {/* ปุ่มกดเปิด Dropdown */}
               <div 
                 onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)}
-                className={`w-full p-4 border rounded-2xl bg-white text-base cursor-pointer flex justify-between items-center transition-all duration-300 shadow-sm ${
+                className={`w-full p-4 border rounded-xl bg-white text-base cursor-pointer flex justify-center items-center transition-all duration-300 shadow-sm relative ${
                   isDropdownOpen ? 'border-blue-500 ring-4 ring-blue-500/20' : 'border-slate-200 hover:border-blue-400'
                 } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className={`flex-1 text-center truncate ${selectedProduct ? 'text-slate-900 font-bold' : 'text-slate-400 font-medium'}`}>
-                  {selectedProduct ? getProduct(selectedProduct)?.name : '-- กรุณาเลือกสินค้า --'}
-                </span>
-                <ChevronDown size={20} className={`text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
+                <div className="flex-1 text-center truncate pr-6">
+                  <span className={selectedProduct ? 'text-slate-900 font-bold' : 'text-slate-500 font-medium'}>
+                    {selectedProduct ? getProduct(selectedProduct)?.name : '-- กรุณาเลือกสินค้า --'}
+                  </span>
+                </div>
+                <ChevronDown size={20} className={`absolute right-4 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
               </div>
 
               {/* กล่องรายชื่อสินค้าค้นหาได้ */}
@@ -1373,8 +1376,8 @@ export default function App() {
             
             {/* 3. ราคาขาย และ จำนวนชิ้น */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
-              <div className="text-center">
-                <label className="block text-sm font-bold text-slate-700 mb-3">
+              <div className="text-center relative">
+                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
                   ราคาขาย/ชิ้น
                 </label>
                 <div className="relative">
@@ -1382,7 +1385,7 @@ export default function App() {
                     type="number" 
                     value={customPrice} 
                     onChange={(e) => setCustomPrice(e.target.value)} 
-                    className="w-full pl-6 pr-16 py-4 border border-slate-200 rounded-2xl text-lg focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-800 bg-white transition-all shadow-sm text-left" 
+                    className="w-full pl-6 pr-12 py-3.5 border border-slate-200 rounded-xl text-lg focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-800 bg-white transition-all shadow-sm text-center" 
                     disabled={!selectedProduct || isProcessing}
                     placeholder="แก้ไขราคา"
                     required
@@ -1392,10 +1395,10 @@ export default function App() {
               </div>
 
               <div className="text-center">
-                <label className="block text-sm font-bold text-slate-700 mb-3">
+                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
                   จำนวนชิ้น
                 </label>
-                <div className="flex items-center h-[60px] shadow-sm rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white">
                   <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl">-</button>
                   <input 
                     type="number" 
@@ -1411,15 +1414,15 @@ export default function App() {
 
             {/* 4. สรุปยอดและบันทึก */}
             <div className="pt-4">
-              <div className="bg-[#eef4ff] p-6 md:p-8 rounded-[1.5rem] border border-[#d6e4ff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner">
+              <div className="bg-[#eef5ff] p-6 md:p-8 rounded-[1.5rem] border border-[#e0ebff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                 <div className="text-center md:text-left w-full md:w-auto">
-                  <p className="text-sm font-bold text-blue-600/80 mb-1.5">ยอดรวมทั้งหมด</p>
-                  <p className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">฿{formatMoney(posTotal)}</p>
+                  <p className="text-sm font-bold text-[#6a8ce2] mb-1">ยอดรวมทั้งหมด</p>
+                  <p className="text-4xl md:text-5xl font-black text-[#3761e9] tracking-tight">฿{formatMoney(posTotal)}</p>
                 </div>
                 <button 
                   type="submit" 
                   disabled={!selectedProduct || !selectedStore || isProcessing} 
-                  className="w-full md:w-auto bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-10 py-4 md:py-4.5 rounded-xl text-base md:text-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_8px_20px_-6px_rgba(59,130,246,0.5)] transform hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
+                  className="w-full md:w-auto bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 text-white px-10 py-3.5 md:py-4 rounded-xl text-base md:text-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 transform hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
                 >
                   บันทึกการขาย
                 </button>
@@ -1478,6 +1481,7 @@ export default function App() {
       </div>
     );
   };
+
 
   // 🎨 กำหนด Style ของปุ่มเมนูให้ตรงตามดีไซน์ใหม่
   const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base";
