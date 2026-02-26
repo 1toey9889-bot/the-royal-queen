@@ -38,8 +38,10 @@ import {
   ShieldCheck,
   Search,
   ArrowUpDown,
-  ChevronDown,
-  Crown
+  Store,
+  Tag,
+  ShoppingBag,
+  ChevronDown
 } from 'lucide-react';
 
 // ==========================================
@@ -227,11 +229,14 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
-          <div className="text-center space-y-3">
-            <div className="mx-auto w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-blue-50">
-              <Lock size={32} strokeWidth={2} />
-            </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">The Royal Queen</h1>
+          <div className="text-center space-y-4">
+            {/* โลโก้ใหม่ในหน้า Login */}
+            <img 
+              src="/logo.jpg" 
+              alt="The Resilient Clinic" 
+              className="mx-auto h-24 md:h-32 object-contain rounded-2xl shadow-lg mb-2"
+              onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }} 
+            />
             <p className="text-sm md:text-base text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -332,7 +337,8 @@ export default function App() {
       const storeLabel = filterStore === 'all' ? 'ทุกร้านค้า' : filterStore;
 
       const csvRows = [];
-      csvRows.push(['รายงานสรุปยอดขาย - The Royal Queen']);
+      // อัปเดตชื่อในรายงาน Excel
+      csvRows.push(['รายงานสรุปยอดขาย - The Resilient Clinic']);
       csvRows.push(['ช่วงเวลา:', timeLabel]);
       csvRows.push(['ร้านค้า:', storeLabel]);
       csvRows.push(['สินค้าที่เลือก:', productLabel]);
@@ -743,7 +749,8 @@ export default function App() {
     const exportProductsReport = () => {
       if (products.length === 0) return;
       const csvRows = [];
-      csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Royal Queen']);
+      // อัปเดตชื่อในรายงาน Excel
+      csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Resilient Clinic']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
       csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
@@ -900,7 +907,8 @@ export default function App() {
       if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
       
       const csvRows = [];
-      csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Royal Queen']);
+      // อัปเดตชื่อในรายงาน Excel
+      csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Resilient Clinic']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
       csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
@@ -1152,336 +1160,6 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS)
-  const SalesView = () => {
-    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
-    const [selectedProduct, setSelectedProduct] = useState('');
-    const [customPrice, setCustomPrice] = useState(''); 
-    const [quantity, setQuantity] = useState(1);
-    const [message, setMessage] = useState('');
-    const [isError, setIsError] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-
-    // --- State สำหรับระบบค้นหาสินค้าใน Dropdown ---
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [productSearchTerm, setProductSearchTerm] = useState('');
-    const dropdownRef = React.useRef(null);
-
-    // ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown
-    useEffect(() => {
-      const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-          setIsDropdownOpen(false);
-        }
-      };
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    // กรองสินค้าตามคำค้นหา
-    const filteredProductsForSelect = useMemo(() => {
-      if (!productSearchTerm) return products;
-      return products.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()));
-    }, [products, productSearchTerm]);
-    // ---------------------------------------------
-
-    // คำนวณยอดรวม (ป้องกัน NaN)
-    const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
-
-    const recentSales = sales
-      .filter(s => getLocalISODate(s.date) === getLocalISODate())
-      .sort((a, b) => {
-         const da = new Date(a.date).getTime() || 0;
-         const db = new Date(b.date).getTime() || 0;
-         return db - da;
-      })
-      .slice(0, 5);
-
-    const handleCheckout = async (e) => {
-      e.preventDefault();
-      const finalQuantity = Number(quantity) || 0;
-      const finalPrice = Number(customPrice) || 0;
-      
-      if (!selectedProduct || !selectedStore) return;
-      if (finalQuantity < 1) { setIsError(true); setMessage('จำนวนต้องมากกว่า 0'); return; }
-      
-      const product = getProduct(selectedProduct);
-      if ((product.stock || 0) < finalQuantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
-      
-      setIsProcessing(true);
-      try {
-        await addDoc(collection(db, "sales"), { 
-          store: selectedStore,
-          productId: selectedProduct, 
-          quantity: finalQuantity, 
-          total: finalPrice * finalQuantity, 
-          date: new Date().toISOString(), 
-          soldBy: loggedInUser?.username || 'unknown'
-        });
-        
-        await updateDoc(doc(db, "products", product.id), { 
-          stock: increment(-finalQuantity) 
-        });
-        
-        setSelectedProduct(''); 
-        setCustomPrice('');
-        setQuantity(1); 
-        setProductSearchTerm(''); // เคลียร์คำค้นหาหลังบันทึก
-        setIsError(false); 
-        setMessage('บันทึกสำเร็จ');
-        setTimeout(() => setMessage(''), 3000);
-      } catch (err) { 
-        setMessage(err.message); 
-        setIsError(true); 
-      }
-      setIsProcessing(false);
-    };
-
-    return (
-      <div className="relative space-y-6 md:space-y-8 max-w-3xl mx-auto animate-in fade-in duration-300">
-        
-        {/* Background Decorative Blur (Premium Feel) */}
-        <div className="absolute inset-0 bg-[#f4f7ff] -z-20 rounded-[3rem]"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/60 via-transparent to-transparent -z-10 pointer-events-none"></div>
-
-        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ (Premium Clean UI) */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white p-6 md:p-10">
-          
-          <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">
-              ข้อมูลการขาย (POS)
-            </h2>
-          </div>
-
-          <form onSubmit={handleCheckout} className="space-y-8">
-            {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-center justify-center ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
-            
-            {/* 1. เลือกร้านค้า */}
-            <div className="text-center">
-              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                เลือกร้านค้า
-              </label>
-              <div className="flex flex-wrap justify-center gap-2 md:gap-3">
-                {STORE_OPTIONS.map(store => {
-                  const isSelected = selectedStore === store;
-                  const isShopee = store.includes('Shopee');
-                  return (
-                    <button
-                      key={store}
-                      type="button"
-                      onClick={() => setSelectedStore(store)}
-                      className={`relative px-4 py-3 rounded-xl border text-sm font-bold transition-all duration-300 overflow-hidden flex-1 min-w-[120px] max-w-[160px] ${
-                        isSelected 
-                          ? isShopee 
-                              ? 'bg-[#f97316] border-[#f97316] text-white shadow-md shadow-orange-500/30 transform scale-105 z-10' 
-                              : 'bg-[#2563eb] border-[#2563eb] text-white shadow-md shadow-blue-600/30 transform scale-105 z-10' 
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      {store}
-                      {/* เอฟเฟกต์มุมพับ */}
-                      {isSelected && (
-                        <div className="absolute top-0 right-0 w-3 h-3 bg-white/25 rounded-bl-lg"></div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="border-b border-dashed border-slate-200/60 mx-10"></div>
-
-            {/* 2. เลือกสินค้า (Dropdown แบบค้นหาได้ จัดกึ่งกลาง) */}
-            <div className="text-center relative" ref={dropdownRef}>
-              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                เลือกสินค้า
-              </label>
-              
-              {/* ปุ่มกดเปิด Dropdown */}
-              <div 
-                onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)}
-                className={`w-full p-4 border rounded-xl bg-white text-base cursor-pointer flex justify-center items-center transition-all duration-300 shadow-sm relative ${
-                  isDropdownOpen ? 'border-blue-500 ring-4 ring-blue-500/20' : 'border-slate-200 hover:border-blue-400'
-                } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <div className="flex-1 text-center truncate pr-6">
-                  <span className={selectedProduct ? 'text-slate-900 font-bold' : 'text-slate-500 font-medium'}>
-                    {selectedProduct ? getProduct(selectedProduct)?.name : '-- กรุณาเลือกสินค้า --'}
-                  </span>
-                </div>
-                <ChevronDown size={20} className={`absolute right-4 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
-              </div>
-
-              {/* กล่องรายชื่อสินค้าค้นหาได้ */}
-              {isDropdownOpen && (
-                <div className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl max-h-[300px] flex flex-col top-full left-0 origin-top animate-in fade-in zoom-in-95 duration-200 text-left">
-                  <div className="p-3 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <input
-                        type="text"
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm"
-                        placeholder="พิมพ์ค้นหาชื่อสินค้า..."
-                        value={productSearchTerm}
-                        onChange={(e) => setProductSearchTerm(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-                  <ul className="overflow-y-auto flex-1 p-2 space-y-1 scrollbar-hide">
-                    {filteredProductsForSelect.map(p => {
-                      const isOutOfStock = (Number(p.stock) || 0) <= 0;
-                      const isSelected = selectedProduct === p.id;
-                      return (
-                        <li
-                          key={p.id}
-                          onClick={() => {
-                            if (isOutOfStock) return;
-                            setSelectedProduct(p.id);
-                            setCustomPrice(p.price); // ดึงราคามาใส่ให้อัตโนมัติ
-                            setIsDropdownOpen(false);
-                            setProductSearchTerm(''); 
-                          }}
-                          className={`px-4 py-3.5 rounded-xl text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${
-                            isOutOfStock
-                              ? "opacity-50 cursor-not-allowed bg-slate-50"
-                              : isSelected
-                                ? "bg-blue-50 text-blue-700 border border-blue-100 shadow-sm"
-                                : "hover:bg-slate-50 text-slate-700 border border-transparent"
-                          }`}
-                        >
-                          <span className="font-bold mb-1.5 sm:mb-0 text-base sm:text-sm truncate pr-2">{p.name}</span>
-                          <span className={`text-[11px] md:text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 border ${
-                            isOutOfStock 
-                              ? 'bg-red-50 text-red-600 border-red-100' 
-                              : isSelected
-                                ? 'bg-blue-100 text-blue-800 border-blue-200'
-                                : 'bg-green-50 text-green-700 border-green-100'
-                          }`}>
-                            {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${Number(p.stock) || 0} ชิ้น`} (฿{formatMoney(p.price)})
-                          </span>
-                        </li>
-                      );
-                    })}
-                    {filteredProductsForSelect.length === 0 && (
-                      <li className="px-4 py-10 text-center flex flex-col items-center justify-center text-slate-400">
-                        <Package size={32} className="text-slate-300 mb-3 opacity-50"/>
-                        <span className="text-sm font-medium">ไม่พบสินค้าที่คุณค้นหา</span>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-            </div>
-            
-            {/* 3. ราคาขาย และ จำนวนชิ้น */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
-              <div className="text-center relative">
-                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                  ราคาขาย/ชิ้น
-                </label>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    value={customPrice} 
-                    onChange={(e) => setCustomPrice(e.target.value)} 
-                    className="w-full pl-6 pr-12 py-3.5 border border-slate-200 rounded-xl text-lg focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-800 bg-white transition-all shadow-sm text-center" 
-                    disabled={!selectedProduct || isProcessing}
-                    placeholder="แก้ไขราคา"
-                    required
-                  />
-                  <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">บาท</span>
-                </div>
-              </div>
-
-              <div className="text-center">
-                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                  จำนวนชิ้น
-                </label>
-                <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white">
-                  <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl">-</button>
-                  <input 
-                    type="number" 
-                    value={quantity} 
-                    onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))} 
-                    className="h-full w-full text-center text-xl font-bold text-slate-800 outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
-                    min="1"
-                  />
-                  <button type="button" onClick={() => setQuantity(Number(quantity || 0) + 1)} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-l border-slate-200 focus:outline-none active:bg-slate-200 text-xl">+</button>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. สรุปยอดและบันทึก */}
-            <div className="pt-4">
-              <div className="bg-[#eef5ff] p-6 md:p-8 rounded-[1.5rem] border border-[#e0ebff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
-                <div className="text-center md:text-left w-full md:w-auto">
-                  <p className="text-sm font-bold text-[#6a8ce2] mb-1">ยอดรวมทั้งหมด</p>
-                  <p className="text-4xl md:text-5xl font-black text-[#3761e9] tracking-tight">฿{formatMoney(posTotal)}</p>
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={!selectedProduct || !selectedStore || isProcessing} 
-                  className="w-full md:w-auto bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 text-white px-10 py-3.5 md:py-4 rounded-xl text-base md:text-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 transform hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
-                >
-                  บันทึกการขาย
-                </button>
-              </div>
-            </div>
-
-          </form>
-        </div>
-
-        {/* ตารางรายการล่าสุด */}
-        <div className="pt-2">
-          <h3 className="text-base font-bold text-slate-700 mb-4 px-2">
-            รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)
-          </h3>
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[500px]">
-              <thead>
-                <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm">
-                  <th className="p-4 font-bold">เวลา</th>
-                  <th className="p-4 font-bold">ร้านค้า</th>
-                  <th className="p-4 font-bold">สินค้า</th>
-                  <th className="p-4 font-bold text-center">จำนวน</th>
-                  <th className="p-4 font-bold text-right">ยอดรวม</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs md:text-sm divide-y divide-slate-50">
-                {recentSales.map(sale => {
-                  let timeString = '-';
-                  try {
-                    const d = new Date(sale.date);
-                    if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.';
-                  } catch(e) {}
-                  
-                  return (
-                  <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 text-slate-500 whitespace-nowrap font-medium">{timeString}</td>
-                    <td className="p-4 whitespace-nowrap">
-                       <span className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                         {sale.store || '-'}
-                       </span>
-                    </td>
-                    <td className="p-4 font-bold text-slate-800">
-                      {getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}
-                    </td>
-                    <td className="p-4 text-center font-bold text-slate-600">{sale.quantity}</td>
-                    <td className="p-4 text-right text-blue-600 font-black whitespace-nowrap text-sm">฿{formatMoney(sale.total)}</td>
-                  </tr>
-                )})}
-                {recentSales.length === 0 && (
-                  <tr><td colSpan="5" className="p-10 text-center text-slate-400 text-sm font-medium">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
 
   // 🎨 กำหนด Style ของปุ่มเมนูให้ตรงตามดีไซน์ใหม่
   const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base";
@@ -1496,7 +1174,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-4 font-sans px-4 text-center">
         <div className="w-10 h-10 md:w-12 md:h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-gray-500 text-sm md:text-base font-medium">กำลังเตรียมระบบ The Royal Queen...</p>
+        <p className="text-gray-500 text-sm md:text-base font-medium">กำลังเตรียมระบบ The Resilient Clinic...</p>
         {loadError && (
           <div className="mt-4 p-3 md:p-4 bg-red-50 text-red-600 rounded-lg max-w-sm border border-red-100 text-xs md:text-sm">
             <p className="font-bold mb-1">พบปัญหาการเชื่อมต่อ</p>
@@ -1514,10 +1192,16 @@ export default function App() {
         {/* Header ผู้บริหารแบบใหม่ */}
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
-            <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
-              <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
-              <span>The Royal Queen</span>
-            </h1>
+            <div className="flex items-center space-x-3">
+              {/* โลโก้ใหม่ในมุมมองผู้บริหาร */}
+              <img 
+                src="/logo.jpg" 
+                alt="The Resilient Clinic" 
+                className="h-14 md:h-16 object-contain rounded-xl shadow-sm"
+                onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
+              />
+              <span className="text-lg md:text-xl font-bold text-gray-700 hidden sm:block border-l-2 border-gray-300 pl-3">ผู้บริหาร</span>
+            </div>
             
             {/* แท็บเมนูผู้บริหาร */}
             <div className="flex space-x-2 w-full max-w-sm bg-gray-100 p-1.5 rounded-xl">
@@ -1542,10 +1226,6 @@ export default function App() {
         {/* Content ผู้บริหาร */}
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
-            <div className="flex items-center space-x-2 text-xs md:text-sm text-yellow-700 bg-gradient-to-r from-yellow-50 to-orange-50 py-1.5 px-3 rounded-full border border-yellow-200 w-max mb-4 shadow-sm">
-              <Crown size={14} className="text-yellow-600" fill="currentColor" />
-              <span className="font-bold">Executive View</span>
-            </div>
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'stock' && <StockView />}
           </div>
@@ -1564,14 +1244,17 @@ export default function App() {
         
         {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
         <div className="relative z-10 flex flex-col h-full">
-          <div className="p-5 md:p-6 flex items-center justify-center md:justify-start">
-            <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
-              <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
-              <span>The Royal Queen</span>
-            </h1>
+          <div className="p-4 flex items-center justify-center border-b border-slate-100">
+            {/* โลโก้ใหม่ในแถบเมนูด้านซ้าย */}
+            <img 
+              src="/logo.jpg" 
+              alt="The Resilient Clinic" 
+              className="max-h-16 w-auto object-contain rounded-lg shadow-sm"
+              onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
+            />
           </div>
           
-          <nav className="px-3 md:px-4 pb-3 md:pb-6 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
+          <nav className="px-3 md:px-4 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
             {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={20} /><span>Dashboard</span></button>}
             {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
             {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
