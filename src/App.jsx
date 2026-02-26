@@ -66,7 +66,7 @@ const defaultPermissions = {
   history: false
 };
 
-// เปลี่ยนชื่อตัวเลือกช่องทางการขายตามที่ผู้ใช้อัปเดต
+// เปลี่ยนชื่อตัวเลือกช่องทางการขาย
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)'];
 
 // ==========================================
@@ -161,7 +161,7 @@ export default function App() {
 
   const formatMoney = (amount) => {
     const validAmount = isNaN(amount) || amount === null ? 0 : amount;
-    return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(validAmount);
+    return new Intl.NumberFormat('th-TH', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(validAmount);
   };
 
   const getProduct = (id) => products.find(p => p.id === id);
@@ -359,6 +359,7 @@ export default function App() {
             <h2 className="text-base md:text-xl lg:text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
+            {/* กรองร้านค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ร้านค้า:</span>
                <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700">
@@ -366,10 +367,12 @@ export default function App() {
                  {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                </select>
             </div>
+            {/* กรองสินค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">สินค้า:</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
+            {/* กรองเวลา */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ดูแบบ:</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
@@ -389,20 +392,20 @@ export default function App() {
           <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
             <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalRevenue)}</p>
+            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(totalRevenue)}</p>
             <p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
           </div>
           <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
             <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalCost)}</p>
+            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(totalCost)}</p>
             <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
           </div>
           <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
             <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3>
-            <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{formatMoney(totalProfit)}</p>
-            <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักค่าบริการและต้นทุนแล้ว</p>
+            <p className="text-xl md:text-2xl font-black text-green-700 mt-2">฿{formatMoney(totalProfit)}</p>
+            <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักต้นทุนแล้ว</p>
           </div>
         </div>
 
@@ -625,10 +628,10 @@ export default function App() {
                            placeholder="ราคา/ชิ้น"
                            title="ราคาขายต่อชิ้น"
                          />
-                         <span>{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
+                         <span>฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
                       </div>
                     ) : (
-                       formatMoney(sale.total)
+                       `฿${formatMoney(sale.total)}`
                     )}
                   </td>
                   <td className="p-3 md:p-4 text-center text-gray-500">
@@ -800,8 +803,8 @@ export default function App() {
                 <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td className="p-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-gray-800">{product.name}</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-medium">{product.cost} ฿</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">{product.price} ฿</span>}</td>
+                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-medium">฿{formatMoney(product.cost)}</span>}</td>
+                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">฿{formatMoney(product.price)}</span>}</td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
                     {isEditing === product.id ? (
                       <><button onClick={() => handleSave(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setIsEditing(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
@@ -1165,7 +1168,7 @@ export default function App() {
     return (
       <div className="space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
         
-        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ */}
+        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ตามดีไซน์ล่าสุด */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="bg-gray-50/50 border-b border-gray-100 px-6 py-4">
             <h2 className="text-xl font-bold text-gray-800 flex items-center">
@@ -1181,7 +1184,7 @@ export default function App() {
               {/* 1. เลือกร้านค้า */}
               <div className="space-y-3">
                 <label className="text-sm font-bold text-gray-700 flex items-center">
-                  <Store size={18} className="mr-2 text-gray-400" /> 1. เลือกร้านค้า (Channel)
+                  <Store size={18} className="mr-2 text-gray-400" /> เลือกร้านค้า
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                   {STORE_OPTIONS.map(store => {
@@ -1214,7 +1217,7 @@ export default function App() {
               <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
                 <div className="space-y-3">
                   <label className="text-sm font-bold text-gray-700 flex items-center">
-                    <Package size={18} className="mr-2 text-gray-400" /> 2. เลือกสินค้า
+                    <Package size={18} className="mr-2 text-gray-400" /> เลือกสินค้า
                   </label>
                   <select 
                     value={selectedProduct} 
@@ -1231,32 +1234,35 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <label className="text-sm font-bold text-gray-700 flex items-center">
-                      <Tag size={18} className="mr-2 text-gray-400" /> 3. ราคาขาย/ชิ้น (฿)
+                      <Tag size={18} className="mr-2 text-gray-400" /> ราคาขาย/ชิ้น
                     </label>
-                    <input 
-                      type="number" 
-                      value={customPrice} 
-                      onChange={(e) => setCustomPrice(e.target.value)} 
-                      className="w-full p-3.5 border border-gray-300 rounded-xl text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium bg-white transition-all shadow-sm" 
-                      disabled={!selectedProduct || isProcessing}
-                      placeholder="แก้ไขราคาขายได้ที่นี่"
-                      required
-                    />
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        value={customPrice} 
+                        onChange={(e) => setCustomPrice(e.target.value)} 
+                        className="w-full pl-4 pr-12 py-3.5 border border-gray-300 rounded-xl text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium bg-white transition-all shadow-sm" 
+                        disabled={!selectedProduct || isProcessing}
+                        placeholder="แก้ไขราคาได้ที่นี่"
+                        required
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">บาท</span>
+                    </div>
                   </div>
                   <div className="space-y-3">
                     <label className="text-sm font-bold text-gray-700 flex items-center">
-                      <ShoppingBag size={18} className="mr-2 text-gray-400" /> 4. จำนวนชิ้น
+                      <ShoppingBag size={18} className="mr-2 text-gray-400" /> จำนวนชิ้น
                     </label>
-                    <div className="flex items-center h-[52px]">
-                      <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full px-5 rounded-l-xl bg-white border border-gray-300 hover:bg-gray-100 font-bold text-gray-600 transition-colors shadow-sm focus:outline-none">-</button>
+                    <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-gray-300">
+                      <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full w-14 bg-gray-50 hover:bg-gray-100 font-bold text-gray-600 transition-colors border-r border-gray-300 focus:outline-none">-</button>
                       <input 
                         type="number" 
                         value={quantity} 
                         onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))} 
-                        className="h-full w-full text-center border-y border-gray-300 text-lg font-bold outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
+                        className="h-full w-full text-center text-lg font-bold outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
                         min="1"
                       />
-                      <button type="button" onClick={() => setQuantity(Number(quantity || 0) + 1)} className="h-full px-5 rounded-r-xl bg-white border border-gray-300 hover:bg-gray-100 font-bold text-gray-600 transition-colors shadow-sm focus:outline-none">+</button>
+                      <button type="button" onClick={() => setQuantity(Number(quantity || 0) + 1)} className="h-full w-14 bg-gray-50 hover:bg-gray-100 font-bold text-gray-600 transition-colors border-l border-gray-300 focus:outline-none">+</button>
                     </div>
                   </div>
                 </div>
@@ -1267,7 +1273,7 @@ export default function App() {
                 <div className="bg-gradient-to-r from-blue-50 to-blue-100/50 p-5 md:p-6 rounded-2xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner">
                   <div className="text-center md:text-left w-full md:w-auto">
                     <p className="text-xs font-bold text-blue-600/80 uppercase tracking-wider mb-1">ยอดรวมทั้งหมด</p>
-                    <p className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">{formatMoney(posTotal)}</p>
+                    <p className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">฿{formatMoney(posTotal)}</p>
                   </div>
                   <button 
                     type="submit" 
@@ -1314,7 +1320,7 @@ export default function App() {
                       {sale.soldBy && <span className="block text-[10px] text-gray-400 font-normal mt-1 flex items-center"><User size={10} className="mr-1"/> {sale.soldBy}</span>}
                     </td>
                     <td className="p-4 text-center font-bold text-gray-700">{sale.quantity}</td>
-                    <td className="p-4 text-right text-blue-600 font-bold whitespace-nowrap text-sm">{formatMoney(sale.total)}</td>
+                    <td className="p-4 text-right text-blue-600 font-bold whitespace-nowrap text-sm">฿{formatMoney(sale.total)}</td>
                   </tr>
                 ))}
                 {recentSales.length === 0 && (
