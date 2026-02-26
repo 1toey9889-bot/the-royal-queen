@@ -383,45 +383,39 @@ export default function App() {
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
             </div>
             {timeframe !== 'all' && (
-              <div className="flex items-center space-x-1.5 md:space-x-2 bg-blue-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-blue-100">
-                {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
-                {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
-                {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
-              </div>
-            )}
-            <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+          <div className="flex items-center space-x-1.5 md:space-x-2 bg-blue-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-blue-100">
+            {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+            {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+            {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย (ก่อนหัก)</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalRevenue)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
-          </div>
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Store size={14} className="mr-1.5 text-purple-500"/> รายได้เข้าบัญชี</h3>
-            <p className="text-xl md:text-2xl font-black text-purple-700 mt-2">{formatMoney(totalNetIncome)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">หลังหักค่าธรรมเนียมแพลตฟอร์ม</p>
-          </div>
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalCost)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
-          </div>
-          <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
-            <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3>
-            <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{formatMoney(totalProfit)}</p>
-            <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักค่าบริการและต้นทุนแล้ว</p>
-          </div>
-        </div>
+        )}
+        <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+      </div>
+    </div>
+    
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+      <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+        <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย</h3>
+        <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalRevenue)}</p>
+        <p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
+      </div>
+      <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
+        <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
+        <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalCost)}</p>
+        <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
+      </div>
+      <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+        <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3>
+        <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{formatMoney(totalProfit)}</p>
+        <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักค่าบริการและต้นทุนแล้ว</p>
+      </div>
+    </div>
 
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
+    <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
             <CalendarDays size={18} className="text-gray-400"/>
             <h3 className="text-sm md:text-lg font-semibold text-gray-800">
               สินค้าขายดี (ตามเงื่อนไขที่เลือก)
