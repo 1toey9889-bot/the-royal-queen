@@ -77,7 +77,7 @@ export default function App() {
 
   // --- 🗄️ 3.1 การจัดการตัวแปรสถานะ (State Management) ---
   const [loggedInUser, setLoggedInUser] = useState(null); 
-  const [activeTab, setActiveTab] = useState('sales');    
+  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -166,11 +166,33 @@ export default function App() {
 
   const getProduct = (id) => products.find(p => p.id === id);
 
-  // ฟังก์ชันจัดการวันที่ให้ตรงกับ Timezone ท้องถิ่น (แก้ปัญหาเหลื่อมวัน)
   const getLocalISODate = (dateString) => {
     const d = dateString ? new Date(dateString) : new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().split('T')[0];
+  };
+
+  // ฟังก์ชันดาวน์โหลด Excel รองรับ iOS และ Android อย่างสมบูรณ์
+  const downloadMobileSafeCSV = (csvString, filename) => {
+    const universalBOM = "\uFEFF";
+    const finalCSV = universalBOM + csvString;
+    const blob = new Blob([finalCSV], { type: 'text/csv;charset=utf-8;' });
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    
+    // ทริกเกอร์การคลิกอย่างปลอดภัย
+    link.click();
+    
+    // ป้องกันปัญหาเบราว์เซอร์ลบไฟล์ก่อนโหลดเสร็จ
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   // ==========================================
@@ -277,7 +299,6 @@ export default function App() {
       const cost = p ? (p.cost * s.quantity) : 0;
       totalCost += cost;
       
-      // ดึงกำไรสุทธิ และ รายได้เข้าบัญชี (รองรับข้อมูลเก่าที่ไม่มีค่าด้วย)
       totalNetIncome += (s.netIncome !== undefined) ? s.netIncome : s.total;
       totalProfit += (s.netProfit !== undefined) ? s.netProfit : (s.total - cost);
     });
@@ -330,14 +351,7 @@ export default function App() {
       csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', totalQty, totalCost, totalRevenue, totalNetIncome, totalProfit, '']);
       
       const csvString = csvRows.map(row => row.join(',')).join('\n');
-      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `รายงานยอดขาย_${timeLabel}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadMobileSafeCSV(csvString, `รายงานยอดขาย_${timeLabel}.csv`);
     };
 
     return (
@@ -369,45 +383,39 @@ export default function App() {
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
             </div>
             {timeframe !== 'all' && (
-              <div className="flex items-center space-x-1.5 md:space-x-2 bg-blue-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-blue-100">
-                {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
-                {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
-                {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
-              </div>
-            )}
-            <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+          <div className="flex items-center space-x-1.5 md:space-x-2 bg-blue-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-blue-100">
+            {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+            {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium" />}
+            {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย (ก่อนหัก)</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalRevenue)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
-          </div>
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Store size={14} className="mr-1.5 text-purple-500"/> รายได้เข้าบัญชี</h3>
-            <p className="text-xl md:text-2xl font-black text-purple-700 mt-2">{formatMoney(totalNetIncome)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">หลังหักค่าธรรมเนียมแพลตฟอร์ม</p>
-          </div>
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
-            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalCost)}</p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
-          </div>
-          <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
-            <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3>
-            <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{formatMoney(totalProfit)}</p>
-            <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักค่าบริการและต้นทุนแล้ว</p>
-          </div>
-        </div>
+        )}
+        <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+      </div>
+    </div>
+    
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+      <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+        <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย</h3>
+        <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalRevenue)}</p>
+        <p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p>
+      </div>
+      <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
+        <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
+        <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">{formatMoney(totalCost)}</p>
+        <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
+      </div>
+      <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+        <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3>
+        <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{formatMoney(totalProfit)}</p>
+        <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักค่าบริการและต้นทุนแล้ว</p>
+      </div>
+    </div>
 
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
+    <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
             <CalendarDays size={18} className="text-gray-400"/>
             <h3 className="text-sm md:text-lg font-semibold text-gray-800">
               สินค้าขายดี (ตามเงื่อนไขที่เลือก)
@@ -715,14 +723,7 @@ export default function App() {
       csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
 
       const csvString = csvRows.map(row => row.join(',')).join('\n');
-      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `สรุปสต๊อกสินค้า_${getLocalISODate()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadMobileSafeCSV(csvString, `สรุปข้อมูลสินค้าและมูลค่าสต๊อก_${getLocalISODate()}.csv`);
     };
 
     const handleSave = async (id) => {
@@ -849,12 +850,32 @@ export default function App() {
       setEditingStockId(null);
     };
 
+    const exportStockReport = () => {
+      if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
+      
+      const csvRows = [];
+      csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Royal Queen']);
+      csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
+      csvRows.push([]);
+      csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
+      
+      filteredAndSortedProducts.forEach((p, index) => {
+        csvRows.push([index + 1, `"${p.name}"`, p.stock || 0]);
+      });
+      
+      const csvString = csvRows.map(row => row.join(',')).join('\n');
+      downloadMobileSafeCSV(csvString, `รายงานจำนวนสต๊อกคงเหลือ_${getLocalISODate()}.csv`);
+    };
+
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         
         <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
+            <button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium">
+              <Download size={16} /><span>ส่งออกสต๊อก (Excel)</span>
+            </button>
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
             <div className="relative flex-1 sm:max-w-xs">
@@ -1396,14 +1417,33 @@ export default function App() {
     );
   }
 
+  // หน้าต่างสำหรับผู้บริหาร (เข้าผ่าน URL ?view=dashboard)
   if (isExecutiveView) {
     return (
-      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans">
-        <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
-          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2"><ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" /><span>The Royal Queen - ผู้บริหาร</span></h1>
+      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans flex flex-col">
+        <div className="max-w-5xl mx-auto w-full space-y-4 md:space-y-6">
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
+              <ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" />
+              <span>The Royal Queen - ผู้บริหาร</span>
+            </h1>
+            <div className="flex space-x-2 w-full sm:w-auto">
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                แดชบอร์ด
+              </button>
+              <button 
+                onClick={() => setActiveTab('stock')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                ดูสต๊อกสินค้า
+              </button>
+            </div>
           </div>
-          <DashboardView />
+          {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'stock' && <StockView />}
         </div>
       </div>
     );
