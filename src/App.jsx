@@ -828,6 +828,7 @@ export default function App() {
   const StockView = () => {
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
     
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
@@ -848,8 +849,14 @@ export default function App() {
     }, [products, searchTerm, sortBy]);
 
     const handleSaveStock = async (id) => {
-      await updateDoc(doc(db, "products", id), { stock: Number(newStock) || 0 });
-      setEditingStockId(null);
+      setIsProcessing(true);
+      try {
+        await updateDoc(doc(db, "products", id), { stock: Number(newStock) || 0 });
+        setEditingStockId(null);
+      } catch (error) {
+        alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message + "\n\n(หากคุณใช้งานผ่านลิงก์ผู้บริหาร อาจต้องเข้าสู่ระบบก่อนเพื่อรับสิทธิ์แก้ไข)");
+      }
+      setIsProcessing(false);
     };
 
     const exportStockReport = () => {
@@ -903,7 +910,8 @@ export default function App() {
                 <th className="p-3 md:p-4 font-medium text-center w-16">ลำดับ</th>
                 <th className="p-3 md:p-4 font-medium">ชื่อสินค้า</th>
                 <th className="p-3 md:p-4 font-medium text-center">คงเหลือ</th>
-                <th className="p-3 md:p-4 font-medium text-right">อัปเดต</th>
+                {/* ซ่อนคอลัมน์อัปเดต ถ้าเป็นการเปิดจากลิงก์ผู้บริหารแบบไม่ได้ล็อกอิน */}
+                {!isExecutiveView && <th className="p-3 md:p-4 font-medium text-right">อัปเดต</th>}
               </tr>
             </thead>
             <tbody className="text-xs md:text-sm">
@@ -913,22 +921,24 @@ export default function App() {
                   <td className="p-3 md:p-4 font-medium text-gray-800">{product.name}</td>
                   <td className="p-3 md:p-4 text-center">
                     {editingStockId === product.id ? (
-                      <input type="number" className="w-16 md:w-20 p-1.5 md:p-2 border rounded text-center text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} /> 
+                      <input type="number" className="w-16 md:w-20 p-1.5 md:p-2 border rounded text-center text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> 
                     ) : (
                       <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${product.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{product.stock || 0} ชิ้น</span>
                     )}
                   </td>
-                  <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2">
-                    {editingStockId === product.id ? (
-                      <><button onClick={() => handleSaveStock(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setEditingStockId(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
-                    ) : (
-                      <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button>
-                    )}
-                  </td>
+                  {!isExecutiveView && (
+                    <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2">
+                      {editingStockId === product.id ? (
+                        <><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
+                      ) : (
+                        <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredAndSortedProducts.length === 0 && (
-                <tr><td colSpan="4" className="text-center p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
+                <tr><td colSpan={isExecutiveView ? 3 : 4} className="text-center p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
               )}
             </tbody>
           </table>
@@ -1226,8 +1236,8 @@ export default function App() {
                     required 
                     disabled={isProcessing}
                   >
-                    <option value="" disabled>-- กรุณาคลิกเพื่อเลือกสินค้า --</option>
-                    {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) <= 0}>{p.name} (ราคาปกติ: {p.price} ฿) - เหลือ {p.stock || 0} ชิ้น</option>)}
+                    <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
+                    {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) <= 0}>{p.name} (ราคาปกติ: ฿{formatMoney(p.price)}) - เหลือ {p.stock || 0} ชิ้น</option>)}
                   </select>
                 </div>
                 
@@ -1241,9 +1251,9 @@ export default function App() {
                         type="number" 
                         value={customPrice} 
                         onChange={(e) => setCustomPrice(e.target.value)} 
-                        className="w-full pl-4 pr-12 py-3.5 border border-gray-300 rounded-xl text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium bg-white transition-all shadow-sm" 
+                        className="w-full pl-4 pr-16 py-3.5 border border-gray-300 rounded-xl text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium bg-white transition-all shadow-sm" 
                         disabled={!selectedProduct || isProcessing}
-                        placeholder="แก้ไขราคาได้ที่นี่"
+                        placeholder="แก้ไขราคาได้"
                         required
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">บาท</span>
@@ -1375,7 +1385,7 @@ export default function App() {
                 onClick={() => setActiveTab('stock')} 
                 className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
-                ดูสต๊อกสินค้า
+                จัดการสต๊อกสินค้า
               </button>
             </div>
           </div>
