@@ -1489,23 +1489,27 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
       
-      {/* แถบเมนูด้านซ้าย (Sidebar) - สลับเมนูตามสิทธิ์การเข้าถึง */}
-      <div className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex-shrink-0 z-10">
-        <div className="p-4 md:p-6 flex items-center justify-center md:justify-start">
-          <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
-            <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
-            <span>The Royal Queen</span>
-          </h1>
-        </div>
+      {/* แถบเมนูด้านซ้าย (Sidebar) - เพิ่มสีพื้นหลังไล่ระดับตามแบบ */}
+      <div className="w-full md:w-64 bg-gradient-to-br from-white via-white to-orange-100/70 border-b md:border-r border-gray-200 flex-shrink-0 z-10 relative overflow-hidden">
         
-        <nav className="px-3 md:px-4 pb-3 md:pb-6 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
-          {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={20} /><span>Dashboard</span></button>}
-          {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
-          {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
-          {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
-          {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
-          {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
-        </nav>
+        {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="p-4 md:p-6 flex items-center justify-center md:justify-start">
+            <h1 className="text-xl md:text-2xl font-extrabold text-blue-700 tracking-tight flex items-center space-x-2">
+              <Crown className="text-yellow-500 w-6 h-6 md:w-8 md:h-8" fill="currentColor" />
+              <span>The Royal Queen</span>
+            </h1>
+          </div>
+          
+          <nav className="px-3 md:px-4 pb-3 md:pb-6 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
+            {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={20} /><span>Dashboard</span></button>}
+            {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={20} /><span>จัดการสินค้า</span></button>}
+            {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
+            {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
+            {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
+          </nav>
+        </div>
       </div>
 
       {/* พื้นที่แสดงผลด้านขวา (Main Content Area) */}
