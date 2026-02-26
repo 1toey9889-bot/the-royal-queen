@@ -37,7 +37,11 @@ import {
   CalendarDays,
   ShieldCheck,
   Search,
-  ArrowUpDown
+  ArrowUpDown,
+  Store,
+  Tag,
+  ShoppingBag,
+  ChevronDown // นำเข้าไอคอนลูกศรชี้ลงเพิ่มเติม
 } from 'lucide-react';
 
 // ==========================================
@@ -1118,6 +1122,29 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // --- State สำหรับระบบค้นหาสินค้าใน Dropdown ---
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [productSearchTerm, setProductSearchTerm] = useState('');
+    const dropdownRef = React.useRef(null);
+
+    // ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsDropdownOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // กรองสินค้าตามคำค้นหา
+    const filteredProductsForSelect = useMemo(() => {
+      if (!productSearchTerm) return products;
+      return products.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()));
+    }, [products, productSearchTerm]);
+    // ---------------------------------------------
+
     // คำนวณยอดรวม (ป้องกัน NaN)
     const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
 
@@ -1155,6 +1182,7 @@ export default function App() {
         setSelectedProduct(''); 
         setCustomPrice('');
         setQuantity(1); 
+        setProductSearchTerm(''); // เคลียร์คำค้นหาหลังบันทึก
         setIsError(false); 
         setMessage('บันทึกสำเร็จ');
         setTimeout(() => setMessage(''), 3000);
@@ -1214,27 +1242,86 @@ export default function App() {
 
               <div className="border-b border-dashed border-gray-200"></div>
 
-              {/* 2. เลือกสินค้าและรายละเอียด */}
+              {/* 2. เลือกสินค้าและรายละเอียด (แบบใหม่ ค้นหาได้) */}
               <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
-                <div className="space-y-3">
+                <div className="space-y-3 relative" ref={dropdownRef}>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     เลือกสินค้า
                   </label>
-                  <select 
-                    value={selectedProduct} 
-                    onChange={(e) => {
-                      const pid = e.target.value;
-                      setSelectedProduct(pid);
-                      const p = getProduct(pid);
-                      setCustomPrice(p ? p.price : '');
-                    }} 
-                    className="w-full p-3.5 border border-gray-300 rounded-xl bg-white text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" 
-                    required 
-                    disabled={isProcessing}
+                  
+                  {/* ปุ่มกดเปิด Dropdown */}
+                  <div 
+                    onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)}
+                    className={`w-full p-3.5 border rounded-xl bg-white text-base cursor-pointer flex justify-between items-center transition-all shadow-sm ${
+                      isDropdownOpen ? 'border-blue-500 ring-4 ring-blue-500/20' : 'border-gray-300 hover:border-blue-400'
+                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <option value="" disabled>-- กรุณาเลือกสินค้า --</option>
-                    {products.map(p => <option key={p.id} value={p.id} disabled={(p.stock || 0) <= 0}>{p.name} (ราคาปกติ: ฿{formatMoney(p.price)}) - เหลือ {p.stock || 0} ชิ้น</option>)}
-                  </select>
+                    <span className={`truncate ${selectedProduct ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+                      {selectedProduct ? getProduct(selectedProduct)?.name : '-- กรุณาเลือกสินค้า --'}
+                    </span>
+                    <ChevronDown size={18} className={`text-gray-400 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {/* กล่องรายชื่อสินค้าค้นหาได้ */}
+                  {isDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-[300px] flex flex-col top-full left-0 origin-top animate-in fade-in zoom-in-95 duration-200">
+                      <div className="p-3 border-b border-gray-100 bg-gray-50/80 rounded-t-xl">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                          <input
+                            type="text"
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm"
+                            placeholder="พิมพ์ค้นหาชื่อสินค้า..."
+                            value={productSearchTerm}
+                            onChange={(e) => setProductSearchTerm(e.target.value)}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <ul className="overflow-y-auto flex-1 p-2 space-y-1">
+                        {filteredProductsForSelect.map(p => {
+                          const isOutOfStock = (p.stock || 0) <= 0;
+                          const isSelected = selectedProduct === p.id;
+                          return (
+                            <li
+                              key={p.id}
+                              onClick={() => {
+                                if (isOutOfStock) return;
+                                setSelectedProduct(p.id);
+                                setCustomPrice(p.price); // ดึงราคามาใส่ให้อัตโนมัติ
+                                setIsDropdownOpen(false);
+                                setProductSearchTerm(''); 
+                              }}
+                              className={`px-3 py-3 rounded-lg text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${
+                                isOutOfStock
+                                  ? "opacity-50 cursor-not-allowed bg-gray-50"
+                                  : isSelected
+                                    ? "bg-blue-50 text-blue-700 border border-blue-100 shadow-sm"
+                                    : "hover:bg-gray-100 text-gray-700 border border-transparent"
+                              }`}
+                            >
+                              <span className="font-bold mb-1.5 sm:mb-0 text-base sm:text-sm truncate pr-2">{p.name}</span>
+                              <span className={`text-[11px] md:text-xs font-bold px-2.5 py-1 rounded-md shrink-0 border ${
+                                isOutOfStock 
+                                  ? 'bg-red-50 text-red-600 border-red-100' 
+                                  : isSelected
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                    : 'bg-green-50 text-green-700 border-green-100'
+                              }`}>
+                                {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${p.stock || 0} ชิ้น`} (฿{formatMoney(p.price)})
+                              </span>
+                            </li>
+                          );
+                        })}
+                        {filteredProductsForSelect.length === 0 && (
+                          <li className="px-3 py-8 text-center flex flex-col items-center justify-center text-gray-500">
+                            <Package size={24} className="text-gray-300 mb-2"/>
+                            <span className="text-sm font-medium">ไม่พบสินค้าที่คุณค้นหา</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
