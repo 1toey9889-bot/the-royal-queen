@@ -41,7 +41,8 @@ import {
   Store,
   Tag,
   ShoppingBag,
-  ChevronDown
+  ChevronDown,
+  Crown
 } from 'lucide-react';
 
 // ==========================================
@@ -230,7 +231,6 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
           <div className="text-center space-y-4">
-            {/* โลโก้ใหม่ในหน้า Login */}
             <img 
               src="/logo.jpg" 
               alt="The Resilient Clinic" 
@@ -303,11 +303,15 @@ export default function App() {
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
     
     filteredSales.forEach(s => {
-      totalQty += Number(s.quantity) || 0; 
+      const qty = Number(s.quantity) || 0;
+      totalQty += qty; 
       totalRevenue += Number(s.total) || 0;
       
       const p = getProduct(s.productId);
-      const cost = p ? (Number(p.cost) * (Number(s.quantity) || 0)) : 0;
+      // หากมีการบันทึก unitCost ไว้ในประวัติ ให้ใช้ค่าเก่า (เพื่อให้กำไรอดีตไม่เพี้ยน) หากไม่มีให้ดึงค่าล่าสุด
+      const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
+      const cost = itemCost * qty;
+      
       totalCost += cost;
       totalProfit += ((Number(s.total) || 0) - cost);
     });
@@ -321,7 +325,7 @@ export default function App() {
     
     const topProducts = Object.entries(productSalesCount)
       .map(([id, qty]) => ({ ...getProduct(id), qty }))
-      .filter(p => p.name)
+      .filter(p => p && p.name)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
 
@@ -337,7 +341,6 @@ export default function App() {
       const storeLabel = filterStore === 'all' ? 'ทุกร้านค้า' : filterStore;
 
       const csvRows = [];
-      // อัปเดตชื่อในรายงาน Excel
       csvRows.push(['รายงานสรุปยอดขาย - The Resilient Clinic']);
       csvRows.push(['ช่วงเวลา:', timeLabel]);
       csvRows.push(['ร้านค้า:', storeLabel]);
@@ -348,14 +351,21 @@ export default function App() {
 
       filteredSales.forEach(s => {
         const p = getProduct(s.productId);
-        const cost = p ? Number(p.cost) : 0;
+        const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
         const qty = Number(s.quantity) || 0;
         const total = Number(s.total) || 0;
-        const actualPricePerUnit = qty > 0 ? (total / qty) : (p ? Number(p.price) : 0);
-        const rowCost = cost * qty;
+        const actualPricePerUnit = s.unitPrice !== undefined ? Number(s.unitPrice) : (qty > 0 ? (total / qty) : 0);
+        
+        const rowCost = itemCost * qty;
         const rowProfit = total - rowCost;
         
-        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, actualPricePerUnit.toFixed(2), qty, rowCost, total, rowProfit, `"${s.soldBy || '-'}"`]);
+        let safeDate = '-';
+        try {
+          const d = new Date(s.date);
+          if(!isNaN(d.getTime())) safeDate = d.toLocaleString('th-TH');
+        } catch(e) {}
+
+        csvRows.push([`"${safeDate}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, itemCost, actualPricePerUnit.toFixed(2), qty, rowCost, total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
 
       csvRows.push([]);
@@ -375,7 +385,7 @@ export default function App() {
             <h2 className="text-base md:text-xl lg:text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
-            {/* กรองร้านค้า */}
+            {/* กรองร้านค้า (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ร้านค้า</span>
                <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700">
@@ -383,12 +393,12 @@ export default function App() {
                  {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                </select>
             </div>
-            {/* กรองสินค้า */}
+            {/* กรองสินค้า (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">สินค้า</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
-            {/* กรองเวลา */}
+            {/* กรองเวลา (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ดูแบบ</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
@@ -443,7 +453,7 @@ export default function App() {
                   <div className="flex items-center space-x-3 md:space-x-4 ml-6 sm:ml-0">
                     <span className="text-xs md:text-sm text-gray-500 whitespace-nowrap font-medium">ขายแล้ว <strong className="text-blue-600">{p.qty}</strong> ชิ้น</span>
                     <div className="w-24 md:w-32 h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / topProducts[0].qty) * 100}%` }}></div>
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / (topProducts[0]?.qty || 1)) * 100}%` }}></div>
                     </div>
                   </div>
                 </div>
@@ -534,6 +544,8 @@ export default function App() {
           productId: newProductId,
           quantity: newQty,
           total: newTotal,
+          unitPrice: unitPrice, 
+          unitCost: newProductData.cost, // อัปเดตต้นทุนของสินค้าใหม่ด้วย
           date: newDateIso,
           store: editForm.store || STORE_OPTIONS[0]
         });
@@ -553,7 +565,7 @@ export default function App() {
             <p className="text-xs md:text-sm text-gray-500 mt-1">สามารถแก้ไขข้อมูล หรือลบออเดอร์ที่คีย์ผิดได้</p>
           </div>
           <div className="flex items-center space-x-2 bg-white px-2 py-1.5 md:px-3 md:py-2 rounded-lg border border-gray-200 shadow-sm w-full md:w-auto justify-between md:justify-start">
-             <span className="text-xs md:text-sm text-gray-500 font-medium">ดูของวันที่:</span>
+             <span className="text-xs md:text-sm text-gray-500 font-medium">ดูของวันที่</span>
              <input 
                 type="date" 
                 value={filterDate} 
@@ -580,7 +592,7 @@ export default function App() {
               {filteredSales.map(sale => {
                 const isCurrentRowEditing = isEditing === sale.id;
                 const safeQty = Number(sale.quantity) || 0;
-                const actualPricePerUnit = safeQty > 0 ? ((Number(sale.total) || 0) / safeQty) : 0;
+                const actualPricePerUnit = sale.unitPrice !== undefined ? Number(sale.unitPrice) : (safeQty > 0 ? (Number(sale.total) / safeQty) : 0);
                 
                 // ตรวจสอบวันทึ่ให้ปลอดภัย
                 let dateDisplay = '-';
@@ -749,7 +761,6 @@ export default function App() {
     const exportProductsReport = () => {
       if (products.length === 0) return;
       const csvRows = [];
-      // อัปเดตชื่อในรายงาน Excel
       csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Resilient Clinic']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
