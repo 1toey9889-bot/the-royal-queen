@@ -37,35 +37,8 @@ import {
   CalendarDays,
   ShieldCheck,
   Search,
-  ArrowUpDown,
-  Store,
-  Tag,
-  ShoppingBag,
-  ChevronDown,
-  Crown
+  ArrowUpDown
 } from 'lucide-react';
-
-// ==========================================
-// 🎨 โลโก้ The Resilient Clinic (วาดด้วย Code ป้องกันรูปหาย 100%)
-// ==========================================
-const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-[#0b132b] flex items-center justify-center overflow-hidden ${className}`}>
-    <svg viewBox="0 0 320 100" className="h-full w-auto py-2" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Lotus Icon */}
-      <g transform="translate(15, 10) scale(0.8)">
-        <path d="M50 10 C 50 10, 30 40, 30 65 C 30 80, 40 85, 50 85 C 60 85, 70 80, 70 65 C 70 40, 50 10, 50 10 Z" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
-        <circle cx="50" cy="58" r="8" fill="#FFFFFF"/>
-        <path d="M 28 50 C 10 50, 5 70, 15 85 C 25 95, 40 85, 40 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-        <path d="M 72 50 C 90 50, 95 70, 85 85 C 75 95, 60 85, 60 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-        <path d="M 12 80 C 30 105, 70 105, 88 80" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-      </g>
-      {/* Text */}
-      <text x="115" y="38" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1">THE</text>
-      <text x="113" y="65" fontFamily="Arial, sans-serif" fontSize="28" fontWeight="bold" fill="#D4AF37" letterSpacing="1">RESILIENT</text>
-      <text x="115" y="86" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1.5">CLINIC</text>
-    </svg>
-  </div>
-);
 
 // ==========================================
 // 🔥 2. ตั้งค่าการเชื่อมต่อฐานข้อมูล (Firebase Setup)
@@ -253,7 +226,11 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
           <div className="text-center space-y-4">
-            <ResilientLogo className="mx-auto h-24 md:h-32 rounded-2xl shadow-lg mb-4 w-full max-w-[320px]" />
+            <img 
+              src="/logo.jpg" 
+              alt="The Resilient Clinic" 
+              className="mx-auto h-24 md:h-32 object-contain rounded-2xl shadow-lg mb-4 w-full max-w-[320px]" 
+            />
             <p className="text-sm md:text-base text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -1219,7 +1196,12 @@ export default function App() {
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center justify-center">
-              <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
+              <img 
+                src="/logo.jpg" 
+                alt="The Resilient Clinic" 
+                className="h-16 md:h-20 object-contain rounded-xl shadow-sm"
+                onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
+              />
             </div>
             
             {/* แท็บเมนูผู้บริหาร */}
@@ -1245,10 +1227,15 @@ export default function App() {
         {/* Content ผู้บริหาร */}
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
-            <div className="flex items-center space-x-2 text-xs md:text-sm text-yellow-700 bg-gradient-to-r from-yellow-50 to-orange-50 py-1.5 px-3 rounded-full border border-yellow-200 w-max shadow-sm">
-              <Crown size={14} className="text-yellow-600" fill="currentColor" />
+            
+            {/* ป้าย Executive View แบบดั้งเดิมที่ขอคืนมา */}
+            <div className="flex items-center space-x-2 text-xs md:text-sm text-yellow-700 bg-gradient-to-r from-yellow-50 to-orange-50 py-1.5 px-3 rounded-full border border-yellow-200 w-max shadow-sm mb-4">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-600">
+                <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"></path>
+              </svg>
               <span className="font-bold">Executive View</span>
             </div>
+
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'stock' && <StockView />}
           </div>
@@ -1268,7 +1255,12 @@ export default function App() {
         {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-4 flex items-center justify-center border-b border-slate-100">
-            <ResilientLogo className="h-16 w-full rounded-lg shadow-sm" />
+            <img 
+              src="/logo.jpg" 
+              alt="The Resilient Clinic" 
+              className="max-h-16 w-auto object-contain rounded-lg shadow-sm"
+              onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
+            />
           </div>
           
           <nav className="px-3 md:px-4 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
