@@ -361,7 +361,7 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
             {/* กรองร้านค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
-               <span className="text-xs text-gray-500 font-medium">ร้านค้า:</span>
+               <span className="text-xs text-gray-500 font-medium">ร้านค้า</span>
                <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700">
                  <option value="all">ทุกร้านค้า</option>
                  {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -369,12 +369,12 @@ export default function App() {
             </div>
             {/* กรองสินค้า */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
-               <span className="text-xs text-gray-500 font-medium">สินค้า:</span>
+               <span className="text-xs text-gray-500 font-medium">สินค้า</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
             {/* กรองเวลา */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
-               <span className="text-xs text-gray-500 font-medium">ดูแบบ:</span>
+               <span className="text-xs text-gray-500 font-medium">ดูแบบ</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
             </div>
             {timeframe !== 'all' && (
