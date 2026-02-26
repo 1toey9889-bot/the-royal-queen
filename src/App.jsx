@@ -158,7 +158,7 @@ export default function App() {
   };
 
   const formatMoney = (amount) => {
-    const validAmount = isNaN(amount) ? 0 : amount;
+    const validAmount = isNaN(amount) || amount === null ? 0 : amount;
     return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(validAmount);
   };
 
@@ -253,7 +253,7 @@ export default function App() {
     );
   };
 
-  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard) รูปแบบใหม่ (เข้าใจง่าย & ย้อนหลังได้)
+  // 📊 [View 2] หน้าสรุปยอดขาย (Dashboard) รูปแบบใหม่
   const DashboardView = () => {
     const [timeframe, setTimeframe] = useState('monthly'); 
     const currentDateStr = getLocalISODate();
@@ -333,11 +333,12 @@ export default function App() {
       filteredSales.forEach(s => {
         const p = getProduct(s.productId);
         const cost = p ? p.cost : 0;
-        const price = p ? p.price : 0;
+        // กรณีคีย์ราคาแมนนวล จะต้องหาค่าเฉลี่ยต่อชิ้น
+        const actualPricePerUnit = s.quantity > 0 ? (s.total / s.quantity) : (p ? p.price : 0);
         const rowCost = cost * s.quantity;
         const rowProfit = s.total - rowCost;
         
-        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, price, s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
+        csvRows.push([`"${new Date(s.date).toLocaleString('th-TH')}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, cost, actualPricePerUnit.toFixed(2), s.quantity, rowCost, s.total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
 
       csvRows.push([]);
@@ -386,7 +387,6 @@ export default function App() {
           </div>
         </div>
         
-        {/* ปรับ Grid เป็น 3 คอลัมน์ และลบกล่องสีม่วงออกตามที่ขอ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
@@ -443,7 +443,7 @@ export default function App() {
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(getLocalISODate());
     const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '' });
+    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '' });
     const [isProcessing, setIsProcessing] = useState(false);
 
     const formatForInput = (isoString) => {
@@ -475,28 +475,20 @@ export default function App() {
       setIsProcessing(true);
       try {
         const oldQty = sale.quantity;
-        const newQty = Number(editForm.quantity) || 1;
+        const newQty = Math.max(1, Number(editForm.quantity) || 1);
         const oldProductId = sale.productId;
         const newProductId = editForm.productId;
         const newProductData = getProduct(newProductId);
         
         if (!newProductData) throw new Error("ไม่พบข้อมูลสินค้าใหม่");
-        if (newQty < 1) throw new Error("จำนวนต้องมากกว่า 0");
 
         const parsedDate = new Date(editForm.date);
         if (isNaN(parsedDate.getTime())) throw new Error("รูปแบบวันที่ไม่ถูกต้อง");
         const newDateIso = parsedDate.toISOString();
 
-        // คำนวณราคาใหม่ โดยรักษาราคาต่อชิ้น (Custom Price) ที่เคยขายไว้
-        let newTotal;
-        if (oldProductId !== newProductId) {
-          // ถ้าเปลี่ยนสินค้า ให้ใช้ราคามาตรฐานของสินค้าใหม่
-          newTotal = newProductData.price * newQty;
-        } else {
-          // ถ้าสินค้าเดิม ให้รักษาราคาที่เขาคีย์แมนนวลไว้
-          const customUnitPrice = sale.quantity > 0 ? (sale.total / sale.quantity) : newProductData.price;
-          newTotal = customUnitPrice * newQty;
-        }
+        // คำนวณราคาใหม่ โดยใช้ราคาต่อชิ้นที่ตั้งไว้
+        const unitPrice = Number(editForm.customPrice) || 0;
+        const newTotal = unitPrice * newQty;
 
         if (oldProductId !== newProductId) {
           if (getProduct(oldProductId)) {
@@ -542,7 +534,6 @@ export default function App() {
         </div>
 
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          {/* เอาคอลัมน์กำไรสุทธิออก กลับไปใช้รูปแบบมาตรฐาน */}
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
@@ -556,10 +547,14 @@ export default function App() {
               </tr>
             </thead>
             <tbody className="text-xs md:text-sm">
-              {filteredSales.map(sale => (
+              {filteredSales.map(sale => {
+                const isCurrentRowEditing = isEditing === sale.id;
+                const actualPricePerUnit = sale.quantity > 0 ? (sale.total / sale.quantity) : 0;
+
+                return (
                 <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td className="p-3 md:p-4 text-gray-500 whitespace-nowrap">
-                    {isEditing === sale.id ? (
+                    {isCurrentRowEditing ? (
                       <input 
                         type="datetime-local" 
                         className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-[10px] md:text-xs" 
@@ -572,7 +567,7 @@ export default function App() {
                     )}
                   </td>
                   <td className="p-3 md:p-4 whitespace-nowrap">
-                    {isEditing === sale.id ? (
+                    {isCurrentRowEditing ? (
                       <select 
                         value={editForm.store} 
                         onChange={e => setEditForm({...editForm, store: e.target.value})} 
@@ -588,10 +583,14 @@ export default function App() {
                     )}
                   </td>
                   <td className="p-3 md:p-4 min-w-[150px]">
-                    {isEditing === sale.id ? (
+                    {isCurrentRowEditing ? (
                       <select 
                         value={editForm.productId} 
-                        onChange={e => setEditForm({...editForm, productId: e.target.value})} 
+                        onChange={e => {
+                          const newPid = e.target.value;
+                          const newPData = getProduct(newPid);
+                          setEditForm({...editForm, productId: newPid, customPrice: newPData ? newPData.price : 0});
+                        }} 
                         className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs md:text-sm"
                         disabled={isProcessing}
                       >
@@ -604,12 +603,12 @@ export default function App() {
                     )}
                   </td>
                   <td className="p-3 md:p-4 text-center">
-                    {isEditing === sale.id ? (
+                    {isCurrentRowEditing ? (
                       <input 
                         type="number" 
                         className="w-16 mx-auto p-1.5 md:p-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-xs md:text-sm" 
                         value={editForm.quantity} 
-                        onChange={e => setEditForm({...editForm, quantity: e.target.value})}
+                        onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value) || 1)})}
                         disabled={isProcessing}
                         min="1"
                       />
@@ -618,8 +617,18 @@ export default function App() {
                     )}
                   </td>
                   <td className="p-3 md:p-4 text-right text-blue-600 font-medium whitespace-nowrap">
-                    {isEditing === sale.id ? (
-                       <span className="text-gray-400 italic">คำนวณออโต้</span>
+                    {isCurrentRowEditing ? (
+                      <div className="flex flex-col items-end">
+                         <input 
+                           type="number" 
+                           className="w-20 p-1 border border-gray-300 rounded text-right text-xs mb-1 outline-none focus:ring-1 focus:ring-blue-500" 
+                           value={editForm.customPrice} 
+                           onChange={e => setEditForm({...editForm, customPrice: e.target.value})}
+                           placeholder="ราคา/ชิ้น"
+                           title="ราคาขายต่อชิ้น"
+                         />
+                         <span>{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
+                      </div>
                     ) : (
                        formatMoney(sale.total)
                     )}
@@ -628,7 +637,7 @@ export default function App() {
                     <span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span>
                   </td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
-                    {isEditing === sale.id ? (
+                    {isCurrentRowEditing ? (
                       <>
                         <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Save size={16} className="md:w-4 md:h-4" /></button>
                         <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><X size={16} className="md:w-4 md:h-4" /></button>
@@ -642,7 +651,8 @@ export default function App() {
                               productId: sale.productId, 
                               quantity: sale.quantity,
                               date: formatForInput(sale.date),
-                              store: sale.store || STORE_OPTIONS[0]
+                              store: sale.store || STORE_OPTIONS[0],
+                              customPrice: actualPricePerUnit
                             }); 
                           }} 
                           className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
@@ -659,7 +669,7 @@ export default function App() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
               {filteredSales.length === 0 && (
                 <tr><td colSpan="7" className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่มีรายการขายในวันที่เลือก</td></tr>
               )}
@@ -720,17 +730,17 @@ export default function App() {
     const handleSave = async (id) => {
       setIsProcessing(true);
       try {
-        await updateDoc(doc(db, "products", id), { name: editForm.name, cost: Number(editForm.cost), price: Number(editForm.price) });
+        await updateDoc(doc(db, "products", id), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0 });
         setIsEditing(null);
       } catch (error) { alert("Error: " + error.message); }
       setIsProcessing(false);
     };
 
     const handleAdd = async () => {
-      if (!editForm.name || !editForm.price || !editForm.cost) return;
+      if (!editForm.name) return;
       setIsProcessing(true);
       try {
-        await addDoc(collection(db, "products"), { name: editForm.name, cost: Number(editForm.cost), price: Number(editForm.price), stock: 0 });
+        await addDoc(collection(db, "products"), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0, stock: 0 });
         setIsAdding(false);
         setEditForm({ name: '', cost: '', price: '' });
       } catch (error) { alert("Error: " + error.message); }
@@ -1094,13 +1104,12 @@ export default function App() {
   const SalesView = () => {
     const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
     const [selectedProduct, setSelectedProduct] = useState('');
-    const [customPrice, setCustomPrice] = useState(''); // เพิ่ม State สำหรับแก้ไขราคาแมนนวล
+    const [customPrice, setCustomPrice] = useState(''); 
     const [quantity, setQuantity] = useState(1);
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // เมื่อเลือกสินค้า ให้ดึงราคามาตรฐานมาใส่ในช่อง customPrice
     useEffect(() => {
       if (selectedProduct) {
         const p = getProduct(selectedProduct);
@@ -1110,7 +1119,6 @@ export default function App() {
       }
     }, [selectedProduct, products]);
 
-    // คำนวณยอดรวมจาก ราคาที่กรอก x จำนวน
     const posTotal = selectedProduct ? (Number(customPrice) || 0) * quantity : 0;
 
     const recentSales = sales
@@ -1121,19 +1129,18 @@ export default function App() {
     const handleCheckout = async (e) => {
       e.preventDefault();
       if (!selectedProduct || !selectedStore) return;
+      if (quantity < 1) { setIsError(true); setMessage('จำนวนต้องมากกว่า 0'); return; }
       
       const product = getProduct(selectedProduct);
       if ((product.stock || 0) < quantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
       
       setIsProcessing(true);
       try {
-        const totalCost = product.cost * quantity;
-        
         await addDoc(collection(db, "sales"), { 
           store: selectedStore,
           productId: selectedProduct, 
           quantity: Number(quantity), 
-          total: posTotal, // บันทึกยอดที่เกิดจาก Custom Price
+          total: posTotal, 
           date: new Date().toISOString(), 
           soldBy: loggedInUser.username 
         });
@@ -1218,7 +1225,13 @@ export default function App() {
                   <label className="block text-xs md:text-sm font-bold mb-1.5 md:mb-2 text-gray-700">จำนวนชิ้น</label>
                   <div className="flex items-center space-x-3 md:space-x-4">
                     <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">-</button>
-                    <input type="number" value={quantity} readOnly className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-bold" />
+                    <input 
+                      type="number" 
+                      value={quantity} 
+                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} 
+                      className="w-full text-center p-2.5 md:p-3 border border-gray-300 rounded-lg text-base md:text-lg font-bold outline-none focus:ring-2 focus:ring-blue-500" 
+                      min="1"
+                    />
                     <button type="button" onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-600 transition">+</button>
                   </div>
                 </div>
