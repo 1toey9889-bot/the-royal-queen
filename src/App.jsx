@@ -1,7 +1,7 @@
 // ==========================================
 // 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
 // ==========================================
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, 
@@ -38,12 +38,30 @@ import {
   ShieldCheck,
   Search,
   ArrowUpDown,
-  Store,
-  Tag,
-  ShoppingBag,
-  ChevronDown,
-  Crown
+  ChevronDown
 } from 'lucide-react';
+
+// ==========================================
+// 🎨 โลโก้ The Resilient Clinic (วาดด้วย Code ป้องกันรูปหาย 100%)
+// ==========================================
+const ResilientLogo = ({ className = "" }) => (
+  <div className={`bg-[#0b132b] flex items-center justify-center overflow-hidden ${className}`}>
+    <svg viewBox="0 0 320 100" className="h-full w-auto py-2" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Lotus Icon */}
+      <g transform="translate(15, 10) scale(0.8)">
+        <path d="M50 10 C 50 10, 30 40, 30 65 C 30 80, 40 85, 50 85 C 60 85, 70 80, 70 65 C 70 40, 50 10, 50 10 Z" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
+        <circle cx="50" cy="58" r="8" fill="#FFFFFF"/>
+        <path d="M 28 50 C 10 50, 5 70, 15 85 C 25 95, 40 85, 40 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+        <path d="M 72 50 C 90 50, 95 70, 85 85 C 75 95, 60 85, 60 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+        <path d="M 12 80 C 30 105, 70 105, 88 80" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+      </g>
+      {/* Text */}
+      <text x="115" y="38" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1">THE</text>
+      <text x="113" y="65" fontFamily="Arial, sans-serif" fontSize="28" fontWeight="bold" fill="#D4AF37" letterSpacing="1">RESILIENT</text>
+      <text x="115" y="86" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1.5">CLINIC</text>
+    </svg>
+  </div>
+);
 
 // ==========================================
 // 🔥 2. ตั้งค่าการเชื่อมต่อฐานข้อมูล (Firebase Setup)
@@ -231,12 +249,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 md:p-10 space-y-8">
           <div className="text-center space-y-4">
-            <img 
-              src="/logo.jpg" 
-              alt="The Resilient Clinic" 
-              className="mx-auto h-24 md:h-32 object-contain rounded-2xl shadow-lg mb-2"
-              onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }} 
-            />
+            <ResilientLogo className="mx-auto h-24 md:h-32 rounded-2xl shadow-lg mb-4 w-full max-w-[320px]" />
             <p className="text-sm md:text-base text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -308,7 +321,6 @@ export default function App() {
       totalRevenue += Number(s.total) || 0;
       
       const p = getProduct(s.productId);
-      // หากมีการบันทึก unitCost ไว้ในประวัติ ให้ใช้ค่าเก่า (เพื่อให้กำไรอดีตไม่เพี้ยน) หากไม่มีให้ดึงค่าล่าสุด
       const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
       const cost = itemCost * qty;
       
@@ -385,7 +397,6 @@ export default function App() {
             <h2 className="text-base md:text-xl lg:text-2xl font-extrabold text-gray-800 tracking-tight">สรุปยอดขาย</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
-            {/* กรองร้านค้า (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ร้านค้า</span>
                <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700">
@@ -393,12 +404,10 @@ export default function App() {
                  {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                </select>
             </div>
-            {/* กรองสินค้า (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">สินค้า</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-medium text-gray-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
-            {/* กรองเวลา (ไม่มีโคลอน) */}
             <div className="flex items-center space-x-1.5 md:space-x-2 bg-slate-50 px-2 py-1.5 md:px-3 md:py-2 rounded-md md:rounded-lg border border-gray-200">
                <span className="text-xs text-gray-500 font-medium">ดูแบบ</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-medium text-gray-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
@@ -466,6 +475,348 @@ export default function App() {
     );
   };
 
+  // 🛒 [View 7] หน้าข้อมูลการขาย POS (Sales POS)
+  const SalesView = () => {
+    const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
+    const [selectedProduct, setSelectedProduct] = useState('');
+    const [customPrice, setCustomPrice] = useState(''); 
+    const [quantity, setQuantity] = useState(1);
+    const [message, setMessage] = useState('');
+    const [isError, setIsError] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    // --- State สำหรับระบบค้นหาสินค้าใน Dropdown ---
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [productSearchTerm, setProductSearchTerm] = useState('');
+    const dropdownRef = useRef(null);
+
+    // ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsDropdownOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // กรองสินค้าตามคำค้นหา (ดักจับ Error 100%)
+    const filteredProductsForSelect = useMemo(() => {
+      if (!productSearchTerm) return products;
+      return products.filter(p => String(p?.name || '').toLowerCase().includes(String(productSearchTerm || '').toLowerCase()));
+    }, [products, productSearchTerm]);
+    // ---------------------------------------------
+
+    // ดึงราคาตั้งต้นเมื่อเปลี่ยนสินค้า
+    useEffect(() => {
+      if (selectedProduct) {
+        const p = getProduct(selectedProduct);
+        if (p) setCustomPrice(p.price);
+      } else {
+        setCustomPrice('');
+      }
+    }, [selectedProduct, products]);
+
+    // คำนวณยอดรวม (ป้องกัน NaN เด็ดขาด)
+    const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
+
+    const recentSales = sales
+      .filter(s => getLocalISODate(s.date) === getLocalISODate())
+      .sort((a, b) => {
+         const da = new Date(a.date).getTime() || 0;
+         const db = new Date(b.date).getTime() || 0;
+         return db - da;
+      })
+      .slice(0, 5);
+
+    const handleCheckout = async (e) => {
+      e.preventDefault();
+      const finalQuantity = Number(quantity) || 0;
+      const finalPrice = Number(customPrice) || 0;
+      
+      if (!selectedProduct || !selectedStore) return;
+      if (finalQuantity < 1) { setIsError(true); setMessage('จำนวนต้องมากกว่า 0'); return; }
+      
+      const product = getProduct(selectedProduct);
+      if ((product.stock || 0) < finalQuantity) { setIsError(true); setMessage('สต๊อกไม่พอ'); return; }
+      
+      setIsProcessing(true);
+      try {
+        await addDoc(collection(db, "sales"), { 
+          store: selectedStore,
+          productId: selectedProduct, 
+          quantity: finalQuantity, 
+          total: finalPrice * finalQuantity, 
+          unitPrice: finalPrice,          // บันทึกราคาขาย ณ วันนั้น
+          unitCost: Number(product.cost), // บันทึกต้นทุน ณ วันนั้น
+          date: new Date().toISOString(), 
+          soldBy: loggedInUser?.username || 'unknown'
+        });
+        
+        await updateDoc(doc(db, "products", product.id), { 
+          stock: increment(-finalQuantity) 
+        });
+        
+        setSelectedProduct(''); 
+        setCustomPrice('');
+        setQuantity(1); 
+        setProductSearchTerm(''); 
+        setIsError(false); 
+        setMessage('บันทึกสำเร็จ');
+        setTimeout(() => setMessage(''), 3000);
+      } catch (err) { 
+        setMessage(err.message); 
+        setIsError(true); 
+      }
+      setIsProcessing(false);
+    };
+
+    return (
+      <div className="relative space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+        
+        <div className="absolute inset-0 bg-[#f4f7ff] -z-20 rounded-[3rem]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/60 via-transparent to-transparent -z-10 pointer-events-none"></div>
+
+        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ตรงปก */}
+        <div className="bg-white/95 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white p-6 md:p-10">
+          
+          <div className="text-center mb-8">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">
+              คีย์ข้อมูลการขาย (POS)
+            </h2>
+          </div>
+
+          <form onSubmit={handleCheckout} className="space-y-8">
+            {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-center justify-center ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
+            
+            {/* 1. เลือกร้านค้า (ไม่มีไอคอน ตรงกลาง) */}
+            <div className="text-center">
+              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
+                เลือกร้านค้า
+              </label>
+              <div className="flex flex-wrap justify-center gap-2 md:gap-3">
+                {STORE_OPTIONS.map(store => {
+                  const isSelected = selectedStore === store;
+                  const isShopee = String(store || '').includes('Shopee');
+                  return (
+                    <button
+                      key={store}
+                      type="button"
+                      onClick={() => setSelectedStore(store)}
+                      className={`relative px-4 py-3 rounded-xl border text-sm font-bold transition-all duration-300 overflow-hidden flex-1 min-w-[120px] max-w-[160px] ${
+                        isSelected 
+                          ? isShopee 
+                              ? 'bg-[#f97316] border-[#f97316] text-white shadow-md shadow-orange-500/30 transform scale-105 z-10' 
+                              : 'bg-[#2563eb] border-[#2563eb] text-white shadow-md shadow-blue-600/30 transform scale-105 z-10' 
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {store}
+                      {/* เอฟเฟกต์มุมพับ */}
+                      {isSelected && (
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-white/25 rounded-bl-lg"></div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="border-b border-dashed border-slate-200/60 mx-10"></div>
+
+            {/* 2. เลือกสินค้าและรายละเอียด (ไม่มีไอคอน ตรงกลาง) */}
+            <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
+              <div className="space-y-3 relative" ref={dropdownRef}>
+                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
+                  เลือกสินค้า
+                </label>
+                
+                {/* ปุ่มกดเปิด Dropdown */}
+                <div 
+                  onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)}
+                  className={`w-full p-4 border rounded-xl bg-white text-base cursor-pointer flex justify-center items-center transition-all duration-300 shadow-sm relative ${
+                    isDropdownOpen ? 'border-blue-500 ring-4 ring-blue-500/20' : 'border-slate-200 hover:border-blue-400'
+                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex-1 text-center truncate pr-6">
+                    <span className={selectedProduct ? 'text-slate-900 font-bold' : 'text-slate-500 font-medium'}>
+                      {selectedProduct ? (getProduct(selectedProduct)?.name || 'ไม่พบสินค้า') : '-- กรุณาเลือกสินค้า --'}
+                    </span>
+                  </div>
+                  <ChevronDown size={20} className={`absolute right-4 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
+                </div>
+
+                {/* กล่องรายชื่อสินค้าค้นหาได้ */}
+                {isDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl max-h-[300px] flex flex-col top-full left-0 origin-top animate-in fade-in zoom-in-95 duration-200 text-left">
+                    <div className="p-3 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                          type="text"
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm"
+                          placeholder="พิมพ์ค้นหาชื่อสินค้า..."
+                          value={productSearchTerm}
+                          onChange={(e) => setProductSearchTerm(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <ul className="overflow-y-auto flex-1 p-2 space-y-1 scrollbar-hide">
+                      {filteredProductsForSelect.map(p => {
+                        const isOutOfStock = (Number(p.stock) || 0) <= 0;
+                        const isSelected = selectedProduct === p.id;
+                        return (
+                          <li
+                            key={p.id}
+                            onClick={() => {
+                              if (isOutOfStock) return;
+                              setSelectedProduct(p.id);
+                              setCustomPrice(p.price);
+                              setIsDropdownOpen(false);
+                              setProductSearchTerm(''); 
+                            }}
+                            className={`px-4 py-3.5 rounded-xl text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${
+                              isOutOfStock
+                                ? "opacity-50 cursor-not-allowed bg-slate-50"
+                                : isSelected
+                                  ? "bg-blue-50 text-blue-700 border border-blue-100 shadow-sm"
+                                  : "hover:bg-slate-50 text-slate-700 border border-transparent"
+                            }`}
+                          >
+                            <span className="font-bold mb-1.5 sm:mb-0 text-base sm:text-sm truncate pr-2">{p.name}</span>
+                            <span className={`text-[11px] md:text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 border ${
+                              isOutOfStock 
+                                ? 'bg-red-50 text-red-600 border-red-100' 
+                                : isSelected
+                                  ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                  : 'bg-green-50 text-green-700 border-green-100'
+                            }`}>
+                              {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${Number(p.stock) || 0} ชิ้น`} (฿{formatMoney(p.price)})
+                            </span>
+                          </li>
+                        );
+                      })}
+                      {filteredProductsForSelect.length === 0 && (
+                        <li className="px-4 py-10 text-center flex flex-col items-center justify-center text-slate-400">
+                          <Package size={32} className="text-slate-300 mb-3 opacity-50"/>
+                          <span className="text-sm font-medium">ไม่พบสินค้าที่คุณค้นหา</span>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
+                <div className="text-center relative">
+                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
+                    ราคาขาย/ชิ้น
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      value={customPrice} 
+                      onChange={(e) => setCustomPrice(e.target.value)} 
+                      className="w-full pl-6 pr-12 py-3.5 border border-slate-200 rounded-xl text-lg focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-800 bg-white transition-all shadow-sm text-center" 
+                      disabled={!selectedProduct || isProcessing}
+                      placeholder="แก้ไขราคา"
+                      required
+                    />
+                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">บาท</span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
+                    จำนวนชิ้น
+                  </label>
+                  <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <button type="button" onClick={() => setQuantity(Math.max(1, (Number(quantity)||0) - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl">-</button>
+                    <input 
+                      type="number" 
+                      value={quantity} 
+                      onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))} 
+                      className="h-full w-full text-center text-xl font-bold text-slate-800 outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
+                      min="1"
+                    />
+                    <button type="button" onClick={() => setQuantity((Number(quantity)||0) + 1)} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-l border-slate-200 focus:outline-none active:bg-slate-200 text-xl">+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. สรุปยอดและบันทึก */}
+            <div className="pt-2">
+              <div className="bg-[#eef5ff] p-6 md:p-8 rounded-[1.5rem] border border-[#e0ebff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+                <div className="text-center md:text-left w-full md:w-auto">
+                  <p className="text-sm font-bold text-[#6a8ce2] mb-1">ยอดรวมทั้งหมด</p>
+                  <p className="text-4xl md:text-5xl font-black text-[#3761e9] tracking-tight">฿{formatMoney(posTotal)}</p>
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={!selectedProduct || !selectedStore || isProcessing} 
+                  className="w-full md:w-auto bg-gradient-to-r from-[#94a8f1] to-[#6082f0] hover:from-[#7690ed] hover:to-[#4e74ea] text-white px-10 py-3.5 md:py-4 rounded-xl text-base md:text-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 transform hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
+                >
+                  บันทึกการขาย
+                </button>
+              </div>
+            </div>
+
+          </form>
+        </div>
+
+        {/* ตารางรายการล่าสุด */}
+        <div className="pt-2">
+          <h3 className="text-base font-bold text-slate-700 mb-4 px-2">
+            รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)
+          </h3>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm">
+                  <th className="p-4 font-bold">เวลา</th>
+                  <th className="p-4 font-bold">ร้านค้า</th>
+                  <th className="p-4 font-bold">สินค้า</th>
+                  <th className="p-4 font-bold text-center">จำนวน</th>
+                  <th className="p-4 font-bold text-right">ยอดรวม</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs md:text-sm divide-y divide-slate-50">
+                {recentSales.map(sale => {
+                  let timeString = '-';
+                  try {
+                    const d = new Date(sale.date);
+                    if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.';
+                  } catch(e) {}
+                  
+                  return (
+                  <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 text-slate-500 whitespace-nowrap font-medium">{timeString}</td>
+                    <td className="p-4 whitespace-nowrap">
+                       <span className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                         {sale.store || '-'}
+                       </span>
+                    </td>
+                    <td className="p-4 font-bold text-slate-800">
+                      {getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}
+                    </td>
+                    <td className="p-4 text-center font-bold text-slate-600">{sale.quantity}</td>
+                    <td className="p-4 text-right text-blue-600 font-black whitespace-nowrap text-sm">฿{formatMoney(sale.total)}</td>
+                  </tr>
+                )})}
+                {recentSales.length === 0 && (
+                  <tr><td colSpan="5" className="p-10 text-center text-slate-400 text-sm font-medium">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // 🕒 [View 3] หน้าประวัติการขาย และแก้ไขออเดอร์ (Sales History)
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(getLocalISODate());
@@ -526,7 +877,6 @@ export default function App() {
           }
         } catch (e) { /* ignore */ }
 
-        // คำนวณราคาใหม่ โดยใช้ราคาต่อชิ้นที่ตั้งไว้
         const unitPrice = Number(editForm.customPrice) || 0;
         const newTotal = unitPrice * newQty;
 
@@ -545,7 +895,7 @@ export default function App() {
           quantity: newQty,
           total: newTotal,
           unitPrice: unitPrice, 
-          unitCost: newProductData.cost, // อัปเดตต้นทุนของสินค้าใหม่ด้วย
+          unitCost: newProductData.cost,
           date: newDateIso,
           store: editForm.store || STORE_OPTIONS[0]
         });
@@ -594,7 +944,6 @@ export default function App() {
                 const safeQty = Number(sale.quantity) || 0;
                 const actualPricePerUnit = sale.unitPrice !== undefined ? Number(sale.unitPrice) : (safeQty > 0 ? (Number(sale.total) / safeQty) : 0);
                 
-                // ตรวจสอบวันทึ่ให้ปลอดภัย
                 let dateDisplay = '-';
                 try {
                   const d = new Date(sale.date);
@@ -1204,13 +1553,7 @@ export default function App() {
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center space-x-3">
-              {/* โลโก้ใหม่ในมุมมองผู้บริหาร */}
-              <img 
-                src="/logo.jpg" 
-                alt="The Resilient Clinic" 
-                className="h-14 md:h-16 object-contain rounded-xl shadow-sm"
-                onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
-              />
+              <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
               <span className="text-lg md:text-xl font-bold text-gray-700 hidden sm:block border-l-2 border-gray-300 pl-3">ผู้บริหาร</span>
             </div>
             
@@ -1251,18 +1594,12 @@ export default function App() {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans">
       
       {/* แถบเมนูด้านซ้าย (Sidebar) - เพิ่มสีพื้นหลังไล่ระดับตามแบบ */}
-      <div className="w-full md:w-64 bg-gradient-to-br from-white via-white to-orange-50/50 border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      <div className="w-full md:w-64 bg-gradient-to-br from-white via-white to-blue-50 border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         
         {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-4 flex items-center justify-center border-b border-slate-100">
-            {/* โลโก้ใหม่ในแถบเมนูด้านซ้าย */}
-            <img 
-              src="/logo.jpg" 
-              alt="The Resilient Clinic" 
-              className="max-h-16 w-auto object-contain rounded-lg shadow-sm"
-              onError={(e) => { e.target.onerror=null; e.target.src='https://placehold.co/400x150/0f172a/d4af37?text=THE+RESILIENT+CLINIC' }}
-            />
+            <ResilientLogo className="h-16 w-full rounded-lg shadow-sm" />
           </div>
           
           <nav className="px-3 md:px-4 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
@@ -1271,7 +1608,7 @@ export default function App() {
             {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
             {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
             {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
-            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>ข้อมูลการขาย (POS)</span></button>}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>คีย์ข้อมูลการขาย (POS)</span></button>}
           </nav>
         </div>
       </div>
@@ -1284,7 +1621,7 @@ export default function App() {
              activeTab === 'products' ? 'ตั้งค่าฐานข้อมูลสินค้า' : 
              activeTab === 'stock' ? 'ระบบคลังสินค้า' : 
              activeTab === 'users' ? 'ตั้งค่าบัญชีและสิทธิ์พนักงาน' : 
-             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'จุดชำระเงิน (POS)'}
+             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'คีย์ข้อมูลการขาย (POS)'}
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-2 text-sm text-slate-700 bg-slate-100/80 py-1.5 px-3 rounded-full border border-slate-200">
