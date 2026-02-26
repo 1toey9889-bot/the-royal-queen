@@ -908,45 +908,47 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[500px]">
-            <thead>
-              <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
-                <th className="p-3 md:p-4 font-medium text-center w-16">ลำดับ</th>
-                <th className="p-3 md:p-4 font-medium">ชื่อสินค้า</th>
-                <th className="p-3 md:p-4 font-medium text-center">คงเหลือ</th>
-                {/* ซ่อนคอลัมน์อัปเดต ถ้าเป็นการเปิดจากลิงก์ผู้บริหารแบบไม่ได้ล็อกอิน */}
-                {!isExecutiveView && <th className="p-3 md:p-4 font-medium text-right">อัปเดต</th>}
-              </tr>
-            </thead>
-            <tbody className="text-xs md:text-sm">
-              {filteredAndSortedProducts.map((product, index) => (
-                <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="p-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
-                  <td className="p-3 md:p-4 font-medium text-gray-800">{product.name}</td>
-                  <td className="p-3 md:p-4 text-center">
-                    {editingStockId === product.id ? (
-                      <input type="number" className="w-16 md:w-20 p-1.5 md:p-2 border rounded text-center text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> 
-                    ) : (
-                      <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${product.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{product.stock || 0} ชิ้น</span>
-                    )}
-                  </td>
-                  {!isExecutiveView && (
-                    <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-[11px] sm:text-xs md:text-sm">
+                  <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center w-10 sm:w-16">ลำดับ</th>
+                  <th className="py-3 px-1 sm:px-3 md:p-4 font-medium">ชื่อสินค้า</th>
+                  <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center whitespace-nowrap">คงเหลือ</th>
+                  {/* ซ่อนคอลัมน์อัปเดต ถ้าเป็นการเปิดจากลิงก์ผู้บริหารแบบไม่ได้ล็อกอิน */}
+                  {!isExecutiveView && <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-right whitespace-nowrap">อัปเดต</th>}
+                </tr>
+              </thead>
+              <tbody className="text-[11px] sm:text-xs md:text-sm">
+                {filteredAndSortedProducts.map((product, index) => (
+                  <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-3 px-1 sm:px-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
+                    <td className="py-3 px-1 sm:px-3 md:p-4 font-medium text-gray-800 break-words">{product.name}</td>
+                    <td className="py-3 px-1 sm:px-3 md:p-4 text-center whitespace-nowrap">
                       {editingStockId === product.id ? (
-                        <><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
+                        <input type="number" className="w-14 sm:w-16 md:w-20 p-1 md:p-1.5 border rounded text-center text-xs focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> 
                       ) : (
-                        <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button>
+                        <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${product.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{product.stock || 0} ชิ้น</span>
                       )}
                     </td>
-                  )}
-                </tr>
-              ))}
-              {filteredAndSortedProducts.length === 0 && (
-                <tr><td colSpan={isExecutiveView ? 3 : 4} className="text-center p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
-              )}
-            </tbody>
-          </table>
+                    {!isExecutiveView && (
+                      <td className="py-3 px-1 sm:px-3 md:p-4 text-right space-x-1 whitespace-nowrap">
+                        {editingStockId === product.id ? (
+                          <><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1 md:p-1.5 rounded-md transition"><Save size={14} className="md:w-4 md:h-4"/></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1 md:p-1.5 rounded-md transition"><X size={14} className="md:w-4 md:h-4"/></button></>
+                        ) : (
+                          <button onClick={() => { setEditingStockId(product.id); setNewStock(product.stock || 0); }} className="text-blue-600 hover:bg-blue-100 p-1 md:p-1.5 rounded-md transition"><Edit2 size={14} className="md:w-4 md:h-4"/></button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {filteredAndSortedProducts.length === 0 && (
+                  <tr><td colSpan={isExecutiveView ? 3 : 4} className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -1136,6 +1138,38 @@ export default function App() {
             <p>{loadError}</p>
           </div>
         )}
+      </div>
+    );
+  }
+
+  // หน้าต่างสำหรับผู้บริหาร (เข้าผ่าน URL ?view=dashboard)
+  if (isExecutiveView) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-3 md:p-8 font-sans flex flex-col">
+        <div className="max-w-5xl mx-auto w-full space-y-4 md:space-y-6">
+          <div className="bg-white p-4 md:p-6 rounded-lg md:rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <h1 className="text-lg md:text-2xl font-extrabold text-blue-600 tracking-tight flex items-center space-x-2">
+              <ShoppingCart className="text-blue-600 w-5 h-5 md:w-6 md:h-6" />
+              <span>The Royal Queen - ผู้บริหาร</span>
+            </h1>
+            <div className="flex space-x-2 w-full sm:w-auto">
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                แดชบอร์ด
+              </button>
+              <button 
+                onClick={() => setActiveTab('stock')} 
+                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                ดูสต๊อกสินค้า
+              </button>
+            </div>
+          </div>
+          {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'stock' && <StockView />}
+        </div>
       </div>
     );
   }
