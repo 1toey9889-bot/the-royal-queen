@@ -37,10 +37,7 @@ import {
   CalendarDays,
   ShieldCheck,
   Search,
-  ArrowUpDown,
-  Store,
-  Tag,
-  ShoppingBag
+  ArrowUpDown
 } from 'lucide-react';
 
 // ==========================================
@@ -1121,15 +1118,7 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    useEffect(() => {
-      if (selectedProduct) {
-        const p = getProduct(selectedProduct);
-        if (p) setCustomPrice(p.price);
-      } else {
-        setCustomPrice('');
-      }
-    }, [selectedProduct, products]);
-
+    // คำนวณยอดรวม (ป้องกัน NaN)
     const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
 
     const recentSales = sales
@@ -1139,7 +1128,8 @@ export default function App() {
 
     const handleCheckout = async (e) => {
       e.preventDefault();
-      const finalQuantity = Number(quantity);
+      const finalQuantity = Number(quantity) || 0;
+      const finalPrice = Number(customPrice) || 0;
       
       if (!selectedProduct || !selectedStore) return;
       if (finalQuantity < 1) { setIsError(true); setMessage('จำนวนต้องมากกว่า 0'); return; }
@@ -1153,7 +1143,7 @@ export default function App() {
           store: selectedStore,
           productId: selectedProduct, 
           quantity: finalQuantity, 
-          total: posTotal, 
+          total: finalPrice * finalQuantity, 
           date: new Date().toISOString(), 
           soldBy: loggedInUser.username 
         });
@@ -1178,11 +1168,10 @@ export default function App() {
     return (
       <div className="space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
         
-        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ตามดีไซน์ล่าสุด */}
+        {/* ส่วนบันทึกการขาย (POS) */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="bg-gray-50/50 border-b border-gray-100 px-6 py-4">
             <h2 className="text-xl font-bold text-gray-800 flex items-center">
-              <ShoppingCart className="text-blue-600 mr-2" size={24} />
               ข้อมูลการขาย (POS)
             </h2>
           </div>
@@ -1193,8 +1182,8 @@ export default function App() {
               
               {/* 1. เลือกร้านค้า */}
               <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700 flex items-center">
-                  <Store size={18} className="mr-2 text-gray-400" /> เลือกร้านค้า
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  เลือกร้านค้า
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                   {STORE_OPTIONS.map(store => {
@@ -1223,15 +1212,22 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="border-b border-dashed border-gray-200"></div>
+
               {/* 2. เลือกสินค้าและรายละเอียด */}
               <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
                 <div className="space-y-3">
-                  <label className="text-sm font-bold text-gray-700 flex items-center">
-                    <Package size={18} className="mr-2 text-gray-400" /> เลือกสินค้า
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    เลือกสินค้า
                   </label>
                   <select 
                     value={selectedProduct} 
-                    onChange={(e) => setSelectedProduct(e.target.value)} 
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      setSelectedProduct(pid);
+                      const p = getProduct(pid);
+                      setCustomPrice(p ? p.price : '');
+                    }} 
                     className="w-full p-3.5 border border-gray-300 rounded-xl bg-white text-base focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" 
                     required 
                     disabled={isProcessing}
@@ -1243,8 +1239,8 @@ export default function App() {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="text-sm font-bold text-gray-700 flex items-center">
-                      <Tag size={18} className="mr-2 text-gray-400" /> ราคาขาย/ชิ้น
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      ราคาขาย/ชิ้น
                     </label>
                     <div className="relative">
                       <input 
@@ -1260,8 +1256,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-3">
-                    <label className="text-sm font-bold text-gray-700 flex items-center">
-                      <ShoppingBag size={18} className="mr-2 text-gray-400" /> จำนวนชิ้น
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      จำนวนชิ้น
                     </label>
                     <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-gray-300">
                       <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="h-full w-14 bg-gray-50 hover:bg-gray-100 font-bold text-gray-600 transition-colors border-r border-gray-300 focus:outline-none">-</button>
@@ -1290,7 +1286,7 @@ export default function App() {
                     disabled={!selectedProduct || !selectedStore || isProcessing} 
                     className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl text-base md:text-lg font-bold transition-all disabled:bg-gray-300 shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0 flex justify-center items-center whitespace-nowrap"
                   >
-                    <Save size={20} className="mr-2" /> บันทึกรายการขาย
+                    บันทึกการขาย
                   </button>
                 </div>
               </div>
@@ -1302,7 +1298,6 @@ export default function App() {
         {/* ตารางรายการล่าสุด */}
         <div className="pt-4">
           <h3 className="text-base md:text-lg font-bold text-gray-800 mb-4 flex items-center">
-            <History size={20} className="mr-2 text-gray-400"/> 
             รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)
           </h3>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -1385,7 +1380,7 @@ export default function App() {
                 onClick={() => setActiveTab('stock')} 
                 className={`flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
-                จัดการสต๊อกสินค้า
+                ดูสต๊อกสินค้า
               </button>
             </div>
           </div>
