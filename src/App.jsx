@@ -42,23 +42,28 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (วาดด้วย Code ป้องกันรูปหาย 100%)
+// 🎨 โลโก้ The Resilient Clinic (วาดใหม่ให้ตรงต้นฉบับ 100%)
 // ==========================================
 const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-[#0b132b] flex items-center justify-center overflow-hidden ${className}`}>
+  <div className={`bg-[#0A142A] flex items-center justify-center overflow-hidden ${className}`}>
     <svg viewBox="0 0 320 100" className="h-full w-auto py-2" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Lotus Icon */}
-      <g transform="translate(15, 10) scale(0.8)">
-        <path d="M50 10 C 50 10, 30 40, 30 65 C 30 80, 40 85, 50 85 C 60 85, 70 80, 70 65 C 70 40, 50 10, 50 10 Z" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
-        <circle cx="50" cy="58" r="8" fill="#FFFFFF"/>
-        <path d="M 28 50 C 10 50, 5 70, 15 85 C 25 95, 40 85, 40 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-        <path d="M 72 50 C 90 50, 95 70, 85 85 C 75 95, 60 85, 60 85" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-        <path d="M 12 80 C 30 105, 70 105, 88 80" stroke="#D4AF37" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+      <g transform="translate(15, 12) scale(0.75)">
+        {/* Center Teardrop */}
+        <path d="M50 15 C 30 40 35 75 50 85 C 65 75 70 40 50 15 Z" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
+        {/* Center Dot */}
+        <circle cx="50" cy="55" r="7.5" fill="#FFFFFF"/>
+        {/* Inner Side Petals */}
+        <path d="M 45 83 C 20 80 10 50 18 30 C 20 50 30 55 35 45" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+        <path d="M 55 83 C 80 80 90 50 82 30 C 80 50 70 55 65 45" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+        {/* Outer Side Petals */}
+        <path d="M 38 85 C 10 85 -5 65 2 45 C 5 60 18 65 25 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
+        <path d="M 62 85 C 90 85 105 65 98 45 C 95 60 82 65 75 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
       </g>
       {/* Text */}
-      <text x="115" y="38" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1">THE</text>
-      <text x="113" y="65" fontFamily="Arial, sans-serif" fontSize="28" fontWeight="bold" fill="#D4AF37" letterSpacing="1">RESILIENT</text>
-      <text x="115" y="86" fontFamily="Arial, sans-serif" fontSize="15" fill="#FFFFFF" letterSpacing="1.5">CLINIC</text>
+      <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
+      <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
+      <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
     </svg>
   </div>
 );
@@ -311,7 +316,6 @@ export default function App() {
 
         return isTimeMatch && isProductMatch && isStoreMatch;
       });
-      // 🛠️ แก้ไขการคำนวณแดชบอร์ด: เพิ่ม products ลงใน array เพื่อให้ dashboard คำนวณใหม่เมื่อลบสินค้า
     }, [sales, products, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
@@ -319,7 +323,6 @@ export default function App() {
     filteredSales.forEach(s => {
       const p = getProduct(s.productId);
       
-      // 🛠️ แก้ไขการคำนวณแดชบอร์ด: ดักจับข้อมูลยอดขายที่เป็นของสินค้าที่ถูกลบไปแล้ว ไม่ให้นำมาบวกซ้ำ
       if (!p) return; 
 
       const qty = Number(s.quantity) || 0;
@@ -1558,7 +1561,7 @@ export default function App() {
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             
-            {/* 🛠️ แก้ไข 1: ลบคำว่า "ผู้บริหาร" ออก เหลือแค่โลโก้ */}
+            {/* 🛠️ แก้ไขหน้าผู้บริหาร: โลโก้เพียวๆ ไม่มีตัวอักษร "ผู้บริหาร" */}
             <div className="flex items-center space-x-3">
               <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
             </div>
@@ -1587,7 +1590,7 @@ export default function App() {
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
             
-            {/* 🛠️ แก้ไข 2: เพิ่มป้าย Executive View ตรงตามรูปเป๊ะ */}
+            {/* 🛠️ แก้ไขหน้าผู้บริหาร: เพิ่มป้าย Executive View */}
             <div className="flex items-center mb-1 md:mb-2">
               <div className="bg-white border border-gray-200 text-slate-700 px-3.5 py-1.5 rounded-full text-xs md:text-sm font-bold flex items-center shadow-sm">
                 <span className="text-amber-500 mr-2 text-base leading-none">👑</span> 
