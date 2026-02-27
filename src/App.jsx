@@ -13,7 +13,7 @@ import {
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (วาดตามต้นฉบับ 100%)
+// 🎨 โลโก้ The Resilient Clinic (วาดใหม่ตามต้นฉบับ 100%)
 // ==========================================
 const ResilientLogo = ({ className = "" }) => (
   <div className={`bg-[#0A142A] flex items-center justify-center overflow-hidden ${className}`}>
@@ -67,7 +67,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]); // 🚀 ดึงเฉพาะข้อมูล Order ระบบใหม่
+  const [orders, setOrders] = useState([]); 
   const [users, setUsers] = useState([]);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -87,8 +87,6 @@ export default function App() {
     });
 
     onSnapshot(collection(db, "products"), (snapshot) => { setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
-
-    // 🚀 ดึงเฉพาะข้อมูลออเดอร์ใหม่ ไม่ดึง sales เก่า
     onSnapshot(collection(db, "orders"), (snapshot) => { setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); setIsLoading(false); });
 
     return () => { clearTimeout(connectionTimeout); unsubscribeUsers(); };
@@ -98,9 +96,9 @@ export default function App() {
     if (loggedInUser) {
       const updatedUser = users.find(u => u.id === loggedInUser.id);
       if (updatedUser) { setLoggedInUser(updatedUser); if (activeTab !== 'sales' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) setActiveTab('sales'); }
-      else { setLoggedInUser(null); }
+      else { if (!isExecutiveView) setLoggedInUser(null); }
     }
-  }, [users, loggedInUser, activeTab]);
+  }, [users]);
 
   // --- Helpers ---
   const canAccess = (tabName) => { if (isExecutiveView) return tabName === 'dashboard' || tabName === 'stock'; if (!loggedInUser) return false; return loggedInUser.role === 'admin' || tabName === 'sales' || !!loggedInUser.permissions?.[tabName]; };
@@ -129,14 +127,13 @@ export default function App() {
     return (<div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans"><div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl p-8 space-y-8"><div className="text-center space-y-4"><ResilientLogo className="mx-auto h-24 rounded-2xl shadow-lg mb-4" /><p className="text-sm text-gray-500 font-medium">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p></div><form onSubmit={handleLogin} className="space-y-6">{error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm text-center font-bold">{error}</div>}<div className="space-y-5"><div><label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">ชื่อผู้ใช้งาน</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" required /></div></div><div><label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">รหัสผ่าน</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" required /></div></div></div><button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3.5 rounded-xl font-bold">เข้าสู่ระบบ</button></form></div></div>);
   };
 
-  // 📊 [View 2] Dashboard 🚀 (ดึงข้อมูลจาก New Orders เท่านั้น)
+  // 📊 Dashboard 
   const DashboardView = () => {
     const [timeframe, setTimeframe] = useState('monthly'); 
     const currentDateStr = getLocalISODate();
     const [filterDate, setFilterDate] = useState(currentDateStr); 
     const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7)); 
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
-    const [filterProductId, setFilterProductId] = useState('all');
     const [filterStore, setFilterStore] = useState('all'); 
 
     const filteredOrders = useMemo(() => {
@@ -146,32 +143,24 @@ export default function App() {
         const orderYearLocal = orderDateLocal.substring(0, 4);
         let isTimeMatch = timeframe === 'daily' ? (orderDateLocal === filterDate) : timeframe === 'monthly' ? (orderMonthLocal === filterMonth) : timeframe === 'yearly' ? (orderYearLocal === filterYear) : true;
         const isStoreMatch = filterStore === 'all' || o.store === filterStore;
-        const isProductMatch = filterProductId === 'all' || (o.items && o.items.some(item => item.productId === filterProductId));
-        return isTimeMatch && isStoreMatch && isProductMatch;
+        return isTimeMatch && isStoreMatch;
       });
-    }, [orders, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
+    }, [orders, timeframe, filterDate, filterMonth, filterYear, filterStore]);
 
-    let totalRevenue = 0; let totalProfit = 0; let totalQty = 0;
-    filteredOrders.forEach(o => {
-      totalRevenue += o.totalAmount;
-      totalProfit += o.totalProfit;
-      o.items.forEach(i => { if (filterProductId === 'all' || i.productId === filterProductId) totalQty += Number(i.quantity); });
-    });
+    let totalRevenue = 0; let totalProfit = 0;
+    filteredOrders.forEach(o => { totalRevenue += o.totalAmount; totalProfit += o.totalProfit; });
 
     const exportDashboardToExcel = () => {
-      if (filteredOrders.length === 0) { alert("ไม่มีข้อมูลในเงื่อนไขที่เลือก"); return; }
-      const csvRows = [['รายงานสรุปยอดขาย - The Resilient Clinic'], ['ร้านค้า:', filterStore, 'วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')], [], ['หมายเลขออเดอร์', 'วันที่-เวลา', 'ร้านค้า', 'ผู้ทำรายการ', 'รวมยอดบิล', 'กำไรบิล']];
-      filteredOrders.forEach(o => {
-        let safeDate = '-'; try { const d = new Date(o.createdAt || o.date); if(!isNaN(d.getTime())) safeDate = d.toLocaleString('th-TH'); } catch(e) {}
-        csvRows.push([ `"${o.id}"`, `"${safeDate}"`, `"${o.store || '-'}"`, `"${o.soldBy || '-'}"`, o.totalAmount, o.totalProfit ]);
-      });
-      downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานยอดขาย_สรุป.csv`);
+      if (filteredOrders.length === 0) { alert("ไม่มีข้อมูล"); return; }
+      const csvRows = [['รายงานสรุปยอดขาย - The Resilient Clinic'], ['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')], [], ['หมายเลขออเดอร์', 'ร้านค้า', 'ยอดรวมบิล', 'กำไรบิล']];
+      filteredOrders.forEach(o => { csvRows.push([ `"${o.id}"`, `"${o.store}"`, o.totalAmount, o.totalProfit ]); });
+      downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานยอดขาย.csv`);
     };
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center space-x-2 md:space-x-3"><div className="bg-gradient-to-br from-blue-500 to-purple-600 p-2 rounded-lg text-white"><BarChart3 size={20} /></div><h2 className="text-xl font-extrabold text-gray-800">สรุปยอดขาย (ระบบบิลรวม)</h2></div>
+          <div className="flex items-center space-x-2 md:space-x-3"><div className="bg-gradient-to-br from-blue-500 to-purple-600 p-2 rounded-lg text-white"><BarChart3 size={20} /></div><h2 className="text-xl font-extrabold text-gray-800">สรุปยอดขาย</h2></div>
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="bg-slate-50 border rounded-lg px-2 py-1.5 text-xs font-medium"><option value="all">ทุกร้านค้า</option>{STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
             <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="bg-slate-50 border rounded-lg px-2 py-1.5 text-xs font-medium"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="all">รวมทั้งหมด</option></select>
@@ -187,7 +176,7 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] POS 🚀 (บังคับใส่ ID เองหรือสแกนเท่านั้น)
+  // 🛒 POS 🚀 (บังคับใส่ ID เองหรือสแกนเท่านั้น)
   const SalesView = () => {
     const [customOrderId, setCustomOrderId] = useState('');
     const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
@@ -244,12 +233,12 @@ export default function App() {
     };
 
     const handleConfirmOrder = async () => {
-      // 🚀 บังคับกรอก ID เองหรือสแกนเท่านั้น
       if (!customOrderId.trim()) { setIsError(true); setMessage('กรุณากรอกหรือสแกนเลขที่ออเดอร์ก่อนยืนยัน'); return; }
       if (cart.length === 0) return;
       setIsProcessing(true);
       try {
-        const orderRef = doc(db, "orders", customOrderId.trim().replace(/\//g, '-'));
+        const orderId = customOrderId.trim().replace(/\//g, '-');
+        const orderRef = doc(db, "orders", orderId);
         await runTransaction(db, async (t) => {
           const snap = await t.get(orderRef); if (snap.exists()) throw new Error("เลขบิลนี้ถูกใช้ไปแล้ว");
           for (const item of cart) {
@@ -269,24 +258,20 @@ export default function App() {
     return (
       <div className="relative space-y-6 max-w-5xl mx-auto animate-in fade-in">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 bg-white rounded-[2rem] shadow-xl p-6 md:p-8 border border-slate-100">
+          <div className="lg:col-span-7 bg-white rounded-[2rem] shadow-xl p-6 border border-slate-100">
             <h2 className="text-2xl font-black text-center mb-6 text-slate-800">บันทึกรายการขาย (POS)</h2>
-            {isScanning && (<div className="w-full bg-black rounded-xl overflow-hidden min-h-[250px] mb-6 relative"><div id="qr-reader" className="w-full h-full text-white"></div><button onClick={()=>setIsScanning(false)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full z-10"><X size={16}/></button></div>)}
-            
-            {message && <div className={`p-4 rounded-xl text-sm font-bold mb-4 ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
-
-            {/* 🚀 ส่วนระบุ ID ออเดอร์ (บังคับ) */}
+            {isScanning && (<div className="w-full bg-black rounded-xl overflow-hidden min-h-[250px] mb-6 relative"><div id="qr-reader" className="w-full h-full"></div><button onClick={()=>setIsScanning(false)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full z-10"><X size={16}/></button></div>)}
+            {message && <div className={`p-4 rounded-xl text-sm font-bold mb-4 ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
             <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 mb-6">
-                <label className="block text-sm font-bold text-blue-800 mb-2 flex items-center justify-center"><Receipt size={16} className="mr-1.5" /> เลขที่ออเดอร์ (ระบุเอง / สแกน) *</label>
+                <label className="block text-sm font-bold text-blue-800 mb-2 flex items-center justify-center"><Receipt size={16} className="mr-1.5" /> เลขที่ออเดอร์ *</label>
                 <div className="flex items-center justify-center gap-2 max-w-sm mx-auto relative">
-                  <input type="text" value={customOrderId} onChange={(e) => setCustomOrderId(e.target.value)} className="w-full pl-4 pr-10 py-2.5 border border-blue-200 rounded-xl text-sm outline-none text-center font-bold text-slate-700 bg-white focus:ring-2 focus:ring-blue-500" placeholder="ใส่เลข Tracking หรือ ID ออเดอร์..." />
-                  <button type="button" onClick={() => { setIsScanning(true); setScanTarget('orderId'); }} className="absolute right-2 p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"><QrCode size={16} /></button>
+                  <input type="text" value={customOrderId} onChange={(e) => setCustomOrderId(e.target.value)} className="w-full pl-4 pr-10 py-2.5 border border-blue-200 rounded-xl text-sm outline-none text-center font-bold text-slate-700 bg-white" placeholder="กรุณาใส่ ID ออเดอร์..." />
+                  <button type="button" onClick={() => { setIsScanning(true); setScanTarget('orderId'); }} className="absolute right-2 p-1.5 bg-blue-100 text-blue-600 rounded-lg"><QrCode size={16} /></button>
                 </div>
             </div>
-
             <form onSubmit={handleAddToCart} className="space-y-6">
               <div className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100 space-y-4">
-                <div className="flex justify-between items-center"><label className="text-sm font-bold">เลือกสินค้า</label><button type="button" onClick={()=>{setIsScanning(true); setScanTarget('product');}} className="flex items-center space-x-1 px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600"><QrCode size={12}/><span>สแกนสินค้า</span></button></div>
+                <div className="flex justify-between items-center font-bold text-sm text-slate-700"><span>เลือกสินค้า</span><button type="button" onClick={()=>{setIsScanning(true); setScanTarget('product');}} className="flex items-center space-x-1 px-3 py-1 bg-white border rounded-lg text-xs"><QrCode size={12}/><span>สแกนสินค้า</span></button></div>
                 <div className="relative" ref={dropdownRef}>
                   <div onClick={()=>setIsDropdownOpen(!isDropdownOpen)} className="w-full p-3 border rounded-xl bg-white font-bold text-slate-700 cursor-pointer flex justify-between items-center">{selectedProduct ? getProduct(selectedProduct).name : 'กรุณาเลือกสินค้า'}<ChevronDown size={18}/></div>
                   {isDropdownOpen && (
@@ -297,27 +282,26 @@ export default function App() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center"><label className="block text-xs font-bold mb-1">ราคา/ชิ้น (แก้ไขได้)</label><input type="number" value={customPrice} onChange={e=>setCustomPrice(e.target.value)} className="w-full p-2.5 border rounded-xl text-center font-bold text-blue-600"/></div>
+                  <div className="text-center"><label className="block text-xs font-bold mb-1">ราคา/ชิ้น</label><input type="number" value={customPrice} onChange={e=>setCustomPrice(e.target.value)} className="w-full p-2.5 border rounded-xl text-center font-bold text-blue-600"/></div>
                   <div className="text-center"><label className="block text-xs font-bold mb-1">จำนวน</label><input type="number" value={quantity} onChange={e=>setQuantity(Math.max(1,parseInt(e.target.value)||1))} className="w-full p-2.5 border rounded-xl text-center font-bold"/></div>
                 </div>
-                <button type="submit" disabled={!selectedProduct} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md transition-all">+ เพิ่มลงตะกร้า</button>
+                <button type="submit" disabled={!selectedProduct} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md">+ เพิ่มลงตะกร้า</button>
               </div>
             </form>
           </div>
-
           <div className="lg:col-span-5 bg-white rounded-[2rem] shadow-lg p-6 flex flex-col h-full border border-slate-100">
              <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center border-b pb-3"><ShoppingBag className="mr-2 text-blue-600"/> บิลปัจจุบัน</h3>
              <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px]">
-                {cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 mt-10"><ShoppingCart size={48} className="mb-3" /><p className="font-medium text-sm">ยังไม่มีสินค้าในตะกร้า</p></div>) : (cart.map(item => (
-                  <div key={item.cartId} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 animate-in slide-in-from-right-5">
+                {cart.map(item => (
+                  <div key={item.cartId} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div className="flex-1"><p className="font-bold text-sm text-slate-800">{item.name}</p><p className="text-[11px] text-slate-500">{item.qty} x ฿{formatMoney(item.price)}</p></div>
-                    <div className="text-right"><p className="font-black text-blue-600 text-sm">฿{formatMoney(item.total)}</p><button onClick={()=>removeFromCart(item.cartId)} className="text-red-400 hover:text-red-600 transition-colors"><MinusCircle size={14}/></button></div>
+                    <div className="text-right"><p className="font-black text-blue-600 text-sm">฿{formatMoney(item.total)}</p><button onClick={()=>removeFromCart(item.cartId)} className="text-red-400 hover:text-red-600"><MinusCircle size={14}/></button></div>
                   </div>
-                )))}
+                ))}
              </div>
              <div className="pt-4 mt-auto border-t border-slate-100">
                 <div className="flex justify-between text-xl font-black mb-4"><span>รวมทั้งสิ้น</span><span className="text-blue-600">฿{formatMoney(cart.reduce((s,i)=>s+i.total,0))}</span></div>
-                <button onClick={handleConfirmOrder} disabled={!customOrderId.trim() || cart.length===0 || isProcessing} className="w-full py-4 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-500/30 hover:bg-green-600 transition-all transform active:scale-95 disabled:opacity-50">ยืนยันการขาย (Checkout)</button>
+                <button onClick={handleConfirmOrder} disabled={!customOrderId.trim() || cart.length===0 || isProcessing} className="w-full py-4 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-500/30 transition-all active:scale-95 disabled:opacity-50">ยืนยันการขาย (Checkout)</button>
              </div>
           </div>
         </div>
@@ -325,33 +309,23 @@ export default function App() {
     );
   };
 
-  // 🕒 [View 3] History (ดึงข้อมูล New Orders เท่านั้น)
+  // 🕒 ประวัติการขาย (ดึงข้อมูล Orders เท่านั้น)
   const SalesHistoryView = () => {
     const [filterDate, setFilterDate] = useState(getLocalISODate());
-    const [isProcessing, setIsProcessing] = useState(false);
     const sortedOrders = useMemo(() => orders.filter(o => getLocalISODate(o.createdAt || o.date) === filterDate).sort((a,b)=>new Date(b.createdAt||b.date) - new Date(a.createdAt||a.date)), [orders, filterDate]);
-    
-    const handleDeleteOrder = async (id) => {
-      if(!confirm('คุณต้องการลบออเดอร์นี้หรือไม่? (สต๊อกจะไม่คืนอัตโนมัติหากกดลบตรงๆ)')) return;
-      await deleteDoc(doc(db, "orders", id));
-    };
-
+    const handleDeleteOrder = async (id) => { if(!confirm('คุณต้องการลบออเดอร์นี้หรือไม่?')) return; await deleteDoc(doc(db, "orders", id)); };
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in">
         <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
           <div><h2 className="text-xl font-black text-gray-800">ประวัติการขาย (Orders)</h2></div>
           <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="p-2 border rounded-lg text-sm text-blue-600 outline-none shadow-sm"/>
         </div>
         <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
           <table className="w-full text-left min-w-[700px] text-sm">
-            <thead><tr className="bg-gray-50 border-b"><th className="p-4">เลขที่บิล (ID)</th><th className="p-4">เวลา</th><th className="p-4">ผู้ขาย</th><th className="p-4 text-right">ยอดรวม</th><th className="p-4 text-right">จัดการ</th></tr></thead>
+            <thead><tr className="bg-gray-50 border-b font-bold"><th className="p-4">เลขที่บิล</th><th className="p-4">เวลา</th><th className="p-4">ผู้ขาย</th><th className="p-4 text-right">ยอดรวม</th><th className="p-4 text-right">จัดการ</th></tr></thead>
             <tbody className="divide-y">
               {sortedOrders.map(o=>(<tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 font-mono font-bold text-blue-600">{o.id}</td>
-                <td className="p-4 text-slate-500">{o.createdAt?new Date(o.createdAt).toLocaleTimeString():'-'}</td>
-                <td className="p-4 font-medium text-slate-700">{o.soldBy || 'N/A'}</td>
-                <td className="p-4 font-black text-right">฿{formatMoney(o.totalAmount)}</td>
-                <td className="p-4 text-right"><button onClick={()=>handleDeleteOrder(o.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={16}/></button></td>
+                <td className="p-4 font-mono font-bold text-blue-600">{o.id}</td><td className="p-4 text-slate-500">{o.createdAt?new Date(o.createdAt).toLocaleTimeString():'-'}</td><td className="p-4 font-medium text-slate-700">{o.soldBy || 'N/A'}</td><td className="p-4 font-black text-right">฿{formatMoney(o.totalAmount)}</td><td className="p-4 text-right"><button onClick={()=>handleDeleteOrder(o.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={16}/></button></td>
               </tr>))}
               {sortedOrders.length === 0 && <tr><td colSpan="5" className="p-10 text-center text-slate-400">ยังไม่มีข้อมูลออเดอร์ในวันนี้</td></tr>}
             </tbody>
@@ -361,23 +335,44 @@ export default function App() {
     );
   };
 
-  // 📦 [View 4] จัดการสินค้า
+  // 📦 จัดการสินค้า
   const ProductsView = () => {
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
     const [isAdding, setIsAdding] = useState(false);
     const handleSave = async (id) => { await updateDoc(doc(db, "products", id), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0 }); setIsEditing(null); };
     const handleAdd = async () => { if (!editForm.name) return; await addDoc(collection(db, "products"), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0, stock: 0 }); setIsAdding(false); setEditForm({ name: '', cost: '', price: '' }); };
-    return (<div className="space-y-4 animate-in fade-in"><div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm"><h2 className="text-xl font-bold">จัดการข้อมูลสินค้า</h2>{!isAdding && canEditTab('products') && <button onClick={()=>{setIsAdding(true); setEditForm({name:'',cost:'',price:''});}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"><Plus size={18}/><span>เพิ่มใหม่</span></button>}</div><div className="bg-white rounded-lg border overflow-x-auto"><table className="w-full text-left border-collapse text-sm"><thead className="bg-gray-50 uppercase border-b"><tr className="text-slate-500 font-bold"><th className="p-4">ชื่อสินค้า</th><th className="p-4 text-center">ราคาขาย</th><th className="p-4 text-right">จัดการ</th></tr></thead><tbody className="divide-y">{isAdding && (<tr className="bg-blue-50"><td className="p-2"><input className="w-full p-2 border rounded" placeholder="ชื่อสินค้า..." value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/></td><td className="p-2"><input type="number" className="w-full p-2 border rounded text-center" placeholder="ราคา..." value={editForm.price} onChange={e=>setEditForm({...editForm, price:e.target.value})}/></td><td className="p-2 text-right space-x-2"><button onClick={handleAdd} className="text-green-600 p-2"><Save/></button><button onClick={()=>setIsAdding(false)} className="text-red-500 p-2"><X/></button></td></tr>)}{products.map(p=>(<tr key={p.id} className="hover:bg-slate-50"><td className="p-4 font-medium">{isEditing===p.id ? <input className="w-full p-1 border rounded" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/> : p.name}</td><td className="p-4 text-center font-bold text-blue-600">{isEditing===p.id ? <input type="number" className="w-full p-1 border rounded text-center" value={editForm.price} onChange={e=>setEditForm({...editForm, price:e.target.value})}/> : `฿${formatMoney(p.price)}`}</td><td className="p-4 text-right space-x-2">{isEditing===p.id ? <><button onClick={()=>handleSave(p.id)} className="text-green-600"><Save size={18}/></button><button onClick={()=>setIsEditing(null)} className="text-gray-400"><X size={18}/></button></> : canEditTab('products') && <><button onClick={()=>{setIsEditing(p.id); setEditForm({name:p.name,cost:p.cost,price:p.price});}} className="text-blue-500"><Edit2 size={16}/></button><button onClick={async()=>{if(confirm('ลบ?')) await deleteDoc(doc(db,"products",p.id));}} className="text-red-500"><Trash2 size={16}/></button></>}</td></tr>))}</tbody></table></div></div>);
+    return (<div className="space-y-4 animate-in fade-in"><div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm"><h2 className="text-xl font-bold">จัดการข้อมูลสินค้า</h2>{!isAdding && canEditTab('products') && <button onClick={()=>{setIsAdding(true); setEditForm({name:'',cost:'',price:''});}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"><Plus size={18}/><span>เพิ่มใหม่</span></button>}</div><div className="bg-white rounded-lg border overflow-x-auto"><table className="w-full text-left border-collapse text-sm"><thead className="bg-gray-50 uppercase border-b font-bold"><tr className="text-slate-500"><th className="p-4">ชื่อสินค้า</th><th className="p-4 text-center">ราคาขาย</th><th className="p-4 text-right">จัดการ</th></tr></thead><tbody className="divide-y">{isAdding && (<tr className="bg-blue-50"><td className="p-2"><input className="w-full p-2 border rounded" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/></td><td className="p-2"><input type="number" className="w-full p-2 border rounded text-center" value={editForm.price} onChange={e=>setEditForm({...editForm, price:e.target.value})}/></td><td className="p-2 text-right space-x-2"><button onClick={handleAdd} className="text-green-600 p-2"><Save/></button><button onClick={()=>setIsAdding(false)} className="text-red-500 p-2"><X/></button></td></tr>)}{products.map(p=>(<tr key={p.id} className="hover:bg-slate-50"><td className="p-4 font-medium">{isEditing===p.id ? <input className="w-full p-1 border rounded" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/> : p.name}</td><td className="p-4 text-center font-bold text-blue-600">{isEditing===p.id ? <input type="number" className="w-full p-1 border rounded text-center" value={editForm.price} onChange={e=>setEditForm({...editForm, price:e.target.value})}/> : `฿${formatMoney(p.price)}`}</td><td className="p-4 text-right space-x-2">{isEditing===p.id ? <><button onClick={()=>handleSave(p.id)} className="text-green-600"><Save size={18}/></button><button onClick={()=>setIsEditing(null)} className="text-gray-400"><X size={18}/></button></> : canEditTab('products') && <><button onClick={()=>{setIsEditing(p.id); setEditForm({name:p.name,cost:p.cost,price:p.price});}} className="text-blue-500"><Edit2 size={16}/></button><button onClick={async()=>{if(confirm('ลบ?')) await deleteDoc(doc(db,"products",p.id));}} className="text-red-500"><Trash2 size={16}/></button></>}</td></tr>))}</tbody></table></div></div>);
   };
 
-  // 📦 [View 5] สต๊อกสินค้า
+  // 📦 สต๊อกสินค้า
   const StockView = () => {
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
     const handleSaveStock = async (id) => { await updateDoc(doc(db, "products", id), { stock: Number(newStock) || 0 }); setEditingStockId(null); };
-    return (<div className="space-y-4 animate-in fade-in"><div className="bg-white p-4 rounded-xl border shadow-sm"><h2 className="text-xl font-bold">จัดการสต๊อกสินค้า</h2></div><div className="bg-white rounded-lg border overflow-x-auto"><table className="w-full text-left border-collapse text-sm"><thead className="bg-gray-50 uppercase border-b"><tr className="text-slate-500 font-bold"><th className="p-4">ชื่อสินค้า</th><th className="p-4 text-center">คงเหลือ</th><th className="p-4 text-right">อัปเดต</th></tr></thead><tbody className="divide-y">{products.map(p=>(<tr key={p.id} className="hover:bg-slate-50"><td className="p-4 font-medium">{p.name}</td><td className="p-4 text-center">{editingStockId===p.id ? <input type="number" className="w-20 p-1 border rounded text-center" value={newStock} onChange={e=>setNewStock(e.target.value)}/> : <span className={`px-3 py-1 rounded-full text-xs font-bold ${p.stock<=5?'bg-red-100 text-red-700':'bg-green-100 text-green-700'}`}>{p.stock} ชิ้น</span>}</td><td className="p-4 text-right">{editingStockId===p.id ? <><button onClick={()=>handleSaveStock(p.id)} className="text-green-600 mx-1"><Save size={18}/></button><button onClick={()=>setEditingStockId(null)} className="text-gray-400 mx-1"><X size={18}/></button></> : canEditTab('stock') && <button onClick={()=>{setEditingStockId(p.id); setNewStock(p.stock);}} className="text-blue-500"><Edit2 size={16}/></button>}</td></tr>))}</tbody></table></div></div>);
+    return (<div className="space-y-4 animate-in fade-in"><div className="bg-white p-4 rounded-xl border shadow-sm"><h2 className="text-xl font-bold">จัดการสต๊อกสินค้า</h2></div><div className="bg-white rounded-lg border overflow-x-auto"><table className="w-full text-left border-collapse text-sm"><thead className="bg-gray-50 uppercase border-b font-bold"><tr className="text-slate-500"><th className="p-4">ชื่อสินค้า</th><th className="p-4 text-center">คงเหลือ</th><th className="p-4 text-right">อัปเดต</th></tr></thead><tbody className="divide-y">{products.map(p=>(<tr key={p.id} className="hover:bg-slate-50"><td className="p-4 font-medium">{p.name}</td><td className="p-4 text-center">{editingStockId===p.id ? <input type="number" className="w-20 p-1 border rounded text-center" value={newStock} onChange={e=>setNewStock(e.target.value)}/> : <span className={`px-3 py-1 rounded-full text-xs font-bold ${p.stock<=5?'bg-red-100 text-red-700':'bg-green-100 text-green-700'}`}>{p.stock} ชิ้น</span>}</td><td className="p-4 text-right">{editingStockId===p.id ? <><button onClick={()=>handleSaveStock(p.id)} className="text-green-600 mx-1"><Save size={18}/></button><button onClick={()=>setEditingStockId(null)} className="text-gray-400 mx-1"><X size={18}/></button></> : canEditTab('stock') && <button onClick={()=>{setEditingStockId(p.id); setNewStock(p.stock);}} className="text-blue-500"><Edit2 size={16}/></button>}</td></tr>))}</tbody></table></div></div>);
   };
+
+  // 👥 จัดการผู้ใช้งาน (FULL VERSION กลับมาแล้ว!)
+  const UsersManagementView = () => {
+    const [isEditing, setIsEditing] = useState(null);
+    const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
+    const [isAdding, setIsAdding] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const handlePermissionChange = (perm) => { setEditForm(prev => { const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] }; if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false; if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; } if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; } if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false; return { ...prev, permissions: newPerms }; }); };
+    const handleSave = async (id) => { setIsProcessing(true); try { await updateDoc(doc(db, "users", id), { password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions }); setIsEditing(null); } catch (error) { alert("Error: " + error.message); } setIsProcessing(false); };
+    const handleAdd = async () => { if (!editForm.username || !editForm.password) return; setIsProcessing(true); try { await addDoc(collection(db, "users"), { username: editForm.username, password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions }); setIsAdding(false); setEditForm({ username: '', password: '', role: 'staff', permissions: defaultPermissions }); } catch(error) { alert("Error: " + error.message); } setIsProcessing(false); };
+    return (
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0"><div><h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการผู้ใช้งานและสิทธิ์</h2></div>{!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center space-x-1.5 text-xs md:text-sm w-full sm:w-auto justify-center"><Plus size={16} /><span>เพิ่มผู้ใช้</span></button>}</div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-auto"><table className="w-full text-left border-collapse min-w-[700px]"><thead><tr className="bg-gray-50 text-gray-600 border-b text-xs md:text-sm"><th className="p-3">Username</th><th className="p-3">รหัสผ่าน</th><th className="p-3">ระดับสิทธิ์</th><th className="p-3">การกำหนดความสามารถ</th><th className="p-3 text-right">จัดการ</th></tr></thead><tbody className="text-xs md:text-sm">{isAdding && (<tr className="bg-blue-50/50 align-top"><td className="p-3"><input className="p-1.5 border rounded w-full outline-none" value={editForm.username} onChange={e=>setEditForm({...editForm, username:e.target.value})} disabled={isProcessing}/></td><td className="p-3"><input className="p-1.5 border rounded w-full outline-none" value={editForm.password} onChange={e=>setEditForm({...editForm, password:e.target.value})} disabled={isProcessing}/></td><td className="p-3"><select className="p-1.5 border rounded w-full" value={editForm.role} onChange={e=>setEditForm({...editForm, role:e.target.value})} disabled={isProcessing}><option value="staff">Staff</option><option value="admin">Admin</option></select></td><td className="p-3">{editForm.role === 'admin' ? (<span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">ทุกเมนู</span>) : (<div className="flex flex-col space-y-2"><label className="flex items-center space-x-1 font-bold"><input type="checkbox" checked={editForm.permissions.dashboard} onChange={()=>handlePermissionChange('dashboard')}/><span>แดชบอร์ด</span></label><div className="ml-4 space-y-1"><label className="flex items-center space-x-1 text-[10px]"><input type="checkbox" checked={editForm.permissions.products} onChange={()=>handlePermissionChange('products')}/><span>จัดการสินค้า</span></label><label className="flex items-center space-x-1 text-[10px] ml-4"><input type="checkbox" checked={editForm.permissions.productsEdit} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products}/><span>แก้ไขได้</span></label><label className="flex items-center space-x-1 text-[10px] ml-4"><input type="checkbox" checked={editForm.permissions.productsExport} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products}/><span>Excel ได้</span></label></div></div>)}</td><td className="p-3 text-right space-x-1"><button onClick={handleAdd} disabled={isProcessing} className="text-green-600 p-1.5 border rounded-md"><Save size={16}/></button><button onClick={()=>setIsAdding(false)} disabled={isProcessing} className="text-red-500 p-1.5 border rounded-md"><X size={16}/></button></td></tr>)}{users.map(u=>(<tr key={u.id} className="border-b hover:bg-gray-50 align-top"><td className="p-3 font-bold">{u.username}</td><td className="p-3">{isEditing===u.id ? <input className="p-1.5 border rounded w-full" value={editForm.password} onChange={e=>setEditForm({...editForm, password:e.target.value})}/> : '••••••'}</td><td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role==='admin'?'bg-purple-100 text-purple-700':'bg-gray-100'}`}>{u.role.toUpperCase()}</span></td><td className="p-3">{(isEditing===u.id && editForm.role!=='admin') ? (<div className="grid grid-cols-2 gap-2 text-[10px]"><label className="flex items-center space-x-1"><input type="checkbox" checked={editForm.permissions?.dashboard} onChange={()=>handlePermissionChange('dashboard')}/><span>แดชบอร์ด</span></label><label className="flex items-center space-x-1"><input type="checkbox" checked={editForm.permissions?.products} onChange={()=>handlePermissionChange('products')}/><span>จัดการสินค้า</span></label></div>) : (u.role==='admin' ? 'ทุกเมนู (Full)' : 'กำหนดเอง')}</td><td className="p-3 text-right space-x-1">{isEditing===u.id ? <><button onClick={()=>handleSave(u.id)} disabled={isProcessing} className="text-green-600 p-1.5 border rounded-md"><Save size={16}/></button><button onClick={()=>setIsEditing(null)} disabled={isProcessing} className="text-gray-400 p-1.5 border rounded-md"><X size={16}/></button></> : <><button onClick={()=>{setIsEditing(u.id); setEditForm({username:u.username, password:u.password, role:u.role, permissions:u.permissions||defaultPermissions});}} className="text-blue-600 p-1.5 border rounded-md"><Edit2 size={16}/></button><button onClick={async()=>{if(confirm('ลบ?')) await deleteDoc(doc(db, "users", u.id));}} className="text-red-500 p-1.5 border rounded-md"><Trash2 size={16}/></button></>}</td></tr>))}</tbody></table></div>
+      </div>
+    );
+  };
+
+  const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base font-bold";
+  const navItemActiveStyle = "bg-[#CEA85E] text-white shadow-lg";
+  const navItemInactiveStyle = "text-slate-300 hover:bg-white/5";
 
   // ==========================================
   // 🎨 5. Main Layout
@@ -399,30 +394,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans">
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
-      <div className="w-full md:w-64 bg-gradient-to-br from-[#0A142A] to-[#12244a] text-white border-b md:border-r border-slate-200 flex-shrink-0 z-10 shadow-2xl relative overflow-hidden">
-        <div className="relative z-10 flex flex-col h-full"><div className="p-6 flex items-center justify-center border-b border-white/10"><ResilientLogo className="h-16 w-full rounded-lg" /></div><nav className="p-4 space-y-1">
-            <button onClick={()=>setActiveTab('dashboard')} className={`w-full flex items-center space-x-3 p-3.5 rounded-xl transition-all ${activeTab==='dashboard'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-300 hover:bg-white/5'}`}><LayoutDashboard size={20}/><span>Dashboard</span></button>
-            <button onClick={()=>setActiveTab('products')} className={`w-full flex items-center space-x-3 p-3.5 rounded-xl transition-all ${activeTab==='products'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-300 hover:bg-white/5'}`}><Package size={20}/><span>จัดการสินค้า</span></button>
-            <button onClick={()=>setActiveTab('stock')} className={`w-full flex items-center space-x-3 p-3.5 rounded-xl transition-all ${activeTab==='stock'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-300 hover:bg-white/5'}`}><Boxes size={20}/><span>สต๊อกสินค้า</span></button>
-            <button onClick={()=>setActiveTab('history')} className={`w-full flex items-center space-x-3 p-3.5 rounded-xl transition-all ${activeTab==='history'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-300 hover:bg-white/5'}`}><History size={20}/><span>ประวัติการขาย</span></button>
-            <button onClick={()=>setActiveTab('sales')} className={`w-full flex items-center space-x-3 p-3.5 rounded-xl transition-all ${activeTab==='sales'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-300 hover:bg-white/5'}`}><ShoppingCart size={20}/><span>บันทึกรายการขาย (POS)</span></button>
-            <div className="pt-10"><button onClick={()=>setLoggedInUser(null)} className="w-full flex items-center space-x-3 p-3.5 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"><LogOut size={20}/><span>ออกจากระบบ</span></button></div>
-          </nav></div>
+      <div className="w-full md:w-64 bg-[#0A142A] text-white border-r border-slate-200 flex-shrink-0 z-10 shadow-2xl relative overflow-hidden">
+        <div className="p-6 flex items-center justify-center border-b border-white/10"><ResilientLogo className="h-16 w-full rounded-lg" /></div>
+        <nav className="p-4 space-y-1">
+            <button onClick={()=>setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab==='dashboard'?navItemActiveStyle:navItemInactiveStyle}`}><LayoutDashboard size={20}/><span>Dashboard</span></button>
+            {canAccess('products') && <button onClick={()=>setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab==='products'?navItemActiveStyle:navItemInactiveStyle}`}><Package size={20}/><span>จัดการสินค้า</span></button>}
+            {canAccess('stock') && <button onClick={()=>setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab==='stock'?navItemActiveStyle:navItemInactiveStyle}`}><Boxes size={20}/><span>สต๊อกสินค้า</span></button>}
+            {canAccess('history') && <button onClick={()=>setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab==='history'?navItemActiveStyle:navItemInactiveStyle}`}><History size={20}/><span>ประวัติการขาย</span></button>}
+            <button onClick={()=>setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab==='sales'?navItemActiveStyle:navItemInactiveStyle}`}><ShoppingCart size={20}/><span>บันทึกรายการขาย (POS)</span></button>
+            {loggedInUser.role === 'admin' && <button onClick={()=>setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab==='users'?navItemActiveStyle:navItemInactiveStyle}`}><Users size={20}/><span>จัดการผู้ใช้</span></button>}
+            <div className="pt-10"><button onClick={()=>setLoggedInUser(null)} className="w-full flex items-center space-x-3 p-3.5 rounded-xl text-red-400 hover:bg-red-400/10"><LogOut size={20}/><span>ออกจากระบบ</span></button></div>
+        </nav>
       </div>
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        <header className="bg-white h-16 border-b flex items-center justify-between px-6 z-10 shadow-sm"><div className="text-slate-600 font-bold uppercase tracking-widest text-sm">THE RESILIENT CLINIC - MANAGEMENT</div><div className="flex items-center space-x-3"><div className="flex items-center space-x-2 text-sm text-slate-700 bg-slate-100 py-1.5 px-4 rounded-full border border-slate-200"><User size={14} className="text-blue-600" /><span className="font-bold">{loggedInUser.username}</span><span className="text-xs text-slate-400">({loggedInUser.role})</span></div></div></header>
-        <main className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-10 relative">
-          <div className="max-w-5xl mx-auto relative z-10">
-            {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
-            {activeTab === 'products' && canAccess('products') && <ProductsView />}
-            {activeTab === 'stock' && canAccess('stock') && <StockView />}
-            {activeTab === 'history' && canAccess('history') && <SalesHistoryView />}
-            {activeTab === 'sales' && canAccess('sales') && <SalesView />}
-            {activeTab === 'users' && loggedInUser.role === 'admin' && <UsersManagementView />}
-          </div>
-        </main>
-      </div>
+      <div className="flex-1 flex flex-col h-screen overflow-hidden"><header className="bg-white border-b flex items-center justify-between px-6 h-16 z-10 shadow-sm"><div className="text-slate-600 font-bold uppercase tracking-widest text-xs hidden sm:block">The Resilient Clinic Management</div><div className="flex items-center space-x-3"><div className="flex items-center space-x-2 text-sm text-slate-700 bg-slate-100 py-1.5 px-4 rounded-full border"><User size={14} className="text-blue-600" /><span className="font-bold">{loggedInUser.username}</span><span className="text-xs text-slate-400">({loggedInUser.role})</span></div></div></header><main className="flex-1 overflow-auto p-4 md:p-8 pb-24 relative"><div className="max-w-5xl mx-auto">{activeTab==='dashboard' && <DashboardView />}{activeTab==='products' && <ProductsView />}{activeTab==='stock' && <StockView />}{activeTab==='history' && <SalesHistoryView />}{activeTab==='sales' && <SalesView />}{activeTab==='users' && <UsersManagementView />}</div></main></div>
     </div>
   );
 }
