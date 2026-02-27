@@ -83,7 +83,7 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
-// 🛠️ ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน (แยกย่อย สิทธิ์การดู / แก้ไข / ส่งออก)
+// ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน
 const defaultPermissions = {
   dashboard: false, dashboardExport: false,
   products: false, productsEdit: false, productsExport: false,
@@ -210,13 +210,12 @@ export default function App() {
     }
   };
 
-  // 🛠️ แก้ไขฟังก์ชันดาวน์โหลด Excel ให้รองรับมือถือ (Mobile Safe Blob Download)
+  // ฟังก์ชันดาวน์โหลด Excel ให้รองรับมือถือ
   const downloadMobileSafeCSV = (csvString, filename) => {
     const universalBOM = "\uFEFF";
     const finalCSV = universalBOM + csvString;
     const blob = new Blob([finalCSV], { type: 'text/csv;charset=utf-8;' });
     
-    // สำหรับ Edge / IE รุ่นเก่า
     if (window.navigator && window.navigator.msSaveOrOpenBlob) {
       window.navigator.msSaveOrOpenBlob(blob, filename);
       return;
@@ -229,7 +228,6 @@ export default function App() {
     link.style.display = 'none';
     document.body.appendChild(link);
     
-    // ใช้ MouseEvent เพื่อให้ระบบมือถือ (iOS/Android) ยอมรับคำสั่ง Download ดีกว่าการ .click() เฉยๆ
     const event = new MouseEvent('click', {
       view: window,
       bubbles: true,
@@ -443,7 +441,6 @@ export default function App() {
               </div>
             )}
             
-            {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel หรือไม่ */}
             {canExportTab('dashboard') && (
               <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
             )}
@@ -600,7 +597,7 @@ export default function App() {
 
         <div className="bg-white/95 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white p-6 md:p-10">
           <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">คีย์ข้อมูลการขาย (POS)</h2>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">บันทึกรายการขาย (POS)</h2>
           </div>
 
           <form onSubmit={handleCheckout} className="space-y-8">
@@ -647,7 +644,7 @@ export default function App() {
                 >
                   <div className="flex-1 text-center truncate pr-6">
                     <span className={selectedProduct ? 'text-slate-900 font-bold' : 'text-slate-500 font-medium'}>
-                      {selectedProduct ? (getProduct(selectedProduct)?.name || 'ไม่พบสินค้า') : '-- กรุณาเลือกสินค้า --'}
+                      {selectedProduct ? (getProduct(selectedProduct)?.name || 'ไม่พบสินค้า') : 'กรุณาเลือกสินค้า'}
                     </span>
                   </div>
                   <ChevronDown size={20} className={`absolute right-4 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
@@ -715,34 +712,36 @@ export default function App() {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
-                <div className="text-center relative">
-                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">ราคาขาย/ชิ้น</label>
-                  <div className="relative">
+                {/* 🛠️ แก้ไข: ลบ .absolute บาท ออก แล้วปรับโครงสร้างปุ่มบวกลบให้เหมือนกล่องจำนวนชิ้น */}
+                <div className="text-center">
+                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">ราคาขาย/ชิ้น (บาท)</label>
+                  <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white relative">
+                    <button type="button" disabled={!selectedProduct || isProcessing} onClick={() => setCustomPrice(Math.max(0, (Number(customPrice)||0) - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl disabled:opacity-50 disabled:cursor-not-allowed z-10">-</button>
                     <input 
                       type="number" 
                       value={customPrice} 
                       onChange={(e) => setCustomPrice(e.target.value)} 
-                      className="w-full pl-6 pr-12 py-3.5 border border-slate-200 rounded-xl text-lg focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-800 bg-white transition-all shadow-sm text-center" 
+                      className="h-full w-full text-center text-xl font-bold text-slate-800 outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white transition-all disabled:opacity-50 z-0" 
                       disabled={!selectedProduct || isProcessing}
-                      placeholder="แก้ไขราคา"
+                      placeholder="0"
                       required
                     />
-                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">บาท</span>
+                    <button type="button" disabled={!selectedProduct || isProcessing} onClick={() => setCustomPrice((Number(customPrice)||0) + 1)} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-l border-slate-200 focus:outline-none active:bg-slate-200 text-xl disabled:opacity-50 disabled:cursor-not-allowed z-10">+</button>
                   </div>
                 </div>
 
                 <div className="text-center">
                   <label className="block text-sm font-bold text-slate-700 mb-3 text-center">จำนวนชิ้น</label>
-                  <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white">
-                    <button type="button" onClick={() => setQuantity(Math.max(1, (Number(quantity)||0) - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl">-</button>
+                  <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white relative">
+                    <button type="button" onClick={() => setQuantity(Math.max(1, (Number(quantity)||0) - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl z-10">-</button>
                     <input 
                       type="number" 
                       value={quantity} 
                       onChange={(e) => setQuantity(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))} 
-                      className="h-full w-full text-center text-xl font-bold text-slate-800 outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white" 
+                      className="h-full w-full text-center text-xl font-bold text-slate-800 outline-none focus:ring-inset focus:ring-2 focus:ring-blue-500 bg-white z-0" 
                       min="1"
                     />
-                    <button type="button" onClick={() => setQuantity((Number(quantity)||0) + 1)} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-l border-slate-200 focus:outline-none active:bg-slate-200 text-xl">+</button>
+                    <button type="button" onClick={() => setQuantity((Number(quantity)||0) + 1)} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-l border-slate-200 focus:outline-none active:bg-slate-200 text-xl z-10">+</button>
                   </div>
                 </div>
               </div>
@@ -1034,7 +1033,6 @@ export default function App() {
                     <span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span>
                   </td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
-                    {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขก่อนแสดงปุ่ม */}
                     {canEditTab('history') ? (
                       isCurrentRowEditing ? (
                         <>
@@ -1159,11 +1157,9 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการข้อมูลสินค้า</h2>
             <div className="flex space-x-2 w-full sm:w-auto">
-              {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel หรือไม่ */}
               {canExportTab('products') && (
                 <button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium"><Download size={16} /><span>ส่งออก Excel</span></button>
               )}
-              {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขก่อนให้เพิ่มสินค้า */}
               {!isAdding && canEditTab('products') && (
                 <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>
               )}
@@ -1217,7 +1213,6 @@ export default function App() {
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-medium">฿{formatMoney(product.cost)}</span>}</td>
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">฿{formatMoney(product.price)}</span>}</td>
                   
-                  {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขสินค้า */}
                   {canEditTab('products') && (
                     <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
                       {isEditing === product.id ? (
@@ -1298,7 +1293,6 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
             
-            {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel สต๊อกหรือไม่ */}
             {canExportTab('stock') && (
               <button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium">
                 <Download size={16} /><span>ส่งออกสต๊อก (Excel)</span>
@@ -1331,7 +1325,6 @@ export default function App() {
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center w-10 sm:w-16">ลำดับ</th>
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium">ชื่อสินค้า</th>
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center whitespace-nowrap">คงเหลือ</th>
-                  {/* 🛠️ ตรวจสอบสิทธิ์การอัปเดตสต๊อก */}
                   {!isExecutiveView && canEditTab('stock') && <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-right whitespace-nowrap">อัปเดต</th>}
                 </tr>
               </thead>
@@ -1374,17 +1367,14 @@ export default function App() {
   // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบและกำหนดสิทธิ์ (Users Management)
   const UsersManagementView = () => {
     const [isEditing, setIsEditing] = useState(null);
-    // ใส่ defaultPermissions เผื่อ user เก่าไม่มีค่าเหล่านี้
     const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // 🛠️ ตรรกะการจัดกลุ่มสิทธิ์ ถ้าปิดการมองเห็น ให้สิทธิ์ย่อยๆ ถูกปิดตามอัตโนมัติ
     const handlePermissionChange = (perm) => {
       setEditForm(prev => {
         const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] };
         
-        // Auto-disable sub-permissions if main permission is turned off
         if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false;
         if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
         if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
@@ -1460,7 +1450,6 @@ export default function App() {
                     {editForm.role === 'admin' ? (
                       <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">เข้าถึงได้ทุกเมนู (Admin)</span>
                     ) : (
-                      // 🛠️ UI สิทธิ์การใช้งานแบบละเอียด
                       <div className="flex flex-col space-y-3">
                         <span className="text-gray-500 font-medium flex items-center"><ShieldCheck size={14} className="mr-1"/>เลือกเมนูที่อนุญาต:</span>
                         
@@ -1529,7 +1518,6 @@ export default function App() {
                       editForm.role === 'admin' ? (
                         <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded text-xs mt-2 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>
                       ) : (
-                         // 🛠️ ฟอร์มแก้ไขสิทธิ์พนักงาน
                         <div className="flex flex-col space-y-3">
                           <span className="text-gray-500 font-medium flex items-center"><ShieldCheck size={14} className="mr-1"/>เลือกเมนูที่อนุญาต:</span>
                           
@@ -1629,14 +1617,24 @@ export default function App() {
   if (isExecutiveView) {
     return (
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-        {/* Header ผู้บริหารแบบใหม่ */}
+        {/* 🛠️ สไตล์สำหรับลบลูกศรตัวเลขใน Input แบบเนียนๆ */}
+        <style>{`
+          input[type=number]::-webkit-outer-spin-button,
+          input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          input[type=number] {
+            -moz-appearance: textfield;
+          }
+        `}</style>
+        
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center space-x-3">
               <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
             </div>
             
-            {/* แท็บเมนูผู้บริหาร */}
             <div className="flex space-x-2 w-full max-w-sm bg-gray-100 p-1.5 rounded-xl">
               <button 
                 onClick={() => setActiveTab('dashboard')} 
@@ -1656,7 +1654,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Content ผู้บริหาร */}
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
             <div className="flex items-center mb-1 md:mb-2">
@@ -1665,7 +1662,6 @@ export default function App() {
                 Executive View
               </div>
             </div>
-
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'stock' && <StockView />}
           </div>
@@ -1678,8 +1674,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans">
+      {/* 🛠️ สไตล์สำหรับลบลูกศรตัวเลขใน Input (สำหรับฝั่งแอดมินพนักงาน) */}
+      <style>{`
+        input[type=number]::-webkit-outer-spin-button,
+        input[type=number]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       
-      {/* แถบเมนูด้านซ้าย (Sidebar) */}
       <div className="w-full md:w-64 bg-gradient-to-br from-white via-white to-blue-50 border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-4 flex items-center justify-center border-b border-slate-100">
@@ -1692,20 +1698,22 @@ export default function App() {
             {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={20} /><span>สต๊อกสินค้า</span></button>}
             {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={20} /><span>จัดการผู้ใช้</span></button>}
             {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={20} /><span>ประวัติการขาย</span></button>}
-            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>คีย์ข้อมูลการขาย (POS)</span></button>}
+            
+            {/* 🛠️ เปลี่ยนชื่อเมนูเป็น บันทึกรายการขาย (POS) */}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={20} /><span>บันทึกรายการขาย (POS)</span></button>}
           </nav>
         </div>
       </div>
 
-      {/* พื้นที่แสดงผลด้านขวา (Main Content Area) */}
       <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative">
         <header className="bg-white/80 backdrop-blur-md h-16 border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-10">
           <div className="text-slate-600 font-bold text-base hidden sm:block">
+            {/* 🛠️ เปลี่ยนข้อความส่วนหัวตอนคลิกเมนู */}
             {activeTab === 'dashboard' ? 'ระบบภาพรวม' : 
              activeTab === 'products' ? 'ตั้งค่าฐานข้อมูลสินค้า' : 
              activeTab === 'stock' ? 'ระบบคลังสินค้า' : 
              activeTab === 'users' ? 'ตั้งค่าบัญชีและสิทธิ์พนักงาน' : 
-             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'คีย์ข้อมูลการขาย (POS)'}
+             activeTab === 'history' ? 'ประวัติการทำรายการ' : 'บันทึกรายการขาย (POS)'}
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-2 text-sm text-slate-700 bg-slate-100/80 py-1.5 px-3 rounded-full border border-slate-200">
