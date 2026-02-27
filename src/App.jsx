@@ -311,17 +311,22 @@ export default function App() {
 
         return isTimeMatch && isProductMatch && isStoreMatch;
       });
-    }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
+      // 🛠️ FIX 1: เพิ่ม products ลงใน array เพื่อให้ dashboard คำนวณใหม่เมื่อลบสินค้า
+    }, [sales, products, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
     
     filteredSales.forEach(s => {
+      const p = getProduct(s.productId);
+      
+      // 🛠️ FIX 2: ดักจับข้อมูลยอดขายที่เป็นของสินค้าที่ถูกลบไปแล้ว ไม่ให้นำมาบวกซ้ำ
+      if (!p) return; 
+
       const qty = Number(s.quantity) || 0;
       totalQty += qty; 
       totalRevenue += Number(s.total) || 0;
       
-      const p = getProduct(s.productId);
-      const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
+      const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : Number(p.cost);
       const cost = itemCost * qty;
       
       totalCost += cost;
