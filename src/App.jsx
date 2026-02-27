@@ -1,291 +1,364 @@
 // ==========================================
-// 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
+// ENTERPRISE POS V2 - FINAL CLEAN VERSION
 // ==========================================
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+
+import React, { useState, useEffect, useMemo } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { 
-  getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, increment, setDoc, runTransaction 
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  doc,
+  runTransaction,
+  increment,
+  setDoc,
+  getDoc
 } from "firebase/firestore";
-import { 
-  LayoutDashboard, Package, ShoppingCart, Plus, Edit2, Trash2, Save, X, TrendingUp, DollarSign, Boxes, Users, LogOut, Lock, User, Download, History, BarChart3, CalendarDays, ShieldCheck, Search, ArrowUpDown, ChevronDown, 
-  QrCode, MinusCircle, PlusCircle, ShoppingBag, Receipt, Link as LinkIcon
-} from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (Premium SVG)
-// ==========================================
-const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-[#0A142A] flex items-center justify-center overflow-hidden ${className}`}>
-    <svg viewBox="0 0 320 100" className="h-full w-auto py-2" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g transform="translate(15, 15) scale(0.75)">
-        <circle cx="50" cy="50" r="7" fill="#FFFFFF"/>
-        <path d="M50 10 C 35 35 35 65 50 75 C 65 65 65 35 50 10 Z" stroke="#CEA85E" strokeWidth="4.5" strokeLinejoin="round"/>
-        <path d="M 40 70 C 20 65 15 40 22 25 C 20 45 28 55 38 60" stroke="#CEA85E" strokeWidth="4.5" strokeLinecap="round"/>
-        <path d="M 60 70 C 80 65 85 40 78 25 C 80 45 72 55 62 60" stroke="#CEA85E" strokeWidth="4.5" strokeLinecap="round"/>
-        <path d="M 30 73 C 10 73 -5 55 5 40 C 5 55 15 65 25 68" stroke="#CEA85E" strokeWidth="4.5" strokeLinecap="round"/>
-        <path d="M 70 73 C 90 73 105 55 95 40 C 95 55 85 65 75 68" stroke="#CEA85E" strokeWidth="4.5" strokeLinecap="round"/>
-      </g>
-      <text x="105" y="38" fontFamily="system-ui, sans-serif" fontSize="12" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
-      <text x="103" y="64" fontFamily="system-ui, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
-      <text x="105" y="84" fontFamily="system-ui, sans-serif" fontSize="12" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
-    </svg>
-  </div>
-);
-
-// ==========================================
-// 🔥 2. ตั้งค่า Firebase
+// 🔥 Firebase Config
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyCgC0ikl147mwcC1-J36Qg27SPUNSz8Afw",
-  authDomain: "the-royal-queen.firebaseapp.com",
-  projectId: "the-royal-queen",
-  storageBucket: "the-royal-queen.firebasestorage.app",
-  messagingSenderId: "1070880208582",
-  appId: "1:1070880208582:web:9530fdad63bab3454149c7"
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_BUCKET",
+  messagingSenderId: "YOUR_ID",
+  appId: "YOUR_APP"
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app);
+const db = getFirestore(app);
 
-const defaultPermissions = {
-  dashboard: false, dashboardExport: false,
-  products: false, productsEdit: false, productsExport: false,
-  stock: false, stockEdit: false, stockExport: false,
-  history: false, historyEdit: false
+// ==========================================
+// 🏪 Constants
+// ==========================================
+const STORE_OPTIONS = [
+  "Shopee(Re)",
+  "Shopee(Long)",
+  "Lazada(Re)",
+  "Lazada(Long)",
+  "Walk-in"
+];
+
+// ==========================================
+// 🧠 Helpers
+// ==========================================
+const formatMoney = (n) =>
+  new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2 }).format(n || 0);
+
+const todayISO = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split("T")[0];
 };
 
-const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'หน้าร้าน (Walk-in)'];
-
+// ==========================================
+// 🚀 MAIN APP
+// ==========================================
 export default function App() {
-  const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
-  const [loggedInUser, setLoggedInUser] = useState(null); 
-  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]); 
-  const [users, setUsers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUsersLoaded, setIsUsersLoaded] = useState(false);
-  const [loadError, setLoadError] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [orderId, setOrderId] = useState("");
+  const [store, setStore] = useState(STORE_OPTIONS[0]);
+  const [pid, setPid] = useState("");
+  const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
-  const productMap = useMemo(() => products.reduce((map, p) => { map[p.id] = p; return map; }, {}), [products]);
-
+  // ==========================================
+  // 🔄 Real-time Data
+  // ==========================================
   useEffect(() => {
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snap) => {
-      if (snap.empty) setDoc(doc(db, "users", "default_admin"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
-      else { setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setIsUsersLoaded(true); }
+    onSnapshot(collection(db, "products"), (snap) => {
+      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    onSnapshot(collection(db, "products"), (snap) => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    onSnapshot(collection(db, "orders"), (snap) => { setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setIsLoading(false); });
-    return () => unsubscribeUsers();
+
+    onSnapshot(collection(db, "orders"), (snap) => {
+      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
   }, []);
 
-  // --- Helpers ---
-  const canAccess = (tabName) => (isExecutiveView && (tabName === 'dashboard' || tabName === 'stock')) || (loggedInUser && (loggedInUser.role === 'admin' || tabName === 'sales' || !!loggedInUser.permissions?.[tabName]));
-  const canEditTab = (tabName) => loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.[tabName + 'Edit'];
-  const canExportTab = (tabName) => loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.[tabName + 'Export'];
-  const formatMoney = (amount) => new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2 }).format(amount || 0);
+  const productMap = useMemo(() => {
+    return products.reduce((acc, p) => {
+      acc[p.id] = p;
+      return acc;
+    }, {});
+  }, [products]);
+
   const getProduct = (id) => productMap[id];
-  const getLocalISODate = (dateString) => { const d = dateString ? new Date(dateString) : new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
 
-  const downloadCSV = (csvString, filename) => {
-    const blob = new Blob(["\uFEFF" + csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.setAttribute('download', filename);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  // ==========================================
+  // 📱 QR Scanner
+  // ==========================================
+  useEffect(() => {
+    let scanner;
+    if (scanning) {
+      scanner = new Html5QrcodeScanner("qr-reader", {
+        fps: 10,
+        qrbox: 250
+      });
+
+      scanner.render((decoded) => {
+        if (productMap[decoded]) {
+          const p = productMap[decoded];
+          setPid(decoded);
+          setPrice(p.price);
+        } else {
+          setOrderId(decoded);
+        }
+        scanner.clear();
+        setScanning(false);
+      });
+    }
+    return () => scanner?.clear().catch(() => null);
+  }, [scanning, productMap]);
+
+  // ==========================================
+  // ➕ Add to Cart
+  // ==========================================
+  const addToCart = (e) => {
+    e.preventDefault();
+    if (!pid) return;
+
+    const p = getProduct(pid);
+
+    const item = {
+      id: Date.now(),
+      pid,
+      name: p.name,
+      qty: Number(qty),
+      price: Number(price),
+      cost: Number(p.cost),
+      total: Number(price) * Number(qty)
+    };
+
+    setCart((prev) => [...prev, item]);
+    setPid("");
+    setQty(1);
   };
 
-  // 👤 [View 1] Login
-  const LoginView = () => {
-    const [u, setU] = useState(''); const [p, setP] = useState(''); const [err, setErr] = useState('');
-    const handleLogin = (e) => { e.preventDefault(); const user = users.find(x => x.username === u && x.password === p); if (user) setLoggedInUser(user); else setErr('ข้อมูลไม่ถูกต้อง'); };
-    return (<div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans"><div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl p-8 space-y-8"><div className="text-center space-y-4"><ResilientLogo className="mx-auto h-24 rounded-2xl shadow-lg mb-4" /><p className="text-sm text-gray-500 font-bold text-center">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p></div><form onSubmit={handleLogin} className="space-y-6">{err && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs text-center font-bold">{err}</div>}<div className="space-y-5"><div><label className="block text-xs font-bold text-gray-500 mb-1 ml-1">USERNAME</label><input type="text" onChange={e => setU(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" required /></div><div><label className="block text-xs font-bold text-gray-500 mb-1 ml-1">PASSWORD</label><input type="password" onChange={e => setP(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" required /></div></div><button className="w-full py-4 bg-[#0A142A] text-white rounded-2xl font-bold shadow-lg shadow-blue-900/20">เข้าสู่ระบบ</button></form></div></div>);
+  // ==========================================
+  // 💳 Confirm Order (FULL ENTERPRISE SAFE)
+  // ==========================================
+  const confirmOrder = async () => {
+    const finalOrderId = orderId.trim();
+    if (!finalOrderId || cart.length === 0)
+      return alert("กรุณาระบุเลขบิลและสินค้า");
+
+    setProcessing(true);
+
+    try {
+      await runTransaction(db, async (t) => {
+        const orderRef = doc(db, "orders", finalOrderId);
+
+        const existing = await t.get(orderRef);
+        if (existing.exists())
+          throw new Error("เลขบิลนี้ถูกใช้แล้ว");
+
+        let totalAmount = 0;
+        let totalCost = 0;
+        let totalItems = 0;
+
+        // 🔥 STOCK VALIDATION
+        for (const item of cart) {
+          const productRef = doc(db, "products", item.pid);
+          const productDoc = await t.get(productRef);
+
+          if (!productDoc.exists())
+            throw new Error(`ไม่พบสินค้า ${item.name}`);
+
+          const currentStock = Number(productDoc.data().stock) || 0;
+
+          if (currentStock < item.qty)
+            throw new Error(`สต๊อก ${item.name} ไม่พอ`);
+
+          t.update(productRef, {
+            stock: currentStock - item.qty
+          });
+
+          totalAmount += item.total;
+          totalCost += item.cost * item.qty;
+          totalItems += item.qty;
+        }
+
+        // ✅ CREATE ORDER
+        t.set(orderRef, {
+          store,
+          items: cart,
+          totalAmount,
+          totalCost,
+          totalProfit: totalAmount - totalCost,
+          totalItems,
+          status: "completed",
+          createdAt: new Date().toISOString()
+        });
+
+        // ✅ DAILY SUMMARY CACHE
+        const summaryRef = doc(db, "daily_summary", todayISO());
+        t.set(
+          summaryRef,
+          {
+            totalRevenue: increment(totalAmount),
+            totalProfit: increment(totalAmount - totalCost),
+            totalOrders: increment(1),
+            totalItems: increment(totalItems)
+          },
+          { merge: true }
+        );
+
+        // ✅ AUDIT LOG
+        const auditRef = doc(collection(db, "audit_logs"));
+        t.set(auditRef, {
+          action: "CREATE_ORDER",
+          orderId: finalOrderId,
+          totalAmount,
+          timestamp: new Date().toISOString()
+        });
+      });
+
+      setCart([]);
+      setOrderId("");
+      alert("บันทึกสำเร็จ");
+    } catch (err) {
+      alert(err.message);
+    }
+
+    setProcessing(false);
   };
 
-  // 📊 [View 2] Dashboard (With Full Filters)
-  const DashboardView = () => {
-    const [timeframe, setTimeframe] = useState('daily'); 
-    const [filterDate, setFilterDate] = useState(getLocalISODate());
-    const [filterStore, setFilterStore] = useState('all');
+  // ==========================================
+  // ❌ Delete Order (คืน stock)
+  // ==========================================
+  const deleteOrder = async (id) => {
+    if (!window.confirm("ลบออเดอร์นี้?")) return;
 
-    const filtered = useMemo(() => orders.filter(o => {
-      const orderDate = getLocalISODate(o.createdAt);
-      return (timeframe === 'daily' ? orderDate === filterDate : true) && (filterStore === 'all' || o.store === filterStore);
-    }), [orders, timeframe, filterDate, filterStore]);
+    await runTransaction(db, async (t) => {
+      const orderRef = doc(db, "orders", id);
+      const orderDoc = await t.get(orderRef);
+      if (!orderDoc.exists()) return;
 
-    const totalRev = filtered.reduce((s, o) => s + (o.totalAmount || 0), 0);
-    const totalProf = filtered.reduce((s, o) => s + (o.totalProfit || 0), 0);
+      const items = orderDoc.data().items || [];
 
-    return (
-      <div className="space-y-6 animate-in fade-in">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-6 rounded-3xl border shadow-sm">
-          <div className="flex items-center space-x-3"><div className="bg-blue-600 p-2 rounded-lg text-white"><BarChart3 size={20}/></div><h2 className="text-xl font-black">Dashboard</h2></div>
-          <div className="flex flex-wrap gap-2">
-            <select value={filterStore} onChange={e=>setFilterStore(e.target.value)} className="border rounded-xl px-2 py-1.5 text-xs font-bold bg-slate-50"><option value="all">ทุกร้านค้า</option>{STORE_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}</select>
-            <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="border rounded-xl px-2 py-1.5 text-xs font-bold bg-slate-50" />
-            {canExportTab('dashboard') && <button onClick={()=>{
-              const rows = [['OrderID', 'Date', 'Revenue', 'Profit']];
-              filtered.forEach(o => rows.push([o.id, getLocalISODate(o.createdAt), o.totalAmount, o.totalProfit]));
-              downloadCSV(rows.map(r => r.join(',')).join('\n'), `Dashboard_${filterDate}.csv`);
-            }} className="bg-green-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold"><Download size={14}/></button>}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white p-6 rounded-3xl border-l-8 border-blue-500 shadow-sm"><h3 className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">ยอดขายรวม</h3><p className="text-3xl font-black text-slate-800">฿{formatMoney(totalRev)}</p></div>
-          <div className="bg-white p-6 rounded-3xl border-l-8 border-emerald-500 shadow-sm"><h3 className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">กำไรสุทธิ</h3><p className="text-3xl font-black text-emerald-600">฿{formatMoney(totalProf)}</p></div>
-        </div>
-      </div>
-    );
-  };
+      for (const item of items) {
+        const productRef = doc(db, "products", item.pid);
+        const productDoc = await t.get(productRef);
 
-  // 🛒 [View 7] POS 🚀 (FULL TRANSACTION SAFE)
-  const SalesView = () => {
-    const [orderId, setOrderId] = useState(''); const [store, setStore] = useState(STORE_OPTIONS[0]);
-    const [pid, setPid] = useState(''); const [price, setPrice] = useState(''); const [qty, setQty] = useState(1);
-    const [cart, setCart] = useState([]); const [scanning, setScanning] = useState(false); const [processing, setProcessing] = useState(false);
-
-    useEffect(() => {
-      let scanner = null; if (scanning) { 
-        setTimeout(() => { 
-          scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: 250 });
-          scanner.render((txt) => { const p = productMap[txt]; if (p) { setPid(txt); setPrice(p.price); setScanning(false); scanner.clear(); } else { setOrderId(txt); setScanning(false); scanner.clear(); } }); 
-        }, 100); 
+        if (productDoc.exists()) {
+          const stock = Number(productDoc.data().stock) || 0;
+          t.update(productRef, { stock: stock + item.qty });
+        }
       }
-      return () => { if (scanner) scanner.clear().catch(() => null); };
-    }, [scanning]);
 
-    const addToCart = (e) => { e.preventDefault(); if(!pid) return; const p = getProduct(pid); setCart([...cart, { id: Date.now(), pid, name: p.name, qty, price: Number(price), cost: Number(p.cost), total: Number(price) * qty }]); setPid(''); setQty(1); };
+      t.delete(orderRef);
 
-    // 🚀 ENTERPRISE TRANSACTION CONFIRM
-    const confirmOrder = async () => {
-      const finalOrderId = orderId.trim();
-      if(!finalOrderId || cart.length === 0) return alert('กรุณาใส่เลขบิลและเลือกสินค้า');
-      setProcessing(true);
-      try {
-        await runTransaction(db, async (t) => {
-          const oRef = doc(db, "orders", finalOrderId);
-          if ((await t.get(oRef)).exists()) throw new Error("เลขบิลนี้มีในระบบแล้ว");
-
-          // 1. Real-time Stock Check & Update
-          for (const item of cart) {
-            const pRef = doc(db, "products", item.pid);
-            const pDoc = await t.get(pRef);
-            if (!pDoc.exists()) throw new Error(`ไม่พบสินค้า ${item.name}`);
-            const curStock = Number(pDoc.data().stock) || 0;
-            if (curStock < item.qty) throw new Error(`สต๊อก ${item.name} ไม่พอ (เหลือ ${curStock})`);
-            t.update(pRef, { stock: curStock - item.qty });
-          }
-
-          const totalAmount = cart.reduce((s,i)=>s+i.total,0);
-          const totalProfit = cart.reduce((s,i)=>s+(i.total-(i.cost*i.qty)),0);
-
-          // 2. Set Order
-          t.set(oRef, { store, totalAmount, totalProfit, createdAt: new Date().toISOString(), soldBy: loggedInUser.username, items: cart, status: "completed" });
-
-          // 3. Update Daily Summary Cache
-          const summaryRef = doc(db, "daily_summary", getLocalISODate());
-          t.set(summaryRef, { totalRevenue: increment(totalAmount), totalProfit: increment(totalProfit), totalOrders: increment(1), totalItems: increment(cart.reduce((s,i)=>s+i.qty,0)) }, { merge: true });
-
-          // 4. Audit Log
-          const auditRef = doc(collection(db, "audit_logs"));
-          t.set(auditRef, { action: "CREATE_ORDER", orderId: finalOrderId, user: loggedInUser.username, totalAmount, timestamp: new Date().toISOString() });
-        });
-        setCart([]); setOrderId(''); alert('บันทึกออเดอร์สำเร็จ!');
-      } catch (err) { alert(err.message); }
-      setProcessing(false);
-    };
-
-    return (
-      <div className="flex flex-col lg:flex-row gap-6 animate-in fade-in">
-        <div className="flex-1 bg-white rounded-[2rem] shadow-xl p-6 md:p-8 border">
-          <h2 className="text-2xl font-black mb-6 flex items-center gap-2">บันทึกการขาย (POS)</h2>
-          {scanning && <div className="mb-6 rounded-2xl overflow-hidden bg-black aspect-video"><div id="qr-reader"></div></div>}
-          <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100 mb-6 space-y-4">
-            <div className="flex items-center justify-between font-bold text-blue-800 text-xs uppercase"><span>หมายเลขบิล *</span><button onClick={()=>setScanning(true)} className="p-2 bg-white rounded-lg shadow-sm border"><QrCode size={16}/></button></div>
-            <input type="text" value={orderId} onChange={e=>setOrderId(e.target.value)} className="w-full p-4 rounded-2xl border-2 border-blue-200 text-center font-black outline-none focus:border-blue-500" placeholder="เลขบิลพัสดุ" />
-          </div>
-          <form onSubmit={addToCart} className="bg-slate-50 p-6 rounded-3xl space-y-4">
-            <div className="flex justify-between font-bold text-xs text-slate-500 px-1"><span>สินค้า</span><button type="button" onClick={()=>setScanning(true)} className="text-blue-600"><QrCode size={14}/></button></div>
-            <select value={pid} onChange={e=>{const p=getProduct(e.target.value); setPid(e.target.value); setPrice(p?.price||'');}} className="w-full p-4 rounded-2xl bg-white shadow-sm border-0 font-bold"><option value="">-- เลือกสินค้า --</option>{products.map(p=><option key={p.id} value={p.id}>{p.name} ({p.stock})</option>)}</select>
-            <div className="grid grid-cols-2 gap-4">
-              <input type="number" value={price} onChange={e=>setPrice(e.target.value)} className="p-4 rounded-2xl bg-white border-0 shadow-sm font-bold text-center" placeholder="ราคา" />
-              <input type="number" value={qty} onChange={e=>setQty(Math.max(1,parseInt(e.target.value)||1))} className="p-4 rounded-2xl bg-white border-0 shadow-sm font-bold text-center" placeholder="จำนวน" />
-            </div>
-            <button disabled={!pid} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg">+ เพิ่มลงบิล</button>
-          </form>
-        </div>
-        <div className="w-full lg:w-[350px] bg-white rounded-[2rem] shadow-xl p-6 border flex flex-col min-h-[500px]">
-          <h3 className="font-black text-slate-800 border-b pb-4 mb-4 flex items-center gap-2"><ShoppingBag size={18} className="text-blue-600"/> รายการบิล</h3>
-          <div className="flex-1 space-y-3 overflow-y-auto max-h-[350px] pr-2 scrollbar-hide">
-            {cart.map(i=>(<div key={i.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border"><div className="text-xs"><b>{i.name}</b><br/>{i.qty} x ฿{formatMoney(i.price)}</div><button onClick={()=>setCart(cart.filter(x=>x.id!==i.id))} className="text-red-400 p-1"><MinusCircle size={20}/></button></div>))}
-          </div>
-          <div className="pt-4 border-t mt-4"><div className="flex justify-between items-end mb-6"><div><p className="text-[10px] font-bold text-slate-400">TOTAL</p><p className="text-3xl font-black text-blue-600">฿{formatMoney(cart.reduce((s,i)=>s+i.total,0))}</p></div></div><button onClick={confirmOrder} disabled={processing || cart.length===0 || !orderId.trim()} className="w-full py-5 bg-green-500 text-white rounded-[1.5rem] font-black shadow-lg disabled:opacity-50 tracking-widest">ยืนยัน (CHECKOUT)</button></div>
-        </div>
-      </div>
-    );
+      const auditRef = doc(collection(db, "audit_logs"));
+      t.set(auditRef, {
+        action: "DELETE_ORDER",
+        orderId: id,
+        timestamp: new Date().toISOString()
+      });
+    });
   };
 
-  // 🕒 [View 3] History (Order Based + Atomic Return Stock)
-  const SalesHistoryView = () => {
-    const [filterDate, setFilterDate] = useState(getLocalISODate());
-    const sorted = useMemo(() => orders.filter(o => getLocalISODate(o.createdAt) === filterDate).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)), [orders, filterDate]);
+  // ==========================================
+  // 📊 Dashboard Summary
+  // ==========================================
+  const totalRevenue = orders.reduce(
+    (s, o) => s + (o.totalAmount || 0),
+    0
+  );
 
-    const handleVoidOrder = async (orderId, items) => {
-      if(!confirm('ยกเลิกบิลและคืนสต๊อกสินค้า?')) return;
-      try {
-        await runTransaction(db, async (t) => {
-          const oRef = doc(db, "orders", orderId);
-          for (const item of items) {
-            const pRef = doc(db, "products", item.pid);
-            const pDoc = await t.get(pRef);
-            if (pDoc.exists()) t.update(pRef, { stock: (Number(pDoc.data().stock)||0) + item.qty });
-          }
-          t.delete(oRef);
-          const auditRef = doc(collection(db, "audit_logs"));
-          t.set(auditRef, { action: "DELETE_ORDER", orderId, user: loggedInUser.username, timestamp: new Date().toISOString() });
-        });
-        alert('ยกเลิกและคืนสต๊อกสำเร็จ');
-      } catch (err) { alert(err.message); }
-    };
+  const totalProfit = orders.reduce(
+    (s, o) => s + (o.totalProfit || 0),
+    0
+  );
 
-    return (<div className="space-y-6 animate-in fade-in"><div className="bg-white p-6 rounded-3xl border shadow-sm flex justify-between items-center"><h2 className="text-xl font-black">ประวัติการขาย</h2><input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="p-2 border rounded-xl text-blue-600 font-bold text-xs outline-none" /></div><div className="bg-white rounded-3xl border shadow-sm overflow-hidden overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 border-b font-bold text-slate-400"><tr><th className="p-4">บิล</th><th className="p-4">ยอดรวม</th><th className="p-4 text-right">จัดการ</th></tr></thead><tbody className="divide-y">{sorted.map(o=>(<tr key={o.id} className="hover:bg-slate-50/50"><td className="p-4 font-mono font-bold text-blue-600">{o.id}</td><td className="p-4 font-black">฿{formatMoney(o.totalAmount)}</td><td className="p-4 text-right">{canEditTab('history') && <button onClick={()=>handleVoidOrder(o.id, o.items)} className="text-red-400 p-2"><Trash2 size={16}/></button>}</td></tr>))}</tbody></table></div></div>);
-  };
-
-  // 📦 [View 4-5-6] (Products / Stock / Users Management)
-  const ProductsView = () => (<div className="space-y-6"><div className="bg-white p-6 rounded-3xl border shadow-sm flex justify-between items-center"><h2 className="text-xl font-black">จัดการสินค้า</h2></div><div className="bg-white rounded-3xl border overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="bg-gray-50 border-b text-slate-400 font-bold tracking-wider uppercase text-[10px]"><th className="p-4">ชื่อ</th><th className="p-4">ราคา</th><th className="p-4 text-right">สต๊อก</th></tr></thead><tbody className="divide-y">{products.map(p=>(<tr key={p.id}><td className="p-4 font-bold">{p.name}</td><td className="p-4 font-black text-blue-600">฿{formatMoney(p.price)}</td><td className="p-4 text-right font-bold text-slate-400">{p.stock}</td></tr>))}</tbody></table></div></div>);
-  const StockView = () => (<div className="space-y-6"><div className="bg-white p-6 rounded-3xl border shadow-sm"><h2 className="text-xl font-black">สต๊อกสินค้า</h2></div><div className="bg-white rounded-3xl border overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="bg-gray-50 border-b text-slate-400 font-bold uppercase text-[10px]"><th className="p-4">ชื่อ</th><th className="p-4 text-center">คงเหลือ</th></tr></thead><tbody className="divide-y">{products.map(p=>(<tr key={p.id}><td className="p-4 font-bold">{p.name}</td><td className="p-4 text-center"><span className={`px-4 py-1 rounded-full text-xs font-bold ${p.stock <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{p.stock}</span></td></tr>))}</tbody></table></div></div>);
-  const UsersManagementView = () => {
-    const [u, setU] = useState(''); const [p, setP] = useState(''); const [isAdding, setIsAdding] = useState(false);
-    const handleAdd = async () => { if(!u || !p) return; await addDoc(collection(db,"users"), { username:u, password:p, role:'staff', permissions:defaultPermissions }); setIsAdding(false); setU(''); setP(''); };
-    return (<div className="space-y-6"><div className="flex justify-between items-center bg-white p-6 rounded-3xl border shadow-sm"><h2 className="text-xl font-black">จัดการพนักงาน</h2><button onClick={()=>setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs">+ เพิ่มพนักงาน</button></div>{isAdding && <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 flex flex-wrap gap-4"><input placeholder="Username" value={u} onChange={e=>setU(e.target.value)} className="p-3 rounded-xl border flex-1" /><input placeholder="Password" value={p} onChange={e=>setP(e.target.value)} className="p-3 rounded-xl border flex-1" /><button onClick={handleAdd} className="bg-green-600 text-white px-8 rounded-xl font-bold">บันทึก</button></div>}<div className="bg-white rounded-3xl border overflow-hidden overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="bg-gray-50 border-b font-bold text-slate-400"> <th className="p-4">User</th> <th className="p-4 text-right">จัดการ</th> </tr></thead><tbody className="divide-y">{users.map(user=>(<tr key={user.id}><td className="p-4 font-bold text-slate-700">{user.username} <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-black uppercase text-slate-400 ml-2">{user.role}</span></td><td className="p-4 text-right"><button onClick={async()=>{if(confirm('ลบ?')) await deleteDoc(doc(db,"users",user.id));}} className="text-red-400 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></td></tr>))}</tbody></table></div></div>);
-  };
-
+  // ==========================================
+  // 🖥️ UI
+  // ==========================================
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row font-sans uppercase-tracking">
-      <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
-      <div className="w-full lg:w-64 bg-[#0A142A] text-white flex-shrink-0 z-20 shadow-2xl relative">
-        <div className="p-6 flex items-center justify-center border-b border-white/5"><ResilientLogo className="h-16 w-full" /></div>
-        <nav className="p-4 space-y-1 flex lg:flex-col overflow-x-auto scrollbar-hide snap-x">
-          <button onClick={()=>setActiveTab('dashboard')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='dashboard'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><LayoutDashboard size={20}/><span className="text-[10px] font-black tracking-widest">DASHBOARD</span></button>
-          <button onClick={()=>setActiveTab('sales')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='sales'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><ShoppingCart size={20}/><span className="text-[10px] font-black tracking-widest">POS</span></button>
-          <button onClick={()=>setActiveTab('history')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='history'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><History size={20}/><span className="text-[10px] font-black tracking-widest">HISTORY</span></button>
-          {canAccess('products') && <button onClick={()=>setActiveTab('products')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='products'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><Package size={20}/><span className="text-[10px] font-black tracking-widest">PRODUCTS</span></button>}
-          {canAccess('stock') && <button onClick={()=>setActiveTab('stock')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='stock'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><Boxes size={20}/><span className="text-[10px] font-black tracking-widest">STOCK</span></button>}
-          {loggedInUser?.role === 'admin' && <button onClick={()=>setActiveTab('users')} className={`snap-start w-full flex items-center space-x-3 p-4 rounded-2xl transition-all flex-shrink-0 ${activeTab==='users'?'bg-[#CEA85E] text-white shadow-lg':'text-slate-400 hover:bg-white/5'}`}><Users size={20}/><span className="text-[10px] font-black tracking-widest">USERS</span></button>}
-          <button onClick={()=>setLoggedInUser(null)} className="snap-start w-full flex items-center space-x-3 p-4 rounded-2xl text-red-400 hover:bg-red-400/10 flex-shrink-0"><LogOut size={20}/><span className="text-[10px] font-black tracking-widest">LOGOUT</span></button>
-        </nav>
-      </div>
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="bg-white/80 backdrop-blur-md h-16 border-b px-6 flex items-center justify-between z-10 shadow-sm"><div className="text-slate-400 font-black text-[10px] tracking-[0.3em] uppercase hidden sm:block">Management System</div><div className="flex items-center space-x-2 text-xs bg-slate-100 py-1.5 px-4 rounded-full border border-slate-200"><User size={12} className="text-blue-600" /><span className="font-black text-slate-700 uppercase">{loggedInUser?.username}</span></div></header>
-        <main className="flex-1 overflow-auto p-4 md:p-8 pb-24 bg-[#f8fafc]"><div className="max-w-5xl mx-auto">
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'products' && <ProductsView />}
-          {activeTab === 'stock' && <StockView />}
-          {activeTab === 'history' && <SalesHistoryView />}
-          {activeTab === 'sales' && <SalesView />}
-          {activeTab === 'users' && <UsersManagementView />}
-        </div></main>
-      </div>
+    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+      <h2>ENTERPRISE POS V2</h2>
+
+      <h3>ยอดขายรวม: ฿{formatMoney(totalRevenue)}</h3>
+      <h3>กำไรรวม: ฿{formatMoney(totalProfit)}</h3>
+
+      <hr />
+
+      {scanning && <div id="qr-reader" />}
+
+      <input
+        placeholder="เลขบิล"
+        value={orderId}
+        onChange={(e) => setOrderId(e.target.value)}
+      />
+      <button onClick={() => setScanning(true)}>Scan QR</button>
+
+      <form onSubmit={addToCart}>
+        <select
+          value={pid}
+          onChange={(e) => {
+            const p = getProduct(e.target.value);
+            setPid(e.target.value);
+            setPrice(p?.price || "");
+          }}
+        >
+          <option value="">เลือกสินค้า</option>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.stock})
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+        />
+
+        <input
+          type="number"
+          value={qty}
+          onChange={(e) =>
+            setQty(Math.max(1, Number(e.target.value)))
+          }
+        />
+
+        <button>เพิ่มสินค้า</button>
+      </form>
+
+      <h3>Cart</h3>
+      {cart.map((c) => (
+        <div key={c.id}>
+          {c.name} - {c.qty} ชิ้น
+        </div>
+      ))}
+
+      <button
+        disabled={processing || cart.length === 0}
+        onClick={confirmOrder}
+      >
+        Confirm Order
+      </button>
+
+      <hr />
+
+      <h3>Orders</h3>
+      {orders.map((o) => (
+        <div key={o.id}>
+          {o.id} - ฿{formatMoney(o.totalAmount)}
+          <button onClick={() => deleteOrder(o.id)}>
+            Delete
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
