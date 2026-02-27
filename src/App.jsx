@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (วาดใหม่ให้ตรงต้นฉบับ 100%)
+// 🎨 โลโก้ The Resilient Clinic 
 // ==========================================
 const ResilientLogo = ({ className = "" }) => (
   <div className={`bg-[#0A142A] flex items-center justify-center overflow-hidden ${className}`}>
@@ -83,15 +83,14 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
-// ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน
+// 🛠️ ค่าเริ่มต้นสำหรับสิทธิ์ของพนักงาน (แยกย่อย สิทธิ์การดู / แก้ไข / ส่งออก)
 const defaultPermissions = {
-  dashboard: false,
-  products: false,
-  stock: false,
-  history: false
+  dashboard: false, dashboardExport: false,
+  products: false, productsEdit: false, productsExport: false,
+  stock: false, stockEdit: false, stockExport: false,
+  history: false, historyEdit: false
 };
 
-// เปลี่ยนชื่อตัวเลือกช่องทางการขาย
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)'];
 
 // ==========================================
@@ -100,7 +99,6 @@ const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)
 export default function App() {
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
 
-  // --- 🗄️ 3.1 การจัดการตัวแปรสถานะ (State Management) ---
   const [loggedInUser, setLoggedInUser] = useState(null); 
   const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   
@@ -112,7 +110,6 @@ export default function App() {
   const [isUsersLoaded, setIsUsersLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  // --- 🔄 3.2 เชื่อมต่อและดึงข้อมูลแบบ Real-time ---
   useEffect(() => {
     const connectionTimeout = setTimeout(() => {
       if (!isUsersLoaded || isLoading) {
@@ -161,7 +158,6 @@ export default function App() {
     };
   }, []);
 
-  // ตรวจสอบสิทธิ์แบบ Real-time
   useEffect(() => {
     if (loggedInUser) {
       const updatedUser = users.find(u => u.id === loggedInUser.id);
@@ -176,15 +172,24 @@ export default function App() {
     }
   }, [users]);
 
-  // --- 🛠️ 3.3 ฟังก์ชันช่วยเหลือ (Helper Functions) ---
+  // --- 🛠️ 3.3 ฟังก์ชันช่วยเหลือในการตรวจสิทธิ์ (Permission Helpers) ---
   const canAccess = (tabName) => {
-    if (isExecutiveView) {
-      return tabName === 'dashboard' || tabName === 'stock';
-    }
+    if (isExecutiveView) return tabName === 'dashboard' || tabName === 'stock';
     if (!loggedInUser) return false;
-    if (loggedInUser.role === 'admin') return true; 
-    if (tabName === 'sales') return true; 
+    if (loggedInUser.role === 'admin' || tabName === 'sales') return true; 
     return !!loggedInUser.permissions?.[tabName]; 
+  };
+
+  const canEditTab = (tabName) => {
+    if (!loggedInUser) return false;
+    if (loggedInUser.role === 'admin') return true;
+    return !!loggedInUser.permissions?.[tabName + 'Edit'];
+  };
+
+  const canExportTab = (tabName) => {
+    if (!loggedInUser) return false;
+    if (loggedInUser.role === 'admin') return true;
+    return !!loggedInUser.permissions?.[tabName + 'Export'];
   };
 
   const formatMoney = (amount) => {
@@ -194,7 +199,6 @@ export default function App() {
 
   const getProduct = (id) => products.find(p => p.id === id);
 
-  // ป้องกันแอปพังจากวันที่ผิดพลาดแบบ 100%
   const getLocalISODate = (dateString) => {
     try {
       const d = dateString ? new Date(dateString) : new Date();
@@ -206,24 +210,36 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันดาวน์โหลด Excel รองรับ iOS และ Android
+  // 🛠️ แก้ไขฟังก์ชันดาวน์โหลด Excel ให้รองรับมือถือ (Mobile Safe Blob Download)
   const downloadMobileSafeCSV = (csvString, filename) => {
     const universalBOM = "\uFEFF";
     const finalCSV = universalBOM + csvString;
     const blob = new Blob([finalCSV], { type: 'text/csv;charset=utf-8;' });
     
-    const url = URL.createObjectURL(blob);
+    // สำหรับ Edge / IE รุ่นเก่า
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(blob, filename);
+      return;
+    }
+
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename;
+    link.setAttribute('download', filename);
     link.style.display = 'none';
     document.body.appendChild(link);
     
-    link.click();
+    // ใช้ MouseEvent เพื่อให้ระบบมือถือ (iOS/Android) ยอมรับคำสั่ง Download ดีกว่าการ .click() เฉยๆ
+    const event = new MouseEvent('click', {
+      view: window,
+      bubbles: true,
+      cancelable: true
+    });
+    link.dispatchEvent(event);
     
     setTimeout(() => {
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(url);
     }, 1000);
   };
 
@@ -322,7 +338,6 @@ export default function App() {
     
     filteredSales.forEach(s => {
       const p = getProduct(s.productId);
-      
       if (!p) return; 
 
       const qty = Number(s.quantity) || 0;
@@ -427,7 +442,11 @@ export default function App() {
                 {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-medium">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
               </div>
             )}
-            <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+            
+            {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel หรือไม่ */}
+            {canExportTab('dashboard') && (
+              <button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2.5 rounded-md md:rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs md:text-sm font-medium"><Download size={14} className="md:w-4 md:h-4" /><span>ส่งออก Excel</span></button>
+            )}
           </div>
         </div>
         
@@ -493,12 +512,10 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // --- State สำหรับระบบค้นหาสินค้าใน Dropdown ---
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const dropdownRef = useRef(null);
 
-    // ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown
     useEffect(() => {
       const handleClickOutside = (event) => {
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -509,14 +526,11 @@ export default function App() {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // กรองสินค้าตามคำค้นหา (ดักจับ Error 100%)
     const filteredProductsForSelect = useMemo(() => {
       if (!productSearchTerm) return products;
       return products.filter(p => String(p?.name || '').toLowerCase().includes(String(productSearchTerm || '').toLowerCase()));
     }, [products, productSearchTerm]);
-    // ---------------------------------------------
 
-    // ดึงราคาตั้งต้นเมื่อเปลี่ยนสินค้า
     useEffect(() => {
       if (selectedProduct) {
         const p = getProduct(selectedProduct);
@@ -526,7 +540,6 @@ export default function App() {
       }
     }, [selectedProduct, products]);
 
-    // คำนวณยอดรวม (ป้องกัน NaN เด็ดขาด)
     const posTotal = selectedProduct ? (Number(customPrice) || 0) * (Number(quantity) || 0) : 0;
 
     const recentSales = sales
@@ -556,8 +569,8 @@ export default function App() {
           productId: selectedProduct, 
           quantity: finalQuantity, 
           total: finalPrice * finalQuantity, 
-          unitPrice: finalPrice,          // บันทึกราคาขาย ณ วันนั้น
-          unitCost: Number(product.cost), // บันทึกต้นทุน ณ วันนั้น
+          unitPrice: finalPrice,          
+          unitCost: Number(product.cost), 
           date: new Date().toISOString(), 
           soldBy: loggedInUser?.username || 'unknown'
         });
@@ -582,27 +595,19 @@ export default function App() {
 
     return (
       <div className="relative space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
-        
         <div className="absolute inset-0 bg-[#f4f7ff] -z-20 rounded-[3rem]"></div>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/60 via-transparent to-transparent -z-10 pointer-events-none"></div>
 
-        {/* ส่วนบันทึกการขาย (POS) แบบใหม่ตรงปก */}
         <div className="bg-white/95 backdrop-blur-sm rounded-[2rem] shadow-xl border border-white p-6 md:p-10">
-          
           <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">
-              คีย์ข้อมูลการขาย (POS)
-            </h2>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">คีย์ข้อมูลการขาย (POS)</h2>
           </div>
 
           <form onSubmit={handleCheckout} className="space-y-8">
             {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-center justify-center ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
             
-            {/* 1. เลือกร้านค้า (ไม่มีไอคอน ตรงกลาง) */}
             <div className="text-center">
-              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                เลือกร้านค้า
-              </label>
+              <label className="block text-sm font-bold text-slate-700 mb-3 text-center">เลือกร้านค้า</label>
               <div className="flex flex-wrap justify-center gap-2 md:gap-3">
                 {STORE_OPTIONS.map(store => {
                   const isSelected = selectedStore === store;
@@ -621,10 +626,7 @@ export default function App() {
                       }`}
                     >
                       {store}
-                      {/* เอฟเฟกต์มุมพับ */}
-                      {isSelected && (
-                        <div className="absolute top-0 right-0 w-3 h-3 bg-white/25 rounded-bl-lg"></div>
-                      )}
+                      {isSelected && <div className="absolute top-0 right-0 w-3 h-3 bg-white/25 rounded-bl-lg"></div>}
                     </button>
                   )
                 })}
@@ -633,14 +635,10 @@ export default function App() {
 
             <div className="border-b border-dashed border-slate-200/60 mx-10"></div>
 
-            {/* 2. เลือกสินค้าและรายละเอียด (ไม่มีไอคอน ตรงกลาง) */}
             <div className="bg-gray-50/50 p-5 md:p-6 rounded-2xl border border-gray-100 space-y-6">
               <div className="space-y-3 relative" ref={dropdownRef}>
-                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                  เลือกสินค้า
-                </label>
+                <label className="block text-sm font-bold text-slate-700 mb-3 text-center">เลือกสินค้า</label>
                 
-                {/* ปุ่มกดเปิด Dropdown */}
                 <div 
                   onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)}
                   className={`w-full p-4 border rounded-xl bg-white text-base cursor-pointer flex justify-center items-center transition-all duration-300 shadow-sm relative ${
@@ -655,7 +653,6 @@ export default function App() {
                   <ChevronDown size={20} className={`absolute right-4 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-blue-500' : ''}`} />
                 </div>
 
-                {/* กล่องรายชื่อสินค้าค้นหาได้ */}
                 {isDropdownOpen && (
                   <div className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl max-h-[300px] flex flex-col top-full left-0 origin-top animate-in fade-in zoom-in-95 duration-200 text-left">
                     <div className="p-3 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
@@ -719,9 +716,7 @@ export default function App() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
                 <div className="text-center relative">
-                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                    ราคาขาย/ชิ้น
-                  </label>
+                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">ราคาขาย/ชิ้น</label>
                   <div className="relative">
                     <input 
                       type="number" 
@@ -737,9 +732,7 @@ export default function App() {
                 </div>
 
                 <div className="text-center">
-                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">
-                    จำนวนชิ้น
-                  </label>
+                  <label className="block text-sm font-bold text-slate-700 mb-3 text-center">จำนวนชิ้น</label>
                   <div className="flex items-center h-[54px] shadow-sm rounded-xl overflow-hidden border border-slate-200 bg-white">
                     <button type="button" onClick={() => setQuantity(Math.max(1, (Number(quantity)||0) - 1))} className="h-full w-16 bg-slate-50 hover:bg-slate-100 font-black text-slate-600 transition-colors border-r border-slate-200 focus:outline-none active:bg-slate-200 text-xl">-</button>
                     <input 
@@ -755,7 +748,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* 3. สรุปยอดและบันทึก */}
             <div className="pt-2">
               <div className="bg-[#eef5ff] p-6 md:p-8 rounded-[1.5rem] border border-[#e0ebff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                 <div className="text-center md:text-left w-full md:w-auto">
@@ -771,15 +763,11 @@ export default function App() {
                 </button>
               </div>
             </div>
-
           </form>
         </div>
 
-        {/* ตารางรายการล่าสุด */}
         <div className="pt-2">
-          <h3 className="text-base font-bold text-slate-700 mb-4 px-2">
-            รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)
-          </h3>
+          <h3 className="text-base font-bold text-slate-700 mb-4 px-2">รายการที่เพิ่งขายไปวันนี้ (5 รายการล่าสุด)</h3>
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[500px]">
               <thead>
@@ -1046,35 +1034,40 @@ export default function App() {
                     <span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span>
                   </td>
                   <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
-                    {isCurrentRowEditing ? (
-                      <>
-                        <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Save size={16} className="md:w-4 md:h-4" /></button>
-                        <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><X size={16} className="md:w-4 md:h-4" /></button>
-                      </>
+                    {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขก่อนแสดงปุ่ม */}
+                    {canEditTab('history') ? (
+                      isCurrentRowEditing ? (
+                        <>
+                          <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Save size={16} className="md:w-4 md:h-4" /></button>
+                          <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><X size={16} className="md:w-4 md:h-4" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => { 
+                              setIsEditing(sale.id); 
+                              setEditForm({
+                                productId: sale.productId, 
+                                quantity: sale.quantity,
+                                date: formatForInput(sale.date),
+                                store: sale.store || STORE_OPTIONS[0],
+                                customPrice: actualPricePerUnit
+                              }); 
+                            }} 
+                            className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
+                          >
+                            <Edit2 size={16} className="md:w-4 md:h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(sale)} 
+                            className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
+                          >
+                            <Trash2 size={16} className="md:w-4 md:h-4" />
+                          </button>
+                        </>
+                      )
                     ) : (
-                      <>
-                        <button 
-                          onClick={() => { 
-                            setIsEditing(sale.id); 
-                            setEditForm({
-                              productId: sale.productId, 
-                              quantity: sale.quantity,
-                              date: formatForInput(sale.date),
-                              store: sale.store || STORE_OPTIONS[0],
-                              customPrice: actualPricePerUnit
-                            }); 
-                          }} 
-                          className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
-                        >
-                          <Edit2 size={16} className="md:w-4 md:h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(sale)} 
-                          className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"
-                        >
-                          <Trash2 size={16} className="md:w-4 md:h-4" />
-                        </button>
-                      </>
+                      <span className="text-gray-400 text-[10px]">ดูได้เท่านั้น</span>
                     )}
                   </td>
                 </tr>
@@ -1166,8 +1159,14 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการข้อมูลสินค้า</h2>
             <div className="flex space-x-2 w-full sm:w-auto">
-              <button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium"><Download size={16} /><span>ส่งออก Excel</span></button>
-              {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>}
+              {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel หรือไม่ */}
+              {canExportTab('products') && (
+                <button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium"><Download size={16} /><span>ส่งออก Excel</span></button>
+              )}
+              {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขก่อนให้เพิ่มสินค้า */}
+              {!isAdding && canEditTab('products') && (
+                <button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 md:space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm font-medium"><Plus size={16} /><span>เพิ่มสินค้าใหม่</span></button>
+              )}
             </div>
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
@@ -1195,7 +1194,7 @@ export default function App() {
                 <th className="p-3 md:p-4 font-medium">ชื่อสินค้า</th>
                 <th className="p-3 md:p-4 font-medium">ราคาคลินิก</th>
                 <th className="p-3 md:p-4 font-medium">ราคาขาย</th>
-                <th className="p-3 md:p-4 font-medium text-right">จัดการ</th>
+                {canEditTab('products') && <th className="p-3 md:p-4 font-medium text-right">จัดการ</th>}
               </tr>
             </thead>
             <tbody className="text-xs md:text-sm">
@@ -1217,13 +1216,17 @@ export default function App() {
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-gray-800">{product.name}</span>}</td>
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-medium">฿{formatMoney(product.cost)}</span>}</td>
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 md:p-2 border rounded text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-medium">฿{formatMoney(product.price)}</span>}</td>
-                  <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
-                    {isEditing === product.id ? (
-                      <><button onClick={() => handleSave(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setIsEditing(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
-                    ) : (
-                      <><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) await deleteDoc(doc(db, "products", product.id)); }} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md transition"><Trash2 size={16} /></button></>
-                    )}
-                  </td>
+                  
+                  {/* 🛠️ ตรวจสอบสิทธิ์การแก้ไขสินค้า */}
+                  {canEditTab('products') && (
+                    <td className="p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap">
+                      {isEditing === product.id ? (
+                        <><button onClick={() => handleSave(product.id)} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-md transition"><Save size={16} /></button><button onClick={() => setIsEditing(null)} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-md transition"><X size={16} /></button></>
+                      ) : (
+                        <><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md transition"><Edit2 size={16} /></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) await deleteDoc(doc(db, "products", product.id)); }} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md transition"><Trash2 size={16} /></button></>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredAndSortedProducts.length === 0 && !isAdding && (
@@ -1275,7 +1278,6 @@ export default function App() {
       if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
       
       const csvRows = [];
-      // อัปเดตชื่อในรายงาน Excel
       csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Resilient Clinic']);
       csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
       csvRows.push([]);
@@ -1295,9 +1297,14 @@ export default function App() {
         <div className="flex flex-col bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-2xl font-bold text-gray-800">จัดการสต๊อกสินค้า</h2>
-            <button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium">
-              <Download size={16} /><span>ส่งออกสต๊อก (Excel)</span>
-            </button>
+            
+            {/* 🛠️ ตรวจสอบสิทธิ์ว่ามีสิทธิ์โหลด Excel สต๊อกหรือไม่ */}
+            {canExportTab('stock') && (
+              <button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 md:space-x-2 bg-green-50 text-green-700 border border-green-200 px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-green-100 transition text-xs md:text-sm font-medium">
+                <Download size={16} /><span>ส่งออกสต๊อก (Excel)</span>
+              </button>
+            )}
+
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-gray-100">
             <div className="relative flex-1 sm:max-w-xs">
@@ -1324,8 +1331,8 @@ export default function App() {
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center w-10 sm:w-16">ลำดับ</th>
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium">ชื่อสินค้า</th>
                   <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-center whitespace-nowrap">คงเหลือ</th>
-                  {/* ซ่อนคอลัมน์อัปเดต ถ้าเป็นการเปิดจากลิงก์ผู้บริหารแบบไม่ได้ล็อกอิน */}
-                  {!isExecutiveView && <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-right whitespace-nowrap">อัปเดต</th>}
+                  {/* 🛠️ ตรวจสอบสิทธิ์การอัปเดตสต๊อก */}
+                  {!isExecutiveView && canEditTab('stock') && <th className="py-3 px-1 sm:px-3 md:p-4 font-medium text-right whitespace-nowrap">อัปเดต</th>}
                 </tr>
               </thead>
               <tbody className="text-[11px] sm:text-xs md:text-sm">
@@ -1342,7 +1349,7 @@ export default function App() {
                         <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${stockAmount <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{stockAmount} ชิ้น</span>
                       )}
                     </td>
-                    {!isExecutiveView && (
+                    {!isExecutiveView && canEditTab('stock') && (
                       <td className="py-3 px-1 sm:px-3 md:p-4 text-right space-x-1 whitespace-nowrap">
                         {editingStockId === product.id ? (
                           <><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1 md:p-1.5 rounded-md transition"><Save size={14} className="md:w-4 md:h-4"/></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1 md:p-1.5 rounded-md transition"><X size={14} className="md:w-4 md:h-4"/></button></>
@@ -1354,7 +1361,7 @@ export default function App() {
                   </tr>
                 )})}
                 {filteredAndSortedProducts.length === 0 && (
-                  <tr><td colSpan={isExecutiveView ? 3 : 4} className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
+                  <tr><td colSpan={isExecutiveView || !canEditTab('stock') ? 3 : 4} className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>
                 )}
               </tbody>
             </table>
@@ -1367,15 +1374,24 @@ export default function App() {
   // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบและกำหนดสิทธิ์ (Users Management)
   const UsersManagementView = () => {
     const [isEditing, setIsEditing] = useState(null);
+    // ใส่ defaultPermissions เผื่อ user เก่าไม่มีค่าเหล่านี้
     const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
     const [isAdding, setIsAdding] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // 🛠️ ตรรกะการจัดกลุ่มสิทธิ์ ถ้าปิดการมองเห็น ให้สิทธิ์ย่อยๆ ถูกปิดตามอัตโนมัติ
     const handlePermissionChange = (perm) => {
-      setEditForm(prev => ({
-        ...prev,
-        permissions: { ...prev.permissions, [perm]: !prev.permissions[perm] }
-      }));
+      setEditForm(prev => {
+        const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] };
+        
+        // Auto-disable sub-permissions if main permission is turned off
+        if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false;
+        if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
+        if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
+        if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false;
+
+        return { ...prev, permissions: newPerms };
+      });
     };
 
     const handleSave = async (id) => {
@@ -1424,8 +1440,8 @@ export default function App() {
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
                 <th className="p-3 md:p-4 font-medium">Username</th>
                 <th className="p-3 md:p-4 font-medium">รหัสผ่าน</th>
-                <th className="p-3 md:p-4 font-medium">ระดับสิทธิ์ (Role)</th>
-                <th className="p-3 md:p-4 font-medium">สิทธิ์การเข้าถึง (Permissions)</th>
+                <th className="p-3 md:p-4 font-medium">ระดับสิทธิ์</th>
+                <th className="p-3 md:p-4 font-medium">ตั้งค่าความสามารถของพนักงาน (Permissions)</th>
                 <th className="p-3 md:p-4 font-medium text-right">จัดการ</th>
               </tr>
             </thead>
@@ -1444,12 +1460,40 @@ export default function App() {
                     {editForm.role === 'admin' ? (
                       <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">เข้าถึงได้ทุกเมนู (Admin)</span>
                     ) : (
-                      <div className="flex flex-col space-y-1.5">
+                      // 🛠️ UI สิทธิ์การใช้งานแบบละเอียด
+                      <div className="flex flex-col space-y-3">
                         <span className="text-gray-500 font-medium flex items-center"><ShieldCheck size={14} className="mr-1"/>เลือกเมนูที่อนุญาต:</span>
-                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>แดชบอร์ด</span></label>
-                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.products} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสินค้า</span></label>
-                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสต๊อก</span></label>
-                        <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions.history} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>ประวัติการขาย (แก้/ลบ)</span></label>
+                        
+                        <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                           <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600"/> <span>แดชบอร์ด</span></label>
+                           <div className="ml-5">
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                           </div>
+                        </div>
+
+                        <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                           <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600"/> <span>จัดการสินค้า</span></label>
+                           <div className="ml-5 flex flex-wrap gap-2">
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label>
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                           </div>
+                        </div>
+
+                        <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                           <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600"/> <span>จัดการสต๊อก</span></label>
+                           <div className="ml-5 flex flex-wrap gap-2">
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500"/> <span>อัปเดตตัวเลขได้</span></label>
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                           </div>
+                        </div>
+
+                        <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                           <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600"/> <span>ประวัติการขาย</span></label>
+                           <div className="ml-5">
+                             <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label>
+                           </div>
+                        </div>
+
                       </div>
                     )}
                   </td>
@@ -1485,11 +1529,40 @@ export default function App() {
                       editForm.role === 'admin' ? (
                         <span className="text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded text-xs mt-2 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>
                       ) : (
-                        <div className="flex flex-col space-y-1.5">
-                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>แดชบอร์ด</span></label>
-                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสินค้า</span></label>
-                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>จัดการสต๊อก</span></label>
-                          <label className="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" checked={editForm.permissions?.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 focus:ring-blue-500"/> <span>ประวัติการขาย (แก้/ลบ)</span></label>
+                         // 🛠️ ฟอร์มแก้ไขสิทธิ์พนักงาน
+                        <div className="flex flex-col space-y-3">
+                          <span className="text-gray-500 font-medium flex items-center"><ShieldCheck size={14} className="mr-1"/>เลือกเมนูที่อนุญาต:</span>
+                          
+                          <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                             <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600"/> <span>แดชบอร์ด</span></label>
+                             <div className="ml-5">
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                             </div>
+                          </div>
+  
+                          <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                             <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600"/> <span>จัดการสินค้า</span></label>
+                             <div className="ml-5 flex flex-wrap gap-2">
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label>
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                             </div>
+                          </div>
+  
+                          <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                             <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600"/> <span>จัดการสต๊อก</span></label>
+                             <div className="ml-5 flex flex-wrap gap-2">
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500"/> <span>อัปเดตตัวเลขได้</span></label>
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-green-600"/> <span>ส่งออก Excel ได้</span></label>
+                             </div>
+                          </div>
+  
+                          <div className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                             <label className="flex items-center space-x-1.5 font-bold mb-1"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600"/> <span>ประวัติการขาย</span></label>
+                             <div className="ml-5">
+                               <label className="flex items-center space-x-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label>
+                             </div>
+                          </div>
+  
                         </div>
                       )
                     ) : (
@@ -1528,7 +1601,6 @@ export default function App() {
     );
   };
 
-
   // 🎨 กำหนด Style ของปุ่มเมนูให้ตรงตามดีไซน์ใหม่
   const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-3.5 rounded-xl transition-all duration-200 whitespace-nowrap text-sm md:text-base";
   const navItemActiveStyle = "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30";
@@ -1560,8 +1632,6 @@ export default function App() {
         {/* Header ผู้บริหารแบบใหม่ */}
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
-            
-            {/* 🛠️ แก้ไขหน้าผู้บริหาร: โลโก้เพียวๆ ไม่มีตัวอักษร "ผู้บริหาร" */}
             <div className="flex items-center space-x-3">
               <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
             </div>
@@ -1589,8 +1659,6 @@ export default function App() {
         {/* Content ผู้บริหาร */}
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
-            
-            {/* 🛠️ แก้ไขหน้าผู้บริหาร: เพิ่มป้าย Executive View */}
             <div className="flex items-center mb-1 md:mb-2">
               <div className="bg-white border border-gray-200 text-slate-700 px-3.5 py-1.5 rounded-full text-xs md:text-sm font-bold flex items-center shadow-sm">
                 <span className="text-amber-500 mr-2 text-base leading-none">👑</span> 
@@ -1611,10 +1679,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans">
       
-      {/* แถบเมนูด้านซ้าย (Sidebar) - เพิ่มสีพื้นหลังไล่ระดับตามแบบ */}
+      {/* แถบเมนูด้านซ้าย (Sidebar) */}
       <div className="w-full md:w-64 bg-gradient-to-br from-white via-white to-blue-50 border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        
-        {/* เนื้อหาหลักของ Sidebar ให้อยู่เหนือพื้นหลัง */}
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-4 flex items-center justify-center border-b border-slate-100">
             <ResilientLogo className="h-16 w-full rounded-lg shadow-sm" />
