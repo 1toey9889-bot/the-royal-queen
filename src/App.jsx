@@ -311,7 +311,7 @@ export default function App() {
 
         return isTimeMatch && isProductMatch && isStoreMatch;
       });
-      // 🛠️ FIX 1: เพิ่ม products ลงใน array เพื่อให้ dashboard คำนวณใหม่เมื่อลบสินค้า
+      // 🛠️ แก้ไขการคำนวณแดชบอร์ด: เพิ่ม products ลงใน array เพื่อให้ dashboard คำนวณใหม่เมื่อลบสินค้า
     }, [sales, products, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
     let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
@@ -319,7 +319,7 @@ export default function App() {
     filteredSales.forEach(s => {
       const p = getProduct(s.productId);
       
-      // 🛠️ FIX 2: ดักจับข้อมูลยอดขายที่เป็นของสินค้าที่ถูกลบไปแล้ว ไม่ให้นำมาบวกซ้ำ
+      // 🛠️ แก้ไขการคำนวณแดชบอร์ด: ดักจับข้อมูลยอดขายที่เป็นของสินค้าที่ถูกลบไปแล้ว ไม่ให้นำมาบวกซ้ำ
       if (!p) return; 
 
       const qty = Number(s.quantity) || 0;
@@ -1557,9 +1557,10 @@ export default function App() {
         {/* Header ผู้บริหารแบบใหม่ */}
         <div className="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
+            
+            {/* 🛠️ แก้ไข 1: ลบคำว่า "ผู้บริหาร" ออก เหลือแค่โลโก้ */}
             <div className="flex items-center space-x-3">
               <ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" />
-              <span className="text-lg md:text-xl font-bold text-gray-700 hidden sm:block border-l-2 border-gray-300 pl-3">ผู้บริหาร</span>
             </div>
             
             {/* แท็บเมนูผู้บริหาร */}
@@ -1585,6 +1586,15 @@ export default function App() {
         {/* Content ผู้บริหาร */}
         <div className="flex-1 overflow-auto p-3 md:p-6 pb-20">
           <div className="max-w-5xl mx-auto space-y-4">
+            
+            {/* 🛠️ แก้ไข 2: เพิ่มป้าย Executive View ตรงตามรูปเป๊ะ */}
+            <div className="flex items-center mb-1 md:mb-2">
+              <div className="bg-white border border-gray-200 text-slate-700 px-3.5 py-1.5 rounded-full text-xs md:text-sm font-bold flex items-center shadow-sm">
+                <span className="text-amber-500 mr-2 text-base leading-none">👑</span> 
+                Executive View
+              </div>
+            </div>
+
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'stock' && <StockView />}
           </div>
