@@ -12,7 +12,7 @@ import {
   Save, X, TrendingUp, CalendarDays, DollarSign, Boxes, Users, 
   LogOut, Lock, User, Download, History, BarChart3, ShieldCheck, 
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
-  Barcode, Store, UserCircle, FileText, Image as ImageIcon // 🚀 อัปเดตไอคอน
+  Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon
 } from 'lucide-react';
 // 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
@@ -318,13 +318,16 @@ export default function App() {
   const SalesView = () => {
     const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
     const [orderId, setOrderId] = useState(''); 
-    const [customerName, setCustomerName] = useState('');
+    const [customerName, setCustomerName] = useState(''); // ข้อมูลชื่อลูกค้า
 
     // 🚀 State สำหรับโหมดสแกนเนอร์และ OCR
-    const [scanMode, setScanMode] = useState(null); // 'camera', 'image', 'text'
+    const [scanMode, setScanMode] = useState(null); // 'camera', 'ocr_camera', 'text'
     const [smartText, setSmartText] = useState('');
     const [isOcrProcessing, setIsOcrProcessing] = useState(false);
     const [ocrStatus, setOcrStatus] = useState('');
+    const videoRef = useRef(null);
+    const canvasRef = useRef(null);
+    const fileInputRef = useRef(null); // เพิ่ม Ref สำหรับระบบเลือกภาพ
     
     const [cart, setCart] = useState([]); 
     const [message, setMessage] = useState('');
@@ -348,80 +351,125 @@ export default function App() {
       setCustomGrandTotal('');
     }, [cart]);
 
+    // 🚀 ฟังก์ชันปิดกล้อง
+    const stopCamera = () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      }
+    };
+
+    // ปิดกล้องเมื่อเปลี่ยนโหมดหรือปิดโมดอล
+    useEffect(() => {
+      if (scanMode !== 'ocr_camera') {
+         stopCamera();
+      }
+      return () => stopCamera();
+    }, [scanMode]);
+
+    // 🚀 เปิดกล้องสำหรับ OCR (Notebook/Mobile)
+    const startOcrCamera = async () => {
+      setScanMode('ocr_camera');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตสิทธิ์ (Permission)");
+        setScanMode(null);
+      }
+    };
+
+    // 🚀 ฟังก์ชันถ่ายภาพและส่งให้ Tesseract (AI) ประมวลผล
+    const captureAndRead = async () => {
+      if (!videoRef.current || !canvasRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      processOcrImage(imageData);
+    };
+
+    // 🚀 ฟังก์ชันเลือกรูปภาพผ่าน File Input แล้วส่งให้ Tesseract
+    const handleImageForOcr = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const imageData = event.target.result;
+        processOcrImage(imageData);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // 🚀 แกนหลักการทำงาน OCR
+    const processOcrImage = async (imageData) => {
+      setIsOcrProcessing(true);
+      setOcrStatus('กำลังโหลดโมเดล AI...');
+      stopCamera(); // ปิดกล้องทันทีที่เริ่มสแกนรูป
+
+      try {
+        const result = await Tesseract.recognize(imageData, 'tha+eng', {
+          logger: m => {
+             if (m.status === 'recognizing text') {
+                setOcrStatus(`กำลังวิเคราะห์รูปภาพ... ${Math.round(m.progress * 100)}%`);
+             }
+          }
+        });
+        
+        const extractedText = result.data.text;
+        handleSmartExtract(extractedText);
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการอ่านข้อความจาก AI');
+        setScanMode(null);
+      }
+      setIsOcrProcessing(false);
+    };
+
     const filteredProductsForSelect = useMemo(() => {
       if (!productSearchTerm) return products;
       return products.filter(p => String(p?.name || '').toLowerCase().includes(String(productSearchTerm || '').toLowerCase()));
     }, [products, productSearchTerm]);
 
-    // 🚀 ฟังก์ชันดึงข้อมูลจากข้อความอัจฉริยะ (Smart Extract - รองรับ ไทย/อังกฤษ)
+    // 🚀 ฟังก์ชันดึงข้อมูลจากข้อความอัจฉริยะ (Smart Extract)
     const handleSmartExtract = (text) => {
       setSmartText(text);
       let foundOrder = false;
       let foundName = false;
 
-      // หารหัสออเดอร์ (รองรับคำว่า คำสั่งซื้อ หรือ Order No / Order ID / Order)
+      // หารหัสออเดอร์
       const orderMatch = text.match(/(?:คำสั่งซื้อ|คำสังซื้อ|คําสั่งซื่อ|Order No\.?|Order ID|Order)[:\s]*([A-Z0-9_-]+)/i) || text.match(/(260[A-Z0-9]+)/i); 
       if (orderMatch && orderMatch[1]) {
           setOrderId(orderMatch[1].trim());
           foundOrder = true;
       }
 
-      // หาชื่อลูกค้า (รองรับ ผู้รับ / Recipient / Receiver / TO)
+      // หาชื่อลูกค้า
       const nameMatch = text.match(/(?:ผู้รับ|ผู้รัย|Recipient|Receiver)\s*\(?TO\)?[:\s]*([^\n]+)/i) || text.match(/(?:ผู้รับ|ผู้รัย|Recipient|Receiver)[:\s]*([^\n]+)/i) || text.match(/\bTO[:\s]+([^\n]+)/i);
       if (nameMatch && nameMatch[1]) {
           let name = nameMatch[1].trim();
-          name = name.replace(/\|/g, '').trim(); // ลบขยะที่ AI อาจจะอ่านพลาด
+          name = name.replace(/\|/g, '').trim(); 
           setCustomerName(name);
           foundName = true;
       }
 
-      // ถ้าเจอข้อมูล ให้เด้งกลับอัตโนมัติแบบรวดเร็ว
       if (foundOrder || foundName) {
           setTimeout(() => {
-             setScanMode(null);
-             setSmartText('');
-          }, 400); 
-      }
-    };
-
-    // 🚀 ฟังก์ชันเลือกรูปจากคลัง (Library) แล้วส่งให้ AI Tesseract อ่าน
-    const handleImageForOcr = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      setIsOcrProcessing(true);
-      setOcrStatus('กำลังโหลดโมเดล AI... (รอสักครู่)');
-
-      try {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          const imageData = event.target.result;
-          
-          // รัน AI OCR
-          const result = await Tesseract.recognize(imageData, 'tha+eng', {
-            logger: m => {
-               if (m.status === 'recognizing text') {
-                  setOcrStatus(`กำลังวิเคราะห์รูปภาพ... ${Math.round(m.progress * 100)}%`);
-               }
-            }
-          });
-          
-          const extractedText = result.data.text;
-          setIsOcrProcessing(false);
-          
-          // ดึงข้อมูล
-          handleSmartExtract(extractedText);
-          
-          // ถ้าดึงแล้วหาไม่เจอทั้งคู่ ให้โชว์กล่องข้อความไว้เผื่อผู้ใช้แก้
-          if (!extractedText.match(/(?:คำสั่งซื้อ|Order|ผู้รับ|TO)/i)) {
-             setScanMode('text');
-          }
-        };
-        reader.readAsDataURL(file);
-      } catch (err) {
-        alert('เกิดข้อผิดพลาดในการอ่านรูปภาพ');
-        setIsOcrProcessing(false);
-        setScanMode('text');
+             if(foundOrder && foundName) {
+                 setScanMode(null);
+                 setSmartText('');
+             } else {
+                 setScanMode('text'); // โชว์ข้อความให้ผู้ใช้เผื่อต้องการแก้ไข
+             }
+          }, 800); 
+      } else {
+          setScanMode('text'); 
       }
     };
 
@@ -611,30 +659,29 @@ export default function App() {
           </div>
         )}
 
-        {/* 🚀 Modal สแกน Barcode / อัปโหลด AI OCR */}
+        {/* 🚀 Modal สแกน Barcode และ Smart Extract (กล้อง + เลือกรูป) */}
         {scanMode && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 w-full h-full">
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-white p-5 md:p-8 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh]">
                
-               {/* 🚀 3 แถบเมนู อัปเดตใหม่ให้รองรับการอัปโหลดไฟล์ */}
                <div className="flex bg-slate-100 p-1.5 rounded-xl shrink-0 gap-1">
-                  <button onClick={() => setScanMode('camera')} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Barcode size={16} className="mr-1.5 hidden sm:block"/> สแกนบาร์โค้ด</button>
-                  <button onClick={() => setScanMode('image')} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'image' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><ImageIcon size={16} className="mr-1.5 hidden sm:block"/> อัปโหลด (AI)</button>
-                  <button onClick={() => setScanMode('text')} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><FileText size={16} className="mr-1.5 hidden sm:block"/> วางข้อความ</button>
+                  <button onClick={() => setScanMode('camera')} className={`flex-1 py-2.5 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Barcode size={16} className="mr-1.5"/> สแกนโค้ด</button>
+                  <button onClick={() => startOcrCamera()} className={`flex-1 py-2.5 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'ocr_camera' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Camera size={16} className="mr-1.5"/> ดึงด้วย AI</button>
+                  <button onClick={() => setScanMode('text')} className={`flex-1 py-2.5 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><FileText size={16} className="mr-1.5"/> วางข้อความ</button>
                </div>
 
                {/* โหมด 1: สแกนบาร์โค้ดปกติ */}
                {scanMode === 'camera' && (
                  <>
                    <div className="text-center">
-                      <h3 className="font-black text-xl text-slate-800">สแกน Barcode ด้วยกล้อง</h3>
-                      <p className="text-sm text-slate-500 font-medium mt-1">นำกล้องไปส่องที่บาร์โค้ดบนใบปะหน้า</p>
+                      <h3 className="font-black text-xl text-slate-800">สแกน Barcode</h3>
+                      <p className="text-sm text-slate-500 font-medium mt-1">นำกล้องไปส่องที่บาร์โค้ดใบปะหน้า</p>
                    </div>
                    <div className="rounded-xl overflow-hidden border-4 border-slate-200 bg-black aspect-square w-full relative shrink-0">
                       <Scanner 
                          onResult={(text) => {
                            setOrderId(text);
-                           setScanMode(null); // เด้งกลับอัตโนมัติ
+                           setScanMode(null);
                          }}
                          onError={(error) => console.log(error?.message)}
                       />
@@ -642,30 +689,54 @@ export default function App() {
                  </>
                )}
 
-               {/* 🚀 โหมด 2: อัปโหลดรูปจากคลัง / ถ่ายภาพ (AI OCR) */}
-               {scanMode === 'image' && (
-                 <div className="flex flex-col items-center space-y-4">
+               {/* 🚀 โหมด 2: ถ่ายรูป หรือ อัปโหลดรูป ให้ AI อ่านข้อมูล */}
+               {scanMode === 'ocr_camera' && (
+                 <div className="flex flex-col items-center space-y-4 w-full">
                     <div className="text-center">
-                      <h3 className="font-black text-xl text-teal-700">อัปโหลดรูปให้ AI อ่านข้อมูล</h3>
-                      <p className="text-xs text-slate-500 font-medium mt-1">รองรับทั้งการถ่ายรูปใหม่ และการเลือกจากอัลบั้มรูปในเครื่อง</p>
+                      <h3 className="font-black text-xl text-teal-700">ดึงข้อมูลด้วย AI</h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1">สามารถถ่ายภาพสด หรือเลือกรูปจากคลังภาพได้เลย</p>
                     </div>
                     
-                    <label className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-teal-300 rounded-2xl bg-teal-50 hover:bg-teal-100 cursor-pointer transition-colors relative overflow-hidden min-h-[200px]">
-                       {isOcrProcessing ? (
-                          <div className="flex flex-col items-center">
-                            <div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <p className="font-bold text-teal-800 text-center">{ocrStatus}</p>
+                    {/* ส่วนแสดงวิดีโอจากกล้อง */}
+                    <div className="w-full relative rounded-xl overflow-hidden bg-black aspect-video border-4 border-teal-200">
+                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
+                       <canvas ref={canvasRef} className="hidden"></canvas>
+                       {isOcrProcessing && (
+                          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white p-4 text-center z-10">
+                             <div className="w-10 h-10 border-4 border-teal-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+                             <p className="font-bold text-sm">{ocrStatus}</p>
                           </div>
-                       ) : (
-                          <>
-                            <Camera size={48} className="text-teal-500 mb-3" />
-                            <span className="text-teal-700 font-bold text-lg text-center">แตะที่นี่เพื่อถ่ายรูป / เลือกรูป</span>
-                            <span className="text-teal-500 text-xs font-medium mt-2">AI รองรับภาษาไทยและอังกฤษ</span>
-                            {/* 🔥 input type file จะสามารถดึงคลังรูปภาพในมือถือ/iPad ได้อัตโนมัติ */}
-                            <input type="file" accept="image/*" className="hidden" onChange={handleImageForOcr} disabled={isOcrProcessing} />
-                          </>
                        )}
-                    </label>
+                    </div>
+
+                    {/* ปุ่ม ควบคุม */}
+                    <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
+                       <button 
+                          type="button" 
+                          onClick={captureAndRead} 
+                          disabled={isOcrProcessing}
+                          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white font-bold py-3.5 rounded-xl shadow-md flex items-center justify-center transition disabled:opacity-50"
+                       >
+                          <Aperture size={20} className="mr-2" /> ถ่ายภาพจากกล้อง
+                       </button>
+                       
+                       <button 
+                          type="button" 
+                          onClick={() => fileInputRef.current && fileInputRef.current.click()} 
+                          disabled={isOcrProcessing}
+                          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-md flex items-center justify-center transition disabled:opacity-50"
+                       >
+                          <ImageIcon size={20} className="mr-2" /> เลือกรูปจากคลัง
+                       </button>
+                       {/* ซ่อน Input File ไว้ เพื่อผูกกับปุ่มด้านบน */}
+                       <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          ref={fileInputRef}
+                          onChange={handleImageForOcr} 
+                       />
+                    </div>
                  </div>
                )}
 
@@ -674,7 +745,7 @@ export default function App() {
                  <div className="flex-1 flex flex-col min-h-[250px]">
                     <div className="text-center mb-3">
                       <h3 className="font-black text-xl text-purple-700">ดึงข้อมูลอัตโนมัติ</h3>
-                      <p className="text-xs text-slate-500 font-medium mt-1">คัดลอกข้อความจากรูปภาพ มาวางด้านล่าง ระบบจะดึงรหัสและชื่อให้ทันที</p>
+                      <p className="text-xs text-slate-500 font-medium mt-1">คัดลอกข้อความจากรูปภาพ (Live Text / Google Lens) มาวางด้านล่าง</p>
                     </div>
                     <textarea 
                        value={smartText} 
@@ -699,20 +770,20 @@ export default function App() {
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 md:space-y-8 w-full">
             {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-center justify-center ${isError ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>{message}</div>}
             
-            {/* 🚀 UI เลือกร้านค้า & รหัสออเดอร์ & ชื่อลูกค้า แบบ 3 กล่อง */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6 w-full">
+            {/* 🚀 UI ปรับ Layout ช่องกรอกข้อมูล ให้กว้างและเห็นได้เต็มที่มากขึ้น */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 w-full">
                
                {/* ส่วนที่ 1: เลือกร้านค้า */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+               <div className="bg-white p-4 md:p-5 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
                   <div className="relative z-10 h-full flex flex-col justify-center">
-                     <div className="flex items-center space-x-3 mb-4">
+                     <div className="flex items-center space-x-3 mb-3">
                         <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2 rounded-xl text-white shadow-md shadow-orange-200">
                            <Store size={20} />
                         </div>
-                        <label className="text-base md:text-lg font-extrabold text-slate-800 tracking-wide">เลือกร้านค้า</label>
+                        <label className="text-base font-extrabold text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     <div className="grid grid-cols-2 gap-3 w-full">
+                     <div className="grid grid-cols-2 gap-2 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -729,7 +800,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 md:py-4 rounded-2xl border-2 text-sm md:text-base font-bold transition-all duration-200 transform active:scale-95 ${colorClass} truncate w-full`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 rounded-xl border-2 text-sm md:text-base font-bold transition-all duration-200 transform active:scale-95 ${colorClass} truncate w-full`}>
                                 {s}
                              </button>
                            )
@@ -739,42 +810,42 @@ export default function App() {
                </div>
 
                {/* ส่วนที่ 2: รหัสออเดอร์ */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+               <div className="bg-white p-4 md:p-5 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
                   <div className="relative z-10 h-full flex flex-col justify-center">
-                     <div className="flex items-center space-x-3 mb-4">
+                     <div className="flex items-center space-x-3 mb-3">
                         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-md shadow-blue-200">
                            <Barcode size={20} />
                         </div>
-                        <label className="text-base md:text-lg font-extrabold text-slate-800 tracking-wide">รหัสออเดอร์ / คำสั่งซื้อ</label>
+                        <label className="text-base font-extrabold text-slate-800 tracking-wide">รหัสออเดอร์ / คำสั่งซื้อ</label>
                      </div>
-                     <div className="flex space-x-3 w-full">
-                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-blue-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base font-bold text-slate-700 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="พิมพ์รหัส..." />
-                        <button type="button" onClick={() => setScanMode('camera')} className="px-5 bg-slate-800 hover:bg-black text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-1" title="สแกน หรือ ดึงข้อมูล">
+                     <div className="flex space-x-2 w-full">
+                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-3 border-2 border-slate-100 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base md:text-lg font-bold text-slate-700 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="พิมพ์รหัสออเดอร์..." />
+                        <button type="button" onClick={() => setScanMode('camera')} className="px-4 bg-slate-800 hover:bg-black text-white rounded-xl shadow-md transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-1" title="สแกน หรือ ดึงข้อมูล">
                            <Scan size={24} />
                         </button>
                      </div>
                   </div>
                </div>
 
-               {/* ส่วนที่ 3: ชื่อลูกค้า (ไม่มีภาพแล้ว) */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+               {/* ส่วนที่ 3: ชื่อลูกค้า (กินพื้นที่ 2 คอลัมน์บนจอระดับกลาง เพื่อให้เห็นชื่อเต็มตา) */}
+               <div className="bg-white p-4 md:p-5 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group md:col-span-2 lg:col-span-1">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
                   <div className="relative z-10 h-full flex flex-col justify-center">
-                     <div className="flex items-center space-x-3 mb-4">
+                     <div className="flex items-center space-x-3 mb-3">
                         <div className="bg-gradient-to-br from-fuchsia-500 to-purple-600 p-2 rounded-xl text-white shadow-md shadow-purple-200">
                            <UserCircle size={20} />
                         </div>
-                        <label className="text-base md:text-lg font-extrabold text-slate-800 tracking-wide">ชื่อลูกค้า (ผู้รับ)</label>
+                        <label className="text-base font-extrabold text-slate-800 tracking-wide">ชื่อลูกค้า (ผู้รับ)</label>
                      </div>
                      <div className="w-full">
-                        <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-purple-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-base font-bold text-slate-700 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="" />
+                        <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-3 border-2 border-slate-100 focus:border-purple-500 rounded-xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none text-base md:text-lg font-bold text-slate-700 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="ชื่อ-นามสกุล..." />
                      </div>
                   </div>
                </div>
             </div>
 
-            <div className="border-b border-dashed border-slate-200/60 mx-4 md:mx-10 mt-6"></div>
+            <div className="border-b border-dashed border-slate-200/60 mx-4 md:mx-10 mt-4"></div>
 
             {/* 🚀 UI ค้นหาสินค้า (ขนาดใหญ่ขึ้น) */}
             <div className="relative z-10 bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm w-full mt-4" ref={dropdownRef}>
