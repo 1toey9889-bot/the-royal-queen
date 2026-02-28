@@ -322,7 +322,7 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     
-    // ✅ ใช้งานสำหรับแก้ไขราคา Grand Total
+    // ✅ Custom Grand Total State
     const [customGrandTotal, setCustomGrandTotal] = useState('');
     const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -336,7 +336,7 @@ export default function App() {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // รีเซ็ต custom grand total หากมีการเพิ่ม/ลดสินค้า
+    // ล้างช่องลดราคารวม เมื่อมีการแก้สินค้าในตะกร้า
     useEffect(() => {
       setCustomGrandTotal('');
     }, [cart]);
@@ -376,19 +376,18 @@ export default function App() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
 
-    // เปิด Modal ยืนยันการชำระเงิน
+    // เปิด Modal ตรวจสอบ
     const handleCheckoutPreflight = (e) => {
       e.preventDefault();
       if (cart.length === 0) { setIsError(true); setMessage('กรุณาเพิ่มสินค้าลงตะกร้าอย่างน้อย 1 รายการ'); return; }
       if (!selectedStore) return;
-      
       for (const item of cart) {
          if (Number(item.quantity) < 1) { setIsError(true); setMessage(`จำนวนของ ${item.name} ต้องมากกว่า 0`); return; }
       }
       setShowConfirmModal(true);
     };
 
-    // การดำเนินการเซฟจริง (กระจายส่วนลดให้แต่ละ Item)
+    // เซฟลงฐานข้อมูลและกระจายยอดเงิน
     const executeCheckout = async () => {
       setIsProcessing(true);
       try {
@@ -403,14 +402,13 @@ export default function App() {
 
           for (const item of cart) {
             const currentStock = Number(productDocs[item.productId].data.stock) || 0;
-            if (currentStock < item.quantity) throw new Error(`สต๊อกสินค้า "${item.name}" ไม่เพียงพอ (มีคนเพิ่งขายตัดหน้าไป)`);
+            if (currentStock < item.quantity) throw new Error(`สต๊อกสินค้า "${item.name}" ไม่เพียงพอ`);
           }
 
           const todayStr = getLocalISODate();
           const summaryRef = doc(db, "daily_summary", todayStr);
           let totalOrderRevenue = 0; let totalOrderProfit = 0; 
           
-          // คำนวณสัดส่วนถ้ามีการแก้ไข Grand Total
           const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
           let remainingTotal = finalTotal;
 
@@ -420,7 +418,6 @@ export default function App() {
              const pRef = productDocs[item.productId].ref;
              const itemCost = Number(pData.cost) || 0;
              
-             // กระจายยอดรวมลงรายตัว
              const isLastItem = i === cart.length - 1;
              const baseItemTotal = Number(item.price) * Number(item.quantity);
              let rowTotal = 0;
@@ -454,7 +451,6 @@ export default function App() {
              totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
           }
 
-          // อัปเดต Total Orders ทีละ 1 ตามโจทย์ที่ให้คิดหลายชิ้นเป็น 1 ออเดอร์
           transaction.set(summaryRef, {
             totalRevenue: increment(totalOrderRevenue),
             totalProfit: increment(totalOrderProfit),
@@ -480,17 +476,17 @@ export default function App() {
     };
 
     return (
-      <div className="relative space-y-6 md:space-y-8 max-w-4xl mx-auto animate-in fade-in duration-300">
+      <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300">
         <div className="absolute inset-0 bg-[#f4f7ff] -z-20 rounded-[3rem]"></div>
         
-        {/* Modal ยืนยันการทำรายการ */}
+        {/* ✅ Modal ยืนยันทำรายการ Responsive Design รองรับ iPad/Phone สมบูรณ์ */}
         {showConfirmModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-               <div className="bg-blue-600 p-5 text-center text-white">
-                  <h3 className="text-xl font-bold">ยืนยันการทำรายการขาย</h3>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 md:p-6">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200">
+               <div className="bg-blue-600 p-4 md:p-5 text-center text-white shrink-0">
+                  <h3 className="text-lg md:text-xl font-bold">ยืนยันการทำรายการขาย</h3>
                </div>
-               <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+               <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
                   <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-4 rounded-xl">
                      <div><span className="text-slate-500 block">ร้านค้า:</span><span className="font-bold text-slate-800">{selectedStore}</span></div>
                      <div><span className="text-slate-500 block">รหัสออเดอร์:</span><span className="font-bold text-slate-800">{orderId || '-'}</span></div>
@@ -516,9 +512,9 @@ export default function App() {
                      </div>
                   </div>
                </div>
-               <div className="p-5 bg-slate-50 border-t border-slate-100 flex space-x-3">
-                  <button type="button" onClick={() => setShowConfirmModal(false)} className="flex-1 py-3 bg-white border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition shadow-sm">ยกเลิก</button>
-                  <button type="button" onClick={executeCheckout} disabled={isProcessing} className="flex-1 py-3 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 transition shadow-sm flex items-center justify-center">
+               <div className="p-4 md:p-5 bg-slate-50 border-t border-slate-100 flex space-x-3 shrink-0">
+                  <button type="button" onClick={() => setShowConfirmModal(false)} className="flex-1 py-3 bg-white border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition shadow-sm text-sm md:text-base">ยกเลิก</button>
+                  <button type="button" onClick={executeCheckout} disabled={isProcessing} className="flex-1 py-3 bg-green-600 rounded-xl font-bold text-white hover:bg-green-700 transition shadow-sm flex items-center justify-center text-sm md:text-base">
                     {isProcessing ? 'กำลังบันทึก...' : <><CheckCircle2 size={20} className="mr-2"/> ยืนยันการขาย</>}
                   </button>
                </div>
@@ -605,30 +601,36 @@ export default function App() {
             </div>
 
             {cart.length > 0 && (
-               <div className="border border-blue-100 bg-blue-50/30 rounded-2xl overflow-hidden">
+               <div className="border border-blue-100 bg-blue-50/30 rounded-2xl overflow-hidden w-full">
                   <div className="bg-blue-100/50 px-4 py-3 border-b border-blue-100 font-bold text-blue-800 text-sm flex items-center">
                     <ShoppingCart size={16} className="mr-2"/> รายการสินค้าที่เลือก ({cart.length} รายการ)
                   </div>
-                  <div className="divide-y divide-blue-50 p-2">
+                  <div className="divide-y divide-blue-50 p-2 md:p-3 w-full">
                      {cart.map((item, index) => (
-                        <div key={index} className="flex flex-col sm:flex-row items-center justify-between p-3 gap-3 bg-white rounded-xl mb-2 shadow-sm border border-slate-100">
-                           {/* ✅ 1. นำ truncate ออก และขยายฟอนต์ให้อ่านง่าย */}
-                           <div className="flex-1 font-bold text-slate-800 break-words px-2 text-base md:text-lg leading-tight">{item.name}</div>
+                        // ✅ ปรับ Flex Layout ใหม่เพื่อ iPad โดยเฉพาะ
+                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-4 gap-4 bg-white rounded-xl mb-3 shadow-sm border border-slate-100 w-full">
+                           {/* ชื่อสินค้า */}
+                           <div className="flex-1 font-bold text-slate-800 break-words w-full lg:w-auto text-base md:text-lg">{item.name}</div>
                            
-                           <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-start">
-                              <span className="text-xs text-slate-500 font-bold sm:hidden">ราคา:</span>
-                              <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-20 p-2 text-center border border-slate-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ราคา"/>
-                           </div>
+                           {/* ส่วนควบคุม (ราคา จำนวน ลบ) */}
+                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-3 md:gap-4 shrink-0">
+                              
+                              <div className="flex items-center space-x-2">
+                                 <span className="text-xs text-slate-500 font-bold lg:hidden">ราคา/ชิ้น:</span>
+                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-20 md:w-24 p-2 text-center border border-slate-200 rounded-lg text-sm md:text-base font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ราคา"/>
+                              </div>
 
-                           <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg p-1 w-full sm:w-auto justify-center">
-                              <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-1.5 bg-white rounded-md shadow-sm hover:bg-slate-100"><Minus size={14}/></button>
-                              <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-10 text-center bg-transparent font-bold outline-none text-sm"/>
-                              <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-1.5 bg-white rounded-md shadow-sm hover:bg-slate-100"><Plus size={14}/></button>
-                           </div>
-                           
-                           <div className="flex items-center justify-between w-full sm:w-auto sm:ml-4 gap-4 px-2">
-                              <span className="font-black text-blue-600 w-full sm:w-20 text-right">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
-                              <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0">
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-1.5 md:p-2 bg-white rounded-md shadow-sm hover:bg-slate-100"><Minus size={14}/></button>
+                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-10 md:w-12 text-center bg-transparent font-bold outline-none text-sm md:text-base"/>
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-1.5 md:p-2 bg-white rounded-md shadow-sm hover:bg-slate-100"><Plus size={14}/></button>
+                              </div>
+                              
+                              <div className="flex items-center justify-end gap-3 min-w-[100px] shrink-0">
+                                 <span className="font-black text-blue-600 text-right text-base md:text-lg">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
+                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-500 hover:bg-red-50 p-2 md:p-2.5 rounded-xl transition-colors"><Trash2 size={18}/></button>
+                              </div>
+
                            </div>
                         </div>
                      ))}
@@ -639,16 +641,17 @@ export default function App() {
             <div className="pt-2">
               <div className="bg-[#eef5ff] p-6 md:p-8 rounded-[1.5rem] border border-[#e0ebff] flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                 
-                {/* ✅ 2. สามารถแก้ราคารวมได้ที่นี่เลย */}
+                {/* ✅ แก้ไขราคารวม: ป้องกัน Backspace แล้วลบไม่หมด โดยใช้แค่ placeholder แทน value fallback */}
                 <div className="text-center md:text-left w-full md:w-auto flex flex-col items-center md:items-start">
                   <p className="text-sm font-bold text-[#6a8ce2] mb-2">ราคารวมทั้งหมด {cart.length > 0 ? `(${cart.length} รายการ)` : ''}</p>
-                  <div className="flex items-center">
-                    <span className="text-3xl md:text-4xl font-black text-[#3761e9] mr-1">฿</span>
+                  <div className="flex items-center relative">
+                    <span className="text-3xl md:text-4xl font-black text-[#3761e9] absolute left-3 select-none">฿</span>
                     <input 
                       type="number" 
-                      value={customGrandTotal !== '' ? customGrandTotal : posTotal}
+                      value={customGrandTotal} // ไม่ดึง posTotal มายัดใส่ value แล้ว
+                      placeholder={posTotal}    // ให้โชว์เบลอๆ ไว้แทนเวลาว่างเปล่า
                       onChange={(e) => setCustomGrandTotal(e.target.value)}
-                      className="w-32 md:w-48 text-3xl md:text-4xl font-black text-[#3761e9] bg-white border border-blue-200 rounded-xl px-2 py-1 outline-none focus:ring-4 focus:ring-blue-500/20 text-center md:text-left disabled:bg-transparent disabled:border-transparent"
+                      className="w-36 md:w-52 pl-10 pr-2 py-2 text-3xl md:text-4xl font-black text-[#3761e9] bg-white border border-blue-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-500/20 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300"
                       disabled={cart.length === 0}
                     />
                   </div>
