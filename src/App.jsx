@@ -814,8 +814,7 @@ export default function App() {
       </div>
     );
   };
-  const ProductsView = () => { /* โค้ดส่วนนี้ไม่ได้แก้ไข เนื่องจากคุณไม่ได้แจ้งให้เปลี่ยน และไม่มีผลกับตะกร้าสินค้า */ return <div className="p-4 text-center bg-white rounded-xl shadow-sm"><Package size={40} className="mx-auto text-blue-400 mb-2" /><p className="font-bold text-slate-700">หน้าจัดการสินค้ายังใช้โค้ดเดิมของคุณได้ 100% ครับ (ผมละไว้เพื่อความกระชับของคำตอบ)</p></div>; };
-
+  
 // 📋 [View 5] หน้าจัดการสต๊อกสินค้า (Stock) 🚀 ENTERPRISE ATOMIC UPDATE
 const StockView = () => {
   const [editingStockId, setEditingStockId] = useState(null);
@@ -913,8 +912,7 @@ const StockView = () => {
   );
 };
 
-  const StockView = () => { return <div className="p-4 text-center bg-white rounded-xl shadow-sm"><Boxes size={40} className="mx-auto text-orange-400 mb-2" /><p className="font-bold text-slate-700">หน้าสต๊อกสินค้ายังใช้โค้ดเดิมของคุณได้ 100% ครับ</p></div>; };
-
+ 
   // 👥 [View 6] หน้าจัดการผู้ใช้งานระบบและกำหนดสิทธิ์ (Users Management)
   const UsersManagementView = () => {
     const [isEditing, setIsEditing] = useState(null);
@@ -1021,8 +1019,7 @@ const StockView = () => {
       </div>
     );
   };
-  const UsersManagementView = () => { return <div className="p-4 text-center bg-white rounded-xl shadow-sm"><Users size={40} className="mx-auto text-purple-400 mb-2" /><p className="font-bold text-slate-700">หน้าจัดการผู้ใช้ยังใช้โค้ดเดิมของคุณได้ 100% ครับ</p></div>; };
-
+  
   // ==========================================
   // 🎨 5. โครงสร้างหน้าจอหลัก (Main Layout Render)
   // ==========================================
