@@ -12,10 +12,12 @@ import {
   Save, X, TrendingUp, CalendarDays, DollarSign, Boxes, Users, 
   LogOut, Lock, User, Download, History, BarChart3, ShieldCheck, 
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
-  Barcode, Store, UserCircle, FileText, Camera
+  Barcode, Store, UserCircle, FileText, Camera, Aperture
 } from 'lucide-react';
-// 🚀 ไลบรารีสำหรับสแกน Barcode
+// 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
+// 🚀 ไลบรารี AI สำหรับอ่านตัวอักษรจากรูปภาพ (OCR)
+import Tesseract from 'tesseract.js';
 
 // ==========================================
 // 🎨 โลโก้ The Resilient Clinic 
@@ -318,8 +320,13 @@ export default function App() {
     const [orderId, setOrderId] = useState(''); 
     const [customerName, setCustomerName] = useState(''); // 🚀 ข้อมูลชื่อลูกค้า
 
-    const [scanMode, setScanMode] = useState(null); // 'camera', 'text', หรือ null
+    // 🚀 State สำหรับโหมดสแกนเนอร์และ OCR
+    const [scanMode, setScanMode] = useState(null); // 'camera', 'ocr_camera', 'text' หรือ null
     const [smartText, setSmartText] = useState('');
+    const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+    const [ocrStatus, setOcrStatus] = useState('');
+    const videoRef = useRef(null);
+    const canvasRef = useRef(null);
     
     const [cart, setCart] = useState([]); 
     const [message, setMessage] = useState('');
@@ -343,36 +350,106 @@ export default function App() {
       setCustomGrandTotal('');
     }, [cart]);
 
+    // 🚀 ฟังก์ชันปิดกล้องของ OCR
+    const stopCamera = () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      }
+    };
+
+    // ปิดกล้องเสมอถ้าเปลี่ยนโหมดหรือปิดโมดอล
+    useEffect(() => {
+      if (scanMode !== 'ocr_camera') {
+         stopCamera();
+      }
+      return () => stopCamera();
+    }, [scanMode]);
+
+    // 🚀 เปิดกล้องสำหรับ OCR (Notebook/Mobile)
+    const startOcrCamera = async () => {
+      setScanMode('ocr_camera');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตสิทธิ์ (Permission)");
+        setScanMode(null);
+      }
+    };
+
+    // 🚀 ฟังก์ชันถ่ายภาพและส่งให้ Tesseract (AI) ประมวลผล
+    const captureAndRead = async () => {
+      if (!videoRef.current || !canvasRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      // วาดภาพลง Canvas
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      setIsOcrProcessing(true);
+      setOcrStatus('กำลังเตรียมระบบ AI... (ครั้งแรกอาจใช้เวลา 5-10 วินาที)');
+      
+      try {
+        const result = await Tesseract.recognize(imageData, 'tha+eng', {
+          logger: m => {
+             if (m.status === 'recognizing text') {
+                setOcrStatus(`กำลังวิเคราะห์ตัวอักษร... ${Math.round(m.progress * 100)}%`);
+             }
+          }
+        });
+        
+        const extractedText = result.data.text;
+        handleSmartExtract(extractedText);
+        stopCamera();
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการอ่านข้อความจาก AI');
+        setScanMode(null);
+      }
+      setIsOcrProcessing(false);
+    };
+
     const filteredProductsForSelect = useMemo(() => {
       if (!productSearchTerm) return products;
       return products.filter(p => String(p?.name || '').toLowerCase().includes(String(productSearchTerm || '').toLowerCase()));
     }, [products, productSearchTerm]);
 
-    // 🚀 ฟังก์ชันดึงข้อมูลจากรูปภาพที่คัดลอกมา (Smart Extract)
+    // 🚀 ฟังก์ชันดึงข้อมูลจากข้อความอัจฉริยะ (รองรับ OCR และ การวางข้อความ)
     const handleSmartExtract = (text) => {
       setSmartText(text);
       let foundOrder = false;
       let foundName = false;
 
-      // หารหัสออเดอร์ (ตามหลัง คำสั่งซื้อ: หรือเป็นตัวเลขผสมตัวอักษรพิมพ์ใหญ่ยาวๆ)
-      const orderMatch = text.match(/คำสั่งซื้อ[:\s]*([A-Z0-9]+)/i) || text.match(/(260[A-Z0-9]+)/i); 
+      // หารหัสออเดอร์ (ค้นหาจากคำว่า คำสั่งซื้อ หรือมองหา Format 260XXXXXX)
+      const orderMatch = text.match(/(?:คำสั่งซื้อ|คำสังซื้อ|คําสั่งซื่อ)[:\s]*([A-Z0-9]+)/i) || text.match(/(260[A-Z0-9]+)/i); 
       if (orderMatch && orderMatch[1]) {
           setOrderId(orderMatch[1].trim());
           foundOrder = true;
       }
 
-      // หาชื่อลูกค้า (ตามหลัง ผู้รับ (TO) หรือ ผู้รับ)
-      const nameMatch = text.match(/ผู้รับ\s*\(?TO\)?[:\s]*([^\n]+)/i) || text.match(/ผู้รับ[:\s]*([^\n]+)/i);
+      // หาชื่อลูกค้า (ค้นหาจากคำว่า ผู้รับ)
+      const nameMatch = text.match(/(?:ผู้รับ|ผู้รัย)\s*\(?TO\)?[:\s]*([^\n]+)/i) || text.match(/(?:ผู้รับ|ผู้รัย)[:\s]*([^\n]+)/i);
       if (nameMatch && nameMatch[1]) {
-          setCustomerName(nameMatch[1].trim());
+          let name = nameMatch[1].trim();
+          name = name.replace(/\|/g, '').trim(); // ลบขยะจาก OCR
+          setCustomerName(name);
           foundName = true;
       }
 
       if (foundOrder || foundName) {
           setTimeout(() => {
-             setScanMode(null);
-             setSmartText('');
-          }, 600); // ดีเลย์เล็กน้อยให้ผู้ใช้เห็นว่าดึงเสร็จแล้ว
+             if(foundOrder && foundName) {
+                 setScanMode(null);
+                 setSmartText('');
+             } else {
+                 setScanMode('text'); // ให้ผู้ใช้เห็นว่าดึงมาได้ไม่ครบ ให้แก้เอง
+             }
+          }, 1500); 
       }
     };
 
@@ -562,16 +639,19 @@ export default function App() {
           </div>
         )}
 
-        {/* 🚀 Modal สแกน Barcode และ Smart Extract */}
+        {/* 🚀 Modal สแกน Barcode และ Smart Extract (กล้อง Notebook) */}
         {scanMode && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 w-full h-full">
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] w-full max-w-md space-y-5 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh]">
                
-               <div className="flex bg-slate-100 p-1.5 rounded-xl shrink-0">
-                  <button onClick={() => setScanMode('camera')} className={`flex-1 py-2 text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Camera size={16} className="mr-1.5"/> เปิดกล้อง</button>
-                  <button onClick={() => setScanMode('text')} className={`flex-1 py-2 text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><FileText size={16} className="mr-1.5"/> อ่านจากรูปภาพ</button>
+               {/* 🚀 3 แถบเมนู ให้เลือกการทำงาน */}
+               <div className="flex bg-slate-100 p-1.5 rounded-xl shrink-0 gap-1">
+                  <button onClick={() => setScanMode('camera')} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Barcode size={16} className="mr-1.5"/> สแกนบาร์โค้ด</button>
+                  <button onClick={() => startOcrCamera()} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'ocr_camera' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Camera size={16} className="mr-1.5"/> ถ่ายรูปอ่าน</button>
+                  <button onClick={() => setScanMode('text')} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg flex justify-center items-center ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><FileText size={16} className="mr-1.5"/> วางข้อความ</button>
                </div>
 
+               {/* โหมด 1: สแกนบาร์โค้ดปกติ */}
                {scanMode === 'camera' && (
                  <>
                    <div className="text-center">
@@ -590,6 +670,36 @@ export default function App() {
                  </>
                )}
 
+               {/* 🚀 โหมด 2: ถ่ายรูปแล้วใช้ AI อ่านข้อความ (Notebook Camera + OCR) */}
+               {scanMode === 'ocr_camera' && (
+                 <div className="flex flex-col items-center space-y-4">
+                    <div className="text-center">
+                      <h3 className="font-black text-xl text-teal-700">ถ่ายรูปให้ AI อ่านข้อมูล</h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1">นำใบปะหน้ามาส่องหน้ากล้องให้ชัดเจน แล้วกดถ่ายภาพ</p>
+                    </div>
+                    
+                    <div className="w-full relative rounded-xl overflow-hidden bg-black aspect-video border-4 border-teal-200">
+                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
+                       <canvas ref={canvasRef} className="hidden"></canvas> {/* ซ่อน Canvas ไว้ใช้ Process รูป */}
+                       {isOcrProcessing && (
+                          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white p-4 text-center z-10">
+                             <div className="w-10 h-10 border-4 border-teal-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+                             <p className="font-bold">{ocrStatus}</p>
+                          </div>
+                       )}
+                    </div>
+                    <button 
+                       type="button" 
+                       onClick={captureAndRead} 
+                       disabled={isOcrProcessing}
+                       className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-8 rounded-full shadow-lg flex items-center transition disabled:opacity-50"
+                    >
+                       <Aperture size={24} className="mr-2" /> ถ่ายภาพและอ่านข้อความ
+                    </button>
+                 </div>
+               )}
+
+               {/* โหมด 3: ดึงข้อความจากการวาง (Smart Text / Live Text) */}
                {scanMode === 'text' && (
                  <div className="flex-1 flex flex-col min-h-[250px]">
                     <div className="text-center mb-3">
@@ -600,7 +710,7 @@ export default function App() {
                        value={smartText} 
                        onChange={(e) => handleSmartExtract(e.target.value)} 
                        className="w-full flex-1 p-4 border-2 border-purple-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 outline-none resize-none text-sm text-slate-700 bg-purple-50/30"
-                       placeholder="วางข้อความที่นี่..."
+                       placeholder="วางข้อความทั้งหมดที่นี่..."
                        autoFocus
                     ></textarea>
                  </div>
@@ -670,14 +780,14 @@ export default function App() {
                      </div>
                      <div className="flex space-x-3 w-full">
                         <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-blue-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base font-bold text-slate-700 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="พิมพ์รหัส..." />
-                        <button type="button" onClick={() => setScanMode('camera')} className="px-5 bg-slate-800 hover:bg-black text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-1">
+                        <button type="button" onClick={() => setScanMode('camera')} className="px-5 bg-slate-800 hover:bg-black text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-1" title="สแกน หรือ ดึงข้อมูล">
                            <Scan size={24} />
                         </button>
                      </div>
                   </div>
                </div>
 
-               {/* ส่วนที่ 3: ชื่อลูกค้า (ไม่มีภาพแล้ว) */}
+               {/* ส่วนที่ 3: ชื่อลูกค้า (เอา Placeholder ออกตามที่ขอ) */}
                <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
                   <div className="relative z-10 h-full flex flex-col justify-center">
@@ -902,7 +1012,7 @@ export default function App() {
           <div className="flex items-center space-x-2 bg-white px-2 py-1.5 md:px-3 md:py-2 rounded-lg border border-gray-200 shadow-sm w-full md:w-auto justify-between md:justify-start"><span className="text-xs md:text-sm text-gray-500 font-medium">ดูของวันที่</span><input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-600 font-medium" /></div>
         </div>
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 border-b border-gray-100 text-xs md:text-sm">
                 <th className="p-3 md:p-4 font-medium whitespace-nowrap">เวลา</th><th className="p-3 md:p-4 font-medium">ออเดอร์ ID</th><th className="p-3 md:p-4 font-medium">ชื่อลูกค้า</th><th className="p-3 md:p-4 font-medium whitespace-nowrap">ร้านค้า</th><th className="p-3 md:p-4 font-medium">สินค้า</th><th className="p-3 md:p-4 font-medium text-center">จำนวน</th><th className="p-3 md:p-4 font-medium text-right">ยอดรวม</th><th className="p-3 md:p-4 font-medium text-center">ผู้ทำรายการ</th>{canEditTab('history') && <th className="p-3 md:p-4 font-medium text-right">จัดการ</th>}
