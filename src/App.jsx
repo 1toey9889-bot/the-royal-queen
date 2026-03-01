@@ -1010,6 +1010,11 @@ export default function App() {
     const [filterDate, setFilterDate] = useState(getLocalISODate());
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
+    
+    // 🚀 State สำหรับการแก้ไขกลุ่มออเดอร์ทั้งหมด
+    const [isEditingGroup, setIsEditingGroup] = useState(null);
+    const [groupEditTotal, setGroupEditTotal] = useState('');
+    
     const [isProcessing, setIsProcessing] = useState(false);
 
     const formatForInput = (isoString) => {
@@ -1020,6 +1025,7 @@ export default function App() {
     const filteredSalesFlat = sales.filter(s => getLocalISODate(s.date) === filterDate);
     const groupedHistorySales = groupSalesByTransaction(filteredSalesFlat);
 
+    // ลบรายการย่อย (Item)
     const handleDelete = async (sale) => {
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์ย่อยนี้?\n\n*สต๊อกสินค้าจะถูกคืนกลับอัตโนมัติ*')) return;
       setIsProcessing(true);
@@ -1034,6 +1040,26 @@ export default function App() {
       setIsProcessing(false);
     };
 
+    // ลบออเดอร์ทั้งหมดในกลุ่ม (Group)
+    const handleDeleteGroup = async (group) => {
+      if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้ทั้งหมด?\n\n*สต๊อกสินค้าทั้งหมดในออเดอร์จะถูกคืนกลับอัตโนมัติ*')) return;
+      setIsProcessing(true);
+      try {
+        await runTransaction(db, async (transaction) => {
+          for (const sale of group.items) {
+            const productRef = doc(db, "products", sale.productId);
+            const pDoc = await transaction.get(productRef);
+            if (pDoc.exists()) {
+              transaction.update(productRef, { stock: (Number(pDoc.data().stock) || 0) + Number(sale.quantity) });
+            }
+            transaction.delete(doc(db, "sales", sale.id));
+          }
+        });
+      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+      setIsProcessing(false);
+    };
+
+    // บันทึกการแก้ไขรายการย่อย (Item)
     const handleSaveEdit = async (sale) => {
       setIsProcessing(true);
       try {
@@ -1057,6 +1083,49 @@ export default function App() {
           });
         });
         setIsEditing(null);
+      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+      setIsProcessing(false);
+    };
+
+    // บันทึกการแก้ไขราคารวมทั้งหมดของออเดอร์ (Group)
+    const handleSaveGroupEdit = async (group) => {
+      setIsProcessing(true);
+      try {
+        const newFinalTotal = Number(groupEditTotal);
+        const oldTotal = group.totalOrderValue;
+        
+        if (newFinalTotal === oldTotal) {
+          setIsEditingGroup(null);
+          setIsProcessing(false);
+          return;
+        }
+
+        const ratio = oldTotal > 0 ? (newFinalTotal / oldTotal) : 1;
+        let remainingTotal = newFinalTotal;
+
+        await runTransaction(db, async (transaction) => {
+          for (let i = 0; i < group.items.length; i++) {
+            const sale = group.items[i];
+            const isLastItem = i === group.items.length - 1;
+            const baseItemTotal = Number(sale.total);
+            
+            let rowTotal = 0;
+            if (isLastItem) {
+              rowTotal = remainingTotal;
+            } else {
+              rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100;
+              remainingTotal -= rowTotal;
+            }
+            
+            const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
+            
+            transaction.update(doc(db, "sales", sale.id), {
+              total: rowTotal,
+              unitPrice: unitPrice
+            });
+          }
+        });
+        setIsEditingGroup(null);
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1108,18 +1177,49 @@ export default function App() {
                           <td className={`p-3 md:p-4 text-right text-slate-700 font-medium whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <div className="flex flex-col items-end"><input type="number" className="w-20 p-1 border border-gray-300 rounded text-right text-xs mb-1 outline-none focus:ring-1 focus:ring-blue-500" value={editForm.customPrice} onChange={e => setEditForm({...editForm, customPrice: e.target.value})} placeholder="ราคา/ชิ้น"/><span>฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span></div> : `฿${formatMoney(sale.total)}`}</td>
                           <td className={`p-3 md:p-4 text-center text-gray-500 ${!canEditTab('history') ? 'border-r border-slate-200' : ''} ${isFirstRow ? (!canEditTab('history') ? 'border-t rounded-tr-2xl' : 'border-t border-slate-200') : 'border-t border-slate-50'}`}><span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span></td>
                           {canEditTab('history') && (
-                            <td className={`p-3 md:p-4 text-right space-x-1 md:space-x-2 whitespace-nowrap border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl' : 'border-t border-slate-50'}`}>
-                              {isCurrentRowEditing ? (<><button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Save size={16} className="md:w-4 md:h-4"/></button><button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><X size={16} className="md:w-4 md:h-4"/></button></>) : (<><button onClick={() => { setIsEditing(sale.id); setEditForm({productId: sale.productId, quantity: sale.quantity, date: formatForInput(sale.date), store: sale.store || STORE_OPTIONS[0], customPrice: sale.unitPrice || (sale.total/sale.quantity), orderId: sale.orderId || ''}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Edit2 size={16} className="md:w-4 md:h-4"/></button><button onClick={() => handleDelete(sale)} className="text-red-600 hover:bg-red-100 p-1.5 md:p-2 rounded-md md:rounded-lg transition"><Trash2 size={16} className="md:w-4 md:h-4"/></button></>)}
+                            <td className={`p-3 md:p-4 text-right whitespace-nowrap border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl' : 'border-t border-slate-50'}`}>
+                              {isCurrentRowEditing ? (
+                                <div className="flex justify-end space-x-1 md:space-x-2">
+                                  <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1 md:p-1.5 rounded-md transition"><Save size={16}/></button>
+                                  <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-gray-500 hover:bg-gray-200 p-1 md:p-1.5 rounded-md transition"><X size={16}/></button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end space-x-1 md:space-x-2">
+                                  <button onClick={() => { setIsEditing(sale.id); setIsEditingGroup(null); setEditForm({productId: sale.productId, quantity: sale.quantity, date: formatForInput(sale.date), store: sale.store || STORE_OPTIONS[0], customPrice: sale.unitPrice || (sale.total/sale.quantity), orderId: sale.orderId || ''}); }} className="text-blue-600 hover:bg-blue-100 p-1 md:p-1.5 rounded-md transition" title="แก้ไขรายการนี้"><Edit2 size={16}/></button>
+                                  <button onClick={() => handleDelete(sale)} className="text-red-600 hover:bg-red-100 p-1 md:p-1.5 rounded-md transition" title="ลบรายการนี้"><Trash2 size={16}/></button>
+                                </div>
+                              )}
                             </td>
                           )}
                         </tr>
                       );
                     })}
+                    {/* 🚀 สรุปยอดรวมและปุ่มแก้ไข/ลบ ระดับกลุ่ม (Group Order) */}
                     <tr className="bg-blue-50/40">
                       <td colSpan="4" className="p-3 md:p-4 text-right text-gray-600 font-bold text-xs md:text-sm border-l border-b border-slate-200 rounded-bl-2xl">ราคารวมสุทธิออเดอร์นี้</td>
                       <td className="p-3 md:p-4 text-center text-gray-800 font-black text-sm border-b border-slate-200">{group.totalItems}</td>
-                      <td className="p-3 md:p-4 text-right text-blue-600 font-black whitespace-nowrap text-base border-b border-slate-200">฿{formatMoney(group.totalOrderValue)}</td>
-                      <td colSpan={canEditTab('history') ? 2 : 1} className="border-r border-b border-slate-200 rounded-br-2xl"></td>
+                      <td className="p-3 md:p-4 text-right text-blue-600 font-black whitespace-nowrap text-base border-b border-slate-200">
+                        {isEditingGroup === group.id ? (
+                           <input type="number" className="w-24 p-1.5 border-2 border-blue-400 rounded-lg text-right focus:ring-2 focus:ring-blue-500 outline-none text-black bg-white shadow-sm" value={groupEditTotal} onChange={e => setGroupEditTotal(e.target.value)} />
+                        ) : (
+                           `฿${formatMoney(group.totalOrderValue)}`
+                        )}
+                      </td>
+                      <td colSpan={canEditTab('history') ? 2 : 1} className="border-r border-b border-slate-200 rounded-br-2xl text-right p-3 md:p-4">
+                        {canEditTab('history') && (
+                           isEditingGroup === group.id ? (
+                              <div className="flex justify-end space-x-1 md:space-x-2">
+                                 <button onClick={() => handleSaveGroupEdit(group)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1.5 md:p-2 rounded-lg transition shadow-sm" title="บันทึกยอดรวมใหม่"><Save size={16} /></button>
+                                 <button onClick={() => setIsEditingGroup(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1.5 md:p-2 rounded-lg transition shadow-sm" title="ยกเลิก"><X size={16} /></button>
+                              </div>
+                           ) : (
+                              <div className="flex justify-end space-x-1 md:space-x-2">
+                                 <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 md:p-2 rounded-lg transition" title="แก้ไขราคารวมทั้งออเดอร์"><Edit2 size={16} /></button>
+                                 <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 md:p-2 rounded-lg transition" title="ลบทั้งออเดอร์ (คืนสต๊อกทั้งหมด)"><Trash2 size={16} /></button>
+                              </div>
+                           )
+                        )}
+                      </td>
                     </tr>
                   </tbody>
                 );
