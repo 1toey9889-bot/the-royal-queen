@@ -1040,19 +1040,39 @@ export default function App() {
       setIsProcessing(false);
     };
 
-    // ลบออเดอร์ทั้งหมดในกลุ่ม (Group)
+    // 🚀 ลบออเดอร์ทั้งหมดในกลุ่ม (Group) [แก้ปัญหา Transaction Read/Write]
     const handleDeleteGroup = async (group) => {
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้ทั้งหมด?\n\n*สต๊อกสินค้าทั้งหมดในออเดอร์จะถูกคืนกลับอัตโนมัติ*')) return;
       setIsProcessing(true);
       try {
         await runTransaction(db, async (transaction) => {
-          for (const sale of group.items) {
-            const productRef = doc(db, "products", sale.productId);
-            const pDoc = await transaction.get(productRef);
+          // 1. รวมจำนวนสินค้าที่จะต้องคืนสต๊อก (เผื่อมีสินค้าซ้ำกันในบิลเดียว)
+          const returnQuantities = {};
+          group.items.forEach(sale => {
+            returnQuantities[sale.productId] = (returnQuantities[sale.productId] || 0) + Number(sale.quantity);
+          });
+
+          // 2. [PHASE READ] ดึงข้อมูลสินค้าทั้งหมด "ก่อน" ที่จะทำการเขียน
+          const productReadDocs = {};
+          for (const productId of Object.keys(returnQuantities)) {
+            const pRef = doc(db, "products", productId);
+            const pDoc = await transaction.get(pRef);
             if (pDoc.exists()) {
-              transaction.update(productRef, { stock: (Number(pDoc.data().stock) || 0) + Number(sale.quantity) });
+              productReadDocs[productId] = { ref: pRef, currentStock: Number(pDoc.data().stock) || 0 };
             }
-            transaction.delete(doc(db, "sales", sale.id));
+          }
+
+          // 3. [PHASE WRITE] เขียนข้อมูลลงฐานข้อมูลหลังจากอ่านเสร็จหมดแล้ว
+          // คืนสต๊อกสินค้า
+          for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
+            if (productReadDocs[productId]) {
+               const pData = productReadDocs[productId];
+               transaction.update(pData.ref, { stock: pData.currentStock + qtyToReturn });
+            }
+          }
+          // ลบรายการขาย
+          for (const sale of group.items) {
+             transaction.delete(doc(db, "sales", sale.id));
           }
         });
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
@@ -1087,7 +1107,7 @@ export default function App() {
       setIsProcessing(false);
     };
 
-    // บันทึกการแก้ไขราคารวมทั้งหมดของออเดอร์ (Group)
+    // 🚀 บันทึกการแก้ไขราคารวมทั้งหมดของออเดอร์ (Group)
     const handleSaveGroupEdit = async (group) => {
       setIsProcessing(true);
       try {
@@ -1422,7 +1442,7 @@ export default function App() {
                   <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-3 px-1 sm:px-3 md:p-4 text-center font-bold text-gray-400">{index + 1}</td>
                     <td className="py-3 px-1 sm:px-3 md:p-4 font-medium text-gray-800 break-words">{product.name}</td>
-                    <td className="py-3 px-1 sm:px-3 md:p-4 text-center whitespace-nowrap">{editingStockId === product.id ? (<input type="number" className="w-14 sm:w-16 md:w-20 p-1 md:p-1.5 border rounded text-center text-xs focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> ) : (<span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${stockAmount <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{stockAmount} ชิ้น</span>)}</td>
+                    <td className="py-3 px-1 sm:px-3 md:p-4 text-center whitespace-nowrap">{editingStockId === product.id ? (<input type="number" className="w-full max-w-[80px] p-1 md:p-1.5 border rounded text-center text-xs focus:ring-2 focus:ring-blue-500 outline-none" value={newStock} onChange={e => setNewStock(e.target.value)} disabled={isProcessing} /> ) : (<span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-bold tracking-wide ${stockAmount <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{stockAmount} ชิ้น</span>)}</td>
                     {!isExecutiveView && canEditTab('stock') && (<td className="py-3 px-1 sm:px-3 md:p-4 text-right space-x-1 whitespace-nowrap">{editingStockId === product.id ? (<><button onClick={() => handleSaveStock(product.id)} disabled={isProcessing} className="text-green-600 bg-green-100 hover:bg-green-200 p-1 md:p-1.5 rounded-md transition"><Save size={14} className="md:w-4 md:h-4"/></button><button onClick={() => setEditingStockId(null)} disabled={isProcessing} className="text-gray-500 bg-gray-200 hover:bg-gray-300 p-1 md:p-1.5 rounded-md transition"><X size={14} className="md:w-4 md:h-4"/></button></>) : (<button onClick={() => { setEditingStockId(product.id); setNewStock(stockAmount); }} className="text-blue-600 hover:bg-blue-100 p-1 md:p-1.5 rounded-md transition"><Edit2 size={14} className="md:w-4 md:h-4"/></button>)}</td>)}
                   </tr>
                 )})}
