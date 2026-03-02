@@ -221,7 +221,8 @@ export default function App() {
   };
 
   const DashboardView = () => {
-    const [timeframe, setTimeframe] = useState('monthly'); 
+    // 🚀 เปลี่ยนเริ่มต้นเป็น 'daily' ตาม Requirement
+    const [timeframe, setTimeframe] = useState('daily'); 
     const currentDateStr = getLocalISODate();
     const [filterDate, setFilterDate] = useState(currentDateStr); 
     const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7)); 
@@ -241,18 +242,40 @@ export default function App() {
       });
     }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
-    let totalQty = 0; let totalRevenue = 0; let totalCost = 0; let totalProfit = 0;
-    filteredSales.forEach(s => {
-      const p = getProduct(s.productId); if (!p) return; 
-      const qty = Number(s.quantity) || 0; totalQty += qty; totalRevenue += Number(s.total) || 0;
-      const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : Number(p.cost);
-      const cost = itemCost * qty; totalCost += cost; totalProfit += ((Number(s.total) || 0) - cost);
-    });
-    const totalOrders = filteredSales.length;
+    // 🚀 Refactor: รวบรวมการคำนวณและจัดเรียงสินค้าลงใน useMemo เพื่อเพิ่ม Performance
+    const dashboardStats = useMemo(() => {
+      let tQty = 0; let tRev = 0; let tCost = 0; let tProfit = 0;
+      const salesCount = {};
 
-    const productSalesCount = {};
-    filteredSales.forEach(s => { productSalesCount[s.productId] = (productSalesCount[s.productId] || 0) + (Number(s.quantity) || 0); });
-    const topProducts = Object.entries(productSalesCount).map(([id, qty]) => ({ ...getProduct(id), qty })).filter(p => p && p.name).sort((a, b) => b.qty - a.qty).slice(0, 5);
+      filteredSales.forEach(s => {
+        const p = getProduct(s.productId); if (!p) return; 
+        const qty = Number(s.quantity) || 0; 
+        tQty += qty; 
+        tRev += Number(s.total) || 0;
+        
+        const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : Number(p.cost);
+        const cost = itemCost * qty; 
+        tCost += cost; 
+        tProfit += ((Number(s.total) || 0) - cost);
+
+        salesCount[s.productId] = (salesCount[s.productId] || 0) + qty;
+      });
+
+      // แสดงรายการทั้งหมดตามที่ขอ (นำ .slice(0, 5) ออก)
+      const topList = Object.entries(salesCount)
+        .map(([id, qty]) => ({ ...getProduct(id), qty }))
+        .filter(p => p && p.name)
+        .sort((a, b) => b.qty - a.qty);
+
+      return {
+        totalQty: tQty,
+        totalRevenue: tRev,
+        totalCost: tCost,
+        totalProfit: tProfit,
+        totalOrders: filteredSales.length,
+        topProducts: topList
+      };
+    }, [filteredSales, productMap]);
 
     const exportDashboardToExcel = () => {
       if (filteredSales.length === 0) { alert("ไม่มีข้อมูลในเงื่อนไขที่เลือก"); return; }
@@ -280,7 +303,7 @@ export default function App() {
         csvRows.push([`"${safeDate}"`, `"${s.orderId || '-'}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, itemCost, actualPricePerUnit.toFixed(2), qty, rowCost, total, rowProfit, `"${s.soldBy || '-'}"`]);
       });
       csvRows.push([]);
-      csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', '', totalQty, totalCost, totalRevenue, totalProfit, '']);
+      csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', '', dashboardStats.totalQty, dashboardStats.totalCost, dashboardStats.totalRevenue, dashboardStats.totalProfit, '']);
       downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานยอดขาย_${timeLabel}.csv`);
     };
 
@@ -316,22 +339,42 @@ export default function App() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden"><div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div><h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย</h3><p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(totalRevenue)}</p><p className="text-[10px] md:text-xs text-gray-400 mt-1">{totalOrders} ออเดอร์ ({totalQty} ชิ้น)</p></div>
-          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden"><div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div><h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3><p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(totalCost)}</p><p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p></div>
-          <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden"><div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div><h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><DollarSign size={14} className="mr-1.5"/> กำไรสุทธิจริง</h3><p className="text-xl md:text-2xl font-black text-green-700 mt-2">฿{formatMoney(totalProfit)}</p><p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">หักต้นทุนแล้ว</p></div>
+          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><TrendingUp size={14} className="mr-1.5 text-blue-500"/> ยอดขาย</h3>
+            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(dashboardStats.totalRevenue)}</p>
+            <p className="text-[10px] md:text-xs text-gray-400 mt-1">{dashboardStats.totalOrders} ออเดอร์ ({dashboardStats.totalQty} ชิ้น)</p>
+          </div>
+          <div className="bg-white p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
+            <h3 className="font-bold text-gray-500 text-xs md:text-sm flex items-center mb-1"><Package size={14} className="mr-1.5 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
+            <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(dashboardStats.totalCost)}</p>
+            <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
+          </div>
+          {/* 🚀 เปลี่ยนช่องที่ 3 จาก "กำไรสุทธิจริง" เป็น "จำนวนออเดอร์" ตามที่ขอ */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+            <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><ShoppingCart size={14} className="mr-1.5"/> จำนวนออเดอร์</h3>
+            <p className="text-xl md:text-2xl font-black text-green-700 mt-2">{dashboardStats.totalOrders} ออเดอร์</p>
+            <p className="text-[10px] md:text-xs text-green-600/70 mt-1 font-medium">รวมทั้งหมด {dashboardStats.totalQty} ชิ้น</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2"><CalendarDays size={18} className="text-gray-400"/><h3 className="text-sm md:text-lg font-semibold text-gray-800">สินค้าขายดี (ตามเงื่อนไขที่เลือก)</h3></div>
+          <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
+            <CalendarDays size={18} className="text-gray-400"/>
+            {/* 🚀 แก้ไขชื่อหัวข้อเป็น สินค้าขายดี */}
+            <h3 className="text-sm md:text-lg font-semibold text-gray-800">สินค้าขายดี</h3>
+          </div>
           <div className="p-4 md:p-6">
             <div className="space-y-3 md:space-y-4">
-              {topProducts.map((p, index) => (
+              {dashboardStats.topProducts.map((p, index) => (
                 <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
                   <div className="flex items-center space-x-2 md:space-x-3"><span className="text-gray-400 font-bold w-4 text-xs md:text-sm">{index + 1}.</span><span className="font-medium text-gray-700 text-xs md:text-base">{p.name}</span></div>
-                  <div className="flex items-center space-x-3 md:space-x-4 ml-6 sm:ml-0"><span className="text-xs md:text-sm text-gray-500 whitespace-nowrap font-medium">ขายแล้ว <strong className="text-blue-600">{p.qty}</strong> ชิ้น</span><div className="w-24 md:w-32 h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / (topProducts[0]?.qty || 1)) * 100}%` }}></div></div></div>
+                  <div className="flex items-center space-x-3 md:space-x-4 ml-6 sm:ml-0"><span className="text-xs md:text-sm text-gray-500 whitespace-nowrap font-medium">ขายแล้ว <strong className="text-blue-600">{p.qty}</strong> ชิ้น</span><div className="w-24 md:w-32 h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(p.qty / (dashboardStats.topProducts[0]?.qty || 1)) * 100}%` }}></div></div></div>
                 </div>
               ))}
-              {topProducts.length === 0 && <p className="text-gray-500 text-xs md:text-sm text-center py-6 bg-gray-50 rounded-lg">ไม่มีข้อมูลการขายในเงื่อนไขที่คุณเลือก</p>}
+              {dashboardStats.topProducts.length === 0 && <p className="text-gray-500 text-xs md:text-sm text-center py-6 bg-gray-50 rounded-lg">ไม่มีข้อมูลการขายในเงื่อนไขที่คุณเลือก</p>}
             </div>
           </div>
         </div>
