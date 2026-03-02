@@ -242,10 +242,11 @@ export default function App() {
       });
     }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
-    // 🚀 Refactor: รวบรวมการคำนวณและจัดเรียงสินค้าลงใน useMemo เพื่อเพิ่ม Performance
+    // 🚀 Refactor: ใช้ Set เพื่อนับจำนวนบิล (ออเดอร์) ตามเวลาที่ทำรายการ
     const dashboardStats = useMemo(() => {
       let tQty = 0; let tRev = 0; let tCost = 0; let tProfit = 0;
       const salesCount = {};
+      const uniqueOrders = new Set(); // 🚀 สร้าง Set สำหรับเก็บรหัสกลุ่มบิล (อิงตามเวลา date)
 
       filteredSales.forEach(s => {
         const p = getProduct(s.productId); if (!p) return; 
@@ -259,6 +260,10 @@ export default function App() {
         tProfit += ((Number(s.total) || 0) - cost);
 
         salesCount[s.productId] = (salesCount[s.productId] || 0) + qty;
+        
+        // 🚀 จับเวลา (date) ซึ่งเป็นตัวแทนของแต่ละบิลโยนเข้า Set
+        // ถ้าสินค้านี้อยู่ในบิลเดียวกัน เวลาจะซ้ำกัน Set จะนับแค่ 1 ครั้ง
+        uniqueOrders.add(s.date); 
       });
 
       // แสดงรายการทั้งหมดตามที่ขอ (นำ .slice(0, 5) ออก)
@@ -272,7 +277,7 @@ export default function App() {
         totalRevenue: tRev,
         totalCost: tCost,
         totalProfit: tProfit,
-        totalOrders: filteredSales.length,
+        totalOrders: uniqueOrders.size, // 🚀 นับจำนวนจากขนาดของ Set (จำนวนบิล)
         topProducts: topList
       };
     }, [filteredSales, productMap]);
