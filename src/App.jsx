@@ -1008,7 +1008,7 @@ export default function App() {
             <table className="w-full text-left border-separate min-w-[700px]" style={{ borderSpacing: '0 16px' }}>
               <thead>
                 <tr className="text-slate-500 text-sm">
-                  <th className="px-3 md:px-4 pb-2 font-bold">เวลา</th>
+                  <th className="px-3 md:px-4 pb-2 font-bold whitespace-nowrap">ลำดับ / เวลา</th>
                   <th className="px-3 md:px-4 pb-2 font-bold">ออเดอร์</th>
                   <th className="px-3 md:px-4 pb-2 font-bold">ร้านค้า</th>
                   <th className="px-3 md:px-4 pb-2 font-bold">สินค้า</th>
@@ -1019,29 +1019,36 @@ export default function App() {
               {groupedRecentSales.length === 0 ? (
                 <tbody><tr><td colSpan="6" className="p-12 text-center text-slate-400 text-base font-medium bg-white rounded-2xl shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
               ) : (
-                groupedRecentSales.map((group) => {
+                groupedRecentSales.map((group, groupIndex) => {
                   let timeString = '-'; 
                   try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) + ' น.'; } catch(e) {}
                   
                   return (
-                    <tbody key={group.id} className="shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow">
+                    <tbody key={group.id} className="shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-2xl bg-white relative">
                       {group.items.map((sale, itemIdx) => {
                         const isFirstRow = itemIdx === 0;
                         return (
                           <tr key={sale.id} className="bg-white hover:bg-slate-50/80 transition-colors">
-                            <td className={`p-3 md:p-4 text-slate-500 font-medium whitespace-nowrap border-l border-slate-200 ${isFirstRow ? 'border-t rounded-tl-2xl' : 'border-t border-slate-50'}`}>{isFirstRow ? timeString : ''}</td>
-                            <td className={`p-3 md:p-4 font-medium text-slate-600 ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
-                            <td className={`p-3 md:p-4 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}><span className={`px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-[10px] md:text-xs font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{sale.store || '-'}</span></td>
-                            <td className={`p-3 md:p-4 font-bold text-slate-800 ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}</td>
-                            <td className={`p-3 md:p-4 text-center font-bold text-slate-600 ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
-                            <td className={`p-3 md:p-4 text-right text-slate-700 font-medium whitespace-nowrap text-sm md:text-base border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
+                            <td className={`p-3 md:p-4 text-slate-500 font-medium whitespace-nowrap border-l border-slate-200 ${isFirstRow ? 'border-t rounded-tl-2xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                               {isFirstRow ? (
+                                  <div className="flex flex-col space-y-1.5">
+                                     <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] md:text-xs font-black px-2.5 py-1 rounded-md shadow-sm text-center">ออเดอร์ที่ {groupedRecentSales.length - groupIndex}</span>
+                                     <span className="text-slate-600 font-bold text-xs md:text-sm flex items-center justify-center"><CalendarDays size={12} className="mr-1"/> {timeString}</span>
+                                  </div>
+                               ) : ''}
+                            </td>
+                            <td className={`p-3 md:p-4 font-medium text-slate-600 ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isFirstRow ? (sale.orderId || '-') : ''}</td>
+                            <td className={`p-3 md:p-4 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-[10px] md:text-xs font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{sale.store || '-'}</span></td>
+                            <td className={`p-3 md:p-4 font-bold text-slate-800 ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}</td>
+                            <td className={`p-3 md:p-4 text-center font-bold text-slate-600 ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
+                            <td className={`p-3 md:p-4 text-right text-slate-700 font-medium whitespace-nowrap text-sm md:text-base border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
                           </tr>
                         );
                       })}
-                      <tr className="bg-blue-50/40">
-                        <td colSpan="4" className="p-3 md:p-4 text-right text-slate-600 font-bold text-xs md:text-sm border-l border-b border-slate-200 rounded-bl-2xl">ราคารวมสุทธิออเดอร์นี้</td>
-                        <td className="p-3 md:p-4 text-center text-slate-700 font-black text-sm border-b border-slate-200">{group.totalItems}</td>
-                        <td className="p-3 md:p-4 text-right text-blue-600 font-black whitespace-nowrap text-base md:text-lg border-r border-b border-slate-200 rounded-br-2xl">฿{formatMoney(group.totalOrderValue)}</td>
+                      <tr className="bg-gradient-to-r from-blue-50 to-indigo-50/50">
+                        <td colSpan="4" className="p-3 md:p-4 text-right text-indigo-800 font-extrabold text-xs md:text-sm border-l border-b border-indigo-100 rounded-bl-2xl">ราคารวมสุทธิออเดอร์นี้</td>
+                        <td className="p-3 md:p-4 text-center text-indigo-900 font-black text-base border-b border-indigo-100">{group.totalItems}</td>
+                        <td className="p-3 md:p-4 text-right text-blue-700 font-black whitespace-nowrap text-lg md:text-xl border-r border-b border-indigo-100 rounded-br-2xl">฿{formatMoney(group.totalOrderValue)} บาท</td>
                       </tr>
                     </tbody>
                   );
@@ -1201,51 +1208,75 @@ export default function App() {
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0">
-          <div><h2 className="text-lg md:text-2xl font-bold text-gray-800">ประวัติการขาย</h2><p className="text-xs md:text-sm text-gray-500 mt-1">สามารถแก้ไขข้อมูล หรือลบออเดอร์ย่อยที่คีย์ผิดได้</p></div>
-          <div className="flex items-center space-x-2 bg-white px-2 py-1.5 md:px-3 md:py-2 rounded-lg border border-gray-200 shadow-sm w-full md:w-auto justify-between md:justify-start"><span className="text-xs md:text-sm text-gray-500 font-medium">ดูของวันที่</span><input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-600 font-medium" /></div>
+        {/* 🚀 ปรับโฉมหน้า Header ให้สวยและน่าสนใจขึ้น */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 bg-white p-5 md:p-6 rounded-[1.5rem] shadow-sm border border-slate-100 mb-6 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-blue-500 to-indigo-600"></div>
+          <div className="flex items-center space-x-4 pl-2">
+            <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
+              <History size={28} />
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">ประวัติการขาย</h2>
+              <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">สามารถแก้ไขข้อมูล หรือลบออเดอร์ย่อยที่คีย์ผิดได้</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 shadow-inner w-full md:w-auto justify-between md:justify-start">
+             <span className="text-xs md:text-sm text-slate-500 font-bold">ดูของวันที่</span>
+             <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-sm md:text-base bg-transparent cursor-pointer outline-none text-blue-600 font-black" />
+          </div>
         </div>
         
-        {/* 🚀 UI ส่วนแสดงประวัติการขายแบบตีกรอบแยกกล่องออเดอร์ */}
+        {/* 🚀 UI ส่วนแสดงประวัติการขายแบบตีกรอบแยกกล่องออเดอร์ และมีลูกเล่น */}
         <div className="w-full overflow-x-auto pb-4 pt-2">
           <table className="w-full text-left border-separate min-w-[800px]" style={{ borderSpacing: '0 16px' }}>
             <thead>
               <tr className="text-slate-500 text-xs md:text-sm">
-                <th className="px-3 md:px-4 pb-2 font-medium whitespace-nowrap">เวลา</th>
-                <th className="px-3 md:px-4 pb-2 font-medium">ออเดอร์ ID</th>
-                <th className="px-3 md:px-4 pb-2 font-medium whitespace-nowrap">ร้านค้า</th>
-                <th className="px-3 md:px-4 pb-2 font-medium">สินค้า</th>
-                <th className="px-3 md:px-4 pb-2 font-medium text-center">จำนวน</th>
-                <th className="px-3 md:px-4 pb-2 font-medium text-right">ยอดรวม</th>
-                <th className="px-3 md:px-4 pb-2 font-medium text-center">ผู้ทำรายการ</th>
-                {canEditTab('history') && <th className="px-3 md:px-4 pb-2 font-medium text-right">จัดการ</th>}
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 whitespace-nowrap">ลำดับ / เวลา</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600">ออเดอร์ ID</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 whitespace-nowrap">ร้านค้า</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600">สินค้า</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 text-center">จำนวน</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 text-right">ยอดรวม</th>
+                <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 text-center">ผู้ทำรายการ</th>
+                {canEditTab('history') && <th className="px-3 md:px-4 pb-3 font-bold text-slate-600 text-right">จัดการ</th>}
               </tr>
             </thead>
             
             {groupedHistorySales.length === 0 ? (
               <tbody><tr><td colSpan="8" className="text-center p-6 md:p-8 text-gray-500 text-xs md:text-sm bg-white rounded-2xl shadow-sm border border-slate-100">ไม่มีรายการขายในวันที่เลือก</td></tr></tbody>
             ) : (
-              groupedHistorySales.map((group) => {
+              groupedHistorySales.map((group, groupIndex) => {
                 let timeString = '-'; 
                 try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
                 
                 return (
-                  <tbody key={group.id} className="shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow">
+                  <tbody key={group.id} className="shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-2xl bg-white relative">
                     {group.items.map((sale, itemIdx) => {
                       const isCurrentRowEditing = isEditing === sale.id;
                       const isFirstRow = itemIdx === 0;
                       
                       return (
                         <tr key={sale.id} className="bg-white hover:bg-slate-50/80 transition-colors">
-                          <td className={`p-3 md:p-4 text-gray-500 whitespace-nowrap border-l border-slate-200 ${isFirstRow ? 'border-t rounded-tl-2xl' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="datetime-local" className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-[10px] md:text-xs" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/> : (isFirstRow ? timeString : '')}</td>
-                          <td className={`p-3 md:p-4 text-gray-600 font-medium ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="text" className="w-20 p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-xs" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/> : (sale.orderId || '-')}</td>
-                          <td className={`p-3 md:p-4 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.store} onChange={e => setEditForm({...editForm, store: e.target.value})} className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs">{STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select> : <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${String(sale.store || '').includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{sale.store || '-'}</span>}</td>
-                          <td className={`p-3 md:p-4 min-w-[150px] ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.productId} onChange={e => setEditForm({...editForm, productId: e.target.value, customPrice: getProduct(e.target.value)?.price||0})} className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs md:text-sm">{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select> : <span className="font-medium text-gray-800">{getProduct(sale.productId)?.name || 'ลบแล้ว'}</span>}</td>
-                          <td className={`p-3 md:p-4 text-center ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="number" className="w-16 mx-auto p-1.5 md:p-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-xs md:text-sm" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} /> : <span className="font-bold">{sale.quantity}</span>}</td>
-                          <td className={`p-3 md:p-4 text-right text-slate-700 font-medium whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <div className="flex flex-col items-end"><input type="number" className="w-20 p-1 border border-gray-300 rounded text-right text-xs mb-1 outline-none focus:ring-1 focus:ring-blue-500" value={editForm.customPrice} onChange={e => setEditForm({...editForm, customPrice: e.target.value})} placeholder="ราคา/ชิ้น"/><span>฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span></div> : `฿${formatMoney(sale.total)}`}</td>
-                          <td className={`p-3 md:p-4 text-center text-gray-500 ${!canEditTab('history') ? 'border-r border-slate-200' : ''} ${isFirstRow ? (!canEditTab('history') ? 'border-t rounded-tr-2xl' : 'border-t border-slate-200') : 'border-t border-slate-50'}`}><span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span></td>
+                          <td className={`p-3 md:p-4 text-gray-500 whitespace-nowrap border-l border-slate-200 ${isFirstRow ? 'border-t rounded-tl-2xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                            {isCurrentRowEditing ? (
+                               <input type="datetime-local" className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-[10px] md:text-xs" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/> 
+                            ) : (
+                               isFirstRow ? (
+                                  <div className="flex flex-col space-y-1.5">
+                                     <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] md:text-xs font-black px-2.5 py-1 rounded-md shadow-sm text-center">ออเดอร์ที่ {groupedHistorySales.length - groupIndex}</span>
+                                     <span className="text-slate-600 font-bold text-xs md:text-sm flex items-center justify-center"><CalendarDays size={12} className="mr-1"/> {timeString}</span>
+                                  </div>
+                               ) : ''
+                            )}
+                          </td>
+                          <td className={`p-3 md:p-4 text-gray-600 font-medium ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="text" className="w-20 p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-xs" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/> : (isFirstRow ? (sale.orderId || '-') : '')}</td>
+                          <td className={`p-3 md:p-4 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.store} onChange={e => setEditForm({...editForm, store: e.target.value})} className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs">{STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select> : <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-bold ${String(sale.store || '').includes('Shopee') ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{sale.store || '-'}</span>}</td>
+                          <td className={`p-3 md:p-4 min-w-[150px] ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.productId} onChange={e => setEditForm({...editForm, productId: e.target.value, customPrice: getProduct(e.target.value)?.price||0})} className="w-full p-1.5 md:p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs md:text-sm">{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select> : <span className="font-medium text-gray-800">{getProduct(sale.productId)?.name || 'ลบแล้ว'}</span>}</td>
+                          <td className={`p-3 md:p-4 text-center ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="number" className="w-16 mx-auto p-1.5 md:p-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-xs md:text-sm" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} /> : <span className="font-bold">{sale.quantity}</span>}</td>
+                          <td className={`p-3 md:p-4 text-right text-slate-700 font-medium whitespace-nowrap ${isFirstRow ? 'border-t border-slate-200 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <div className="flex flex-col items-end"><input type="number" className="w-20 p-1 border border-gray-300 rounded text-right text-xs mb-1 outline-none focus:ring-1 focus:ring-blue-500" value={editForm.customPrice} onChange={e => setEditForm({...editForm, customPrice: e.target.value})} placeholder="ราคา/ชิ้น"/><span>฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span></div> : `฿${formatMoney(sale.total)}`}</td>
+                          <td className={`p-3 md:p-4 text-center text-gray-500 ${!canEditTab('history') ? 'border-r border-slate-200' : ''} ${isFirstRow ? (!canEditTab('history') ? 'border-t rounded-tr-2xl bg-slate-50/50' : 'border-t border-slate-200 bg-slate-50/50') : 'border-t border-slate-50'}`}><span className="bg-gray-100 px-2 py-1 rounded-full text-[10px] md:text-xs">{sale.soldBy || '-'}</span></td>
                           {canEditTab('history') && (
-                            <td className={`p-3 md:p-4 text-right whitespace-nowrap border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl' : 'border-t border-slate-50'}`}>
+                            <td className={`p-3 md:p-4 text-right whitespace-nowrap border-r border-slate-200 ${isFirstRow ? 'border-t rounded-tr-2xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
                               {isCurrentRowEditing ? (
                                 <div className="flex justify-end space-x-1 md:space-x-2">
                                   <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-green-600 hover:bg-green-100 p-1 md:p-1.5 rounded-md transition"><Save size={16}/></button>
@@ -1262,18 +1293,18 @@ export default function App() {
                         </tr>
                       );
                     })}
-                    {/* 🚀 สรุปยอดรวมและปุ่มแก้ไข/ลบ ระดับกลุ่ม (Group Order) */}
-                    <tr className="bg-blue-50/40">
-                      <td colSpan="4" className="p-3 md:p-4 text-right text-gray-600 font-bold text-xs md:text-sm border-l border-b border-slate-200 rounded-bl-2xl">ราคารวมสุทธิออเดอร์นี้</td>
-                      <td className="p-3 md:p-4 text-center text-gray-800 font-black text-sm border-b border-slate-200">{group.totalItems}</td>
-                      <td className="p-3 md:p-4 text-right text-blue-600 font-black whitespace-nowrap text-base border-b border-slate-200">
+                    {/* 🚀 สรุปยอดรวมและปุ่มแก้ไข/ลบ ระดับกลุ่ม (Group Order) มีคำว่า บาท */}
+                    <tr className="bg-gradient-to-r from-blue-50 to-indigo-50/50">
+                      <td colSpan="4" className="p-3 md:p-4 text-right text-indigo-800 font-extrabold text-sm border-l border-b border-indigo-100 rounded-bl-2xl">ราคารวมสุทธิออเดอร์นี้</td>
+                      <td className="p-3 md:p-4 text-center text-indigo-900 font-black text-base border-b border-indigo-100">{group.totalItems}</td>
+                      <td className="p-3 md:p-4 text-right text-blue-700 font-black whitespace-nowrap text-lg md:text-xl border-b border-indigo-100">
                         {isEditingGroup === group.id ? (
                            <input type="number" className="w-24 p-1.5 border-2 border-blue-400 rounded-lg text-right focus:ring-2 focus:ring-blue-500 outline-none text-black bg-white shadow-sm" value={groupEditTotal} onChange={e => setGroupEditTotal(e.target.value)} />
                         ) : (
-                           `฿${formatMoney(group.totalOrderValue)}`
+                           `฿${formatMoney(group.totalOrderValue)} บาท`
                         )}
                       </td>
-                      <td colSpan={canEditTab('history') ? 2 : 1} className="border-r border-b border-slate-200 rounded-br-2xl text-right p-3 md:p-4">
+                      <td colSpan={canEditTab('history') ? 2 : 1} className="border-r border-b border-indigo-100 rounded-br-2xl text-right p-3 md:p-4">
                         {canEditTab('history') && (
                            isEditingGroup === group.id ? (
                               <div className="flex justify-end space-x-1 md:space-x-2">
@@ -1282,8 +1313,8 @@ export default function App() {
                               </div>
                            ) : (
                               <div className="flex justify-end space-x-1 md:space-x-2">
-                                 <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 md:p-2 rounded-lg transition" title="แก้ไขราคารวมทั้งออเดอร์"><Edit2 size={16} /></button>
-                                 <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 md:p-2 rounded-lg transition" title="ลบทั้งออเดอร์ (คืนสต๊อกทั้งหมด)"><Trash2 size={16} /></button>
+                                 <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setIsEditing(null); }} className="text-blue-600 bg-white hover:bg-blue-100 shadow-sm p-1.5 md:p-2 rounded-lg transition" title="แก้ไขราคารวมทั้งออเดอร์"><Edit2 size={16} /></button>
+                                 <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-white hover:bg-red-100 shadow-sm p-1.5 md:p-2 rounded-lg transition" title="ลบทั้งออเดอร์ (คืนสต๊อกทั้งหมด)"><Trash2 size={16} /></button>
                               </div>
                            )
                         )}
