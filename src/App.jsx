@@ -167,7 +167,6 @@ export default function App() {
   const groupSalesByTransaction = (salesArray) => {
     const grouped = {};
     salesArray.forEach(sale => {
-      // ใช้ date (เวลาที่บันทึกลงฐานข้อมูล) เป็นตัวจับกลุ่ม
       const key = sale.date; 
       if (!grouped[key]) {
         grouped[key] = {
@@ -221,7 +220,6 @@ export default function App() {
   };
 
   const DashboardView = () => {
-    // 🚀 เปลี่ยนเริ่มต้นเป็น 'daily' ตาม Requirement
     const [timeframe, setTimeframe] = useState('daily'); 
     const currentDateStr = getLocalISODate();
     const [filterDate, setFilterDate] = useState(currentDateStr); 
@@ -242,11 +240,10 @@ export default function App() {
       });
     }, [sales, timeframe, filterDate, filterMonth, filterYear, filterProductId, filterStore]);
 
-    // 🚀 Refactor: ใช้ Set เพื่อนับจำนวนบิล (ออเดอร์) ตามเวลาที่ทำรายการ
     const dashboardStats = useMemo(() => {
       let tQty = 0; let tRev = 0; let tCost = 0; let tProfit = 0;
       const salesCount = {};
-      const uniqueOrders = new Set(); // 🚀 สร้าง Set สำหรับเก็บรหัสกลุ่มบิล (อิงตามเวลา date)
+      const uniqueOrders = new Set(); 
 
       filteredSales.forEach(s => {
         const p = getProduct(s.productId); if (!p) return; 
@@ -260,13 +257,9 @@ export default function App() {
         tProfit += ((Number(s.total) || 0) - cost);
 
         salesCount[s.productId] = (salesCount[s.productId] || 0) + qty;
-        
-        // 🚀 จับเวลา (date) ซึ่งเป็นตัวแทนของแต่ละบิลโยนเข้า Set
-        // ถ้าสินค้านี้อยู่ในบิลเดียวกัน เวลาจะซ้ำกัน Set จะนับแค่ 1 ครั้ง
         uniqueOrders.add(s.date); 
       });
 
-      // แสดงรายการทั้งหมดตามที่ขอ (นำ .slice(0, 5) ออก)
       const topList = Object.entries(salesCount)
         .map(([id, qty]) => ({ ...getProduct(id), qty }))
         .filter(p => p && p.name)
@@ -277,7 +270,7 @@ export default function App() {
         totalRevenue: tRev,
         totalCost: tCost,
         totalProfit: tProfit,
-        totalOrders: uniqueOrders.size, // 🚀 นับจำนวนจากขนาดของ Set (จำนวนบิล)
+        totalOrders: uniqueOrders.size,
         topProducts: topList
       };
     }, [filteredSales, productMap]);
@@ -356,7 +349,6 @@ export default function App() {
             <p className="text-xl md:text-2xl font-black text-gray-800 mt-2">฿{formatMoney(dashboardStats.totalCost)}</p>
             <p className="text-[10px] md:text-xs text-gray-400 mt-1">คำนวณจากราคาคลินิก</p>
           </div>
-          {/* 🚀 เปลี่ยนช่องที่ 3 จาก "กำไรสุทธิจริง" เป็น "จำนวนออเดอร์" ตามที่ขอ */}
           <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-4 md:p-5 rounded-lg md:rounded-xl shadow-sm border border-green-200 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
             <h3 className="font-bold text-green-800 text-xs md:text-sm flex items-center mb-1"><ShoppingCart size={14} className="mr-1.5"/> จำนวนออเดอร์</h3>
@@ -368,7 +360,6 @@ export default function App() {
         <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 flex items-center space-x-2">
             <CalendarDays size={18} className="text-gray-400"/>
-            {/* 🚀 แก้ไขชื่อหัวข้อเป็น สินค้าขายดี */}
             <h3 className="text-sm md:text-lg font-semibold text-gray-800">สินค้าขายดี</h3>
           </div>
           <div className="p-4 md:p-6">
@@ -565,13 +556,17 @@ export default function App() {
 
     // 🚀 กรองข้อมูลออเดอร์ของวันนี้ และจัดกลุ่มตาม Transaction
     const recentSalesFlat = sales.filter(s => getLocalISODate(s.date) === getLocalISODate());
-    const groupedRecentSales = groupSalesByTransaction(recentSalesFlat).slice(0, 5); 
+    
+    // 💡 การแก้ไขจุดสำคัญ: เก็บค่ารวมทั้งหมดก่อน แล้วค่อย slice ไปแสดงผล
+    const allGroupedRecentSales = groupSalesByTransaction(recentSalesFlat);
+    const totalTodayOrders = allGroupedRecentSales.length; 
+    const groupedRecentSales = allGroupedRecentSales.slice(0, 5); 
 
     const handleCheckoutPreflight = (e) => {
       e.preventDefault();
       if (cart.length === 0) { setIsError(true); setMessage('กรุณาเพิ่มสินค้าลงตะกร้าอย่างน้อย 1 รายการ'); return; }
       if (!selectedStore) { setIsError(true); setMessage('กรุณาเลือกร้านค้า'); return; }
-      if (!orderId || orderId.trim() === '') { setIsError(true); setMessage('กรุณาระบุ รหัสออเดอร์ / คำสั่งซื้อ'); return; } // บังคับใส่รหัสออเดอร์
+      if (!orderId || orderId.trim() === '') { setIsError(true); setMessage('กรุณาระบุ รหัสออเดอร์ / คำสั่งซื้อ'); return; } 
       for (const item of cart) {
          if (Number(item.quantity) < 1) { setIsError(true); setMessage(`จำนวนของ ${item.name} ต้องมากกว่า 0`); return; }
       }
@@ -581,7 +576,6 @@ export default function App() {
     const executeCheckout = async () => {
       setIsProcessing(true);
       try {
-        // 🚀 กำหนด Timestamp ที่แน่นอนเพียงครั้งเดียวต่อ 1 บิล เพื่อให้จัดกลุ่มได้ตรงกัน 100%
         const checkoutTime = new Date().toISOString();
 
         await runTransaction(db, async (transaction) => {
@@ -637,7 +631,7 @@ export default function App() {
                total: rowTotal, 
                unitPrice: unitPrice,         
                unitCost: itemCost, 
-               date: checkoutTime, // 🚀 ใช้เวลาที่สร้างครั้งเดียวสำหรับสินค้าทุกชิ้นในบิลนี้
+               date: checkoutTime, 
                soldBy: loggedInUser?.username || 'unknown'
              });
 
@@ -1032,7 +1026,7 @@ export default function App() {
                             <td className={`p-3 md:p-4 text-slate-500 font-medium whitespace-nowrap border-l border-slate-200 ${isFirstRow ? 'border-t rounded-tl-2xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
                                {isFirstRow ? (
                                   <div className="flex flex-col space-y-1.5">
-                                     <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] md:text-xs font-black px-2.5 py-1 rounded-md shadow-sm text-center">ออเดอร์ที่ {groupedRecentSales.length - groupIndex}</span>
+                                     <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] md:text-xs font-black px-2.5 py-1 rounded-md shadow-sm text-center">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
                                      <span className="text-slate-600 font-bold text-xs md:text-sm flex items-center justify-center"><CalendarDays size={12} className="mr-1"/> {timeString}</span>
                                   </div>
                                ) : ''}
