@@ -20,11 +20,11 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import Tesseract from 'tesseract.js';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (รองรับการย่อขนาด)
+// 🎨 โลโก้ The Resilient Clinic (ปรับโครงสร้างใหม่)
 // ==========================================
-const ResilientLogo = ({ className = "", collapsed = false }) => (
-  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 ${className}`}>
-    <svg viewBox={collapsed ? "25 15 50 70" : "0 0 320 100"} className="h-full w-auto py-2 drop-shadow-md transition-all duration-500" fill="none" xmlns="http://www.w3.org/2000/svg">
+const ResilientLogo = ({ className = "" }) => (
+  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg ${className}`}>
+    <svg viewBox="0 0 320 100" className="h-full w-auto py-2 drop-shadow-md" fill="none" xmlns="http://www.w3.org/2000/svg">
       <g transform="translate(15, 12) scale(0.75)">
         <path d="M50 15 C 30 40 35 75 50 85 C 65 75 70 40 50 15 Z" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
         <circle cx="50" cy="55" r="7.5" fill="#FFFFFF"/>
@@ -33,13 +33,11 @@ const ResilientLogo = ({ className = "", collapsed = false }) => (
         <path d="M 38 85 C 10 85 -5 65 2 45 C 5 60 18 65 25 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
         <path d="M 62 85 C 90 85 105 65 98 45 C 95 60 82 65 75 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
       </g>
-      {!collapsed && (
-        <g className="animate-in fade-in duration-500">
-          <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
-          <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
-          <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
-        </g>
-      )}
+      <g>
+        <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
+        <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
+        <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
+      </g>
     </svg>
   </div>
 );
@@ -328,23 +326,24 @@ export default function App() {
           </div>
         </div>
         
+        {/* 🚀 แก้ไขข้อ 1: ปรับลดขนาดตัวเลขใน Dashboard (จาก text-2xl/3xl เป็น text-xl/2xl) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
             <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 group-hover:w-2 transition-all"></div>
             <h3 className="font-bold text-slate-500 text-sm flex items-center mb-2"><TrendingUp size={16} className="mr-2 text-blue-500"/> ยอดขายรวม</h3>
-            <p className="text-2xl md:text-3xl font-black text-slate-800 mt-2">฿{formatMoney(dashboardStats.totalRevenue)}</p>
+            <p className="text-xl md:text-2xl font-black text-slate-800 mt-2 truncate">฿{formatMoney(dashboardStats.totalRevenue)}</p>
             <p className="text-xs text-slate-400 mt-2 font-medium">{dashboardStats.totalOrders} ออเดอร์ ({dashboardStats.totalQty} ชิ้น)</p>
           </div>
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
             <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-400 group-hover:w-2 transition-all"></div>
             <h3 className="font-bold text-slate-500 text-sm flex items-center mb-2"><Package size={16} className="mr-2 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
-            <p className="text-2xl md:text-3xl font-black text-slate-800 mt-2">฿{formatMoney(dashboardStats.totalCost)}</p>
+            <p className="text-xl md:text-2xl font-black text-slate-800 mt-2 truncate">฿{formatMoney(dashboardStats.totalCost)}</p>
             <p className="text-xs text-slate-400 mt-2 font-medium">คำนวณจากราคาคลินิก</p>
           </div>
           <div className="bg-gradient-to-br from-emerald-50 to-teal-100/50 p-5 md:p-6 rounded-3xl shadow-sm border border-emerald-100 relative overflow-hidden group hover:shadow-md transition-shadow">
             <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500 group-hover:w-2 transition-all"></div>
             <h3 className="font-bold text-emerald-800 text-sm flex items-center mb-2"><ShoppingCart size={16} className="mr-2"/> จำนวนออเดอร์</h3>
-            <p className="text-2xl md:text-3xl font-black text-emerald-700 mt-2">{dashboardStats.totalOrders} <span className="text-lg md:text-xl font-bold">ออเดอร์</span></p>
+            <p className="text-xl md:text-2xl font-black text-emerald-700 mt-2 truncate">{dashboardStats.totalOrders} <span className="text-base md:text-lg font-bold">ออเดอร์</span></p>
             <p className="text-xs text-emerald-600/80 mt-2 font-bold">รวมทั้งหมด {dashboardStats.totalQty} ชิ้น</p>
           </div>
         </div>
@@ -691,6 +690,7 @@ export default function App() {
         )}
 
         <div className="relative space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
+          {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
           <div className="mb-6">
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">บันทึกการขาย (POS)</h2>
           </div>
@@ -699,6 +699,7 @@ export default function App() {
             {message && <div className={`p-3 rounded-xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
             <div className="flex flex-col gap-4 w-full mx-auto items-start">
+               
                {/* กล่องเลือกร้านค้า */}
                <div className="bg-white p-4 md:p-6 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group w-full">
                   <div className="relative z-10 w-full">
@@ -706,6 +707,7 @@ export default function App() {
                         <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2 rounded-xl text-white shadow-sm">
                            <Store size={18} />
                         </div>
+                        {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
                         <label className="text-sm md:text-base font-bold text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
                      <div className="grid grid-cols-5 gap-2 w-full">
@@ -744,6 +746,7 @@ export default function App() {
                         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-sm">
                            <Barcode size={18} />
                         </div>
+                        {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
                         <label className="text-sm md:text-base font-bold text-slate-800 tracking-wide">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
                      </div>
                      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full">
@@ -762,6 +765,7 @@ export default function App() {
                  <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2 rounded-xl text-white shadow-sm">
                     <Package size={18} />
                  </div>
+                 {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
                  <h3 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 tracking-tight">เลือกสินค้าลงตะกร้า</h3>
               </div>
               
@@ -793,6 +797,7 @@ export default function App() {
                              {isLowStock && <AlertCircle size={14} className="text-red-500 shrink-0" />}
                              <span className="font-bold text-sm text-slate-800">{p.name}</span>
                           </div>
+                          
                           <span className={`text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                             {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${stockAmount} ชิ้น (฿${formatMoney(p.price)})`}
                           </span>
@@ -1035,6 +1040,7 @@ export default function App() {
               <History size={20} />
             </div>
             <div>
+              {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
               <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
               <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">สามารถแก้ไขข้อมูล หรือลบออเดอร์ย่อยที่คีย์ผิดได้</p>
             </div>
@@ -1210,6 +1216,7 @@ export default function App() {
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+            {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการสินค้า</h2>
             <div className="flex space-x-2 w-full sm:w-auto">
               {canExportTab('products') && (<button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14} /><span>ส่งออก Excel</span></button>)}
@@ -1307,6 +1314,7 @@ export default function App() {
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+            {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">สต๊อกสินค้า</h2>
             {canExportTab('stock') && (<button onClick={exportStockReport} className="w-full sm:w-auto flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14} /><span>ส่งออกสต๊อก (Excel)</span></button>)}
           </div>
@@ -1382,7 +1390,11 @@ export default function App() {
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
-          <div><h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2><p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p></div>
+          <div>
+            {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
+            <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
+            <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
+          </div>
           {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14} /><span>เพิ่มผู้ใช้</span></button>}
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
@@ -1470,8 +1482,8 @@ export default function App() {
         <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
         <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-[50] sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
-            <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-xl shadow-sm px-4 w-[200px] md:w-[250px]" /></div>
-            <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200 shadow-inner">
+            <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-2xl shadow-sm px-4 w-[200px] md:w-[250px]" /></div>
+            <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><LayoutDashboard size={18} /><span>Dashboard</span></button>
                <button onClick={() => setActiveTab('stock')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Boxes size={18} /><span>สต๊อกสินค้า</span></button>
             </div>
@@ -1501,10 +1513,13 @@ export default function App() {
       {/* 🚀 ปรับความกว้าง Sidebar อัตโนมัติตาม State */}
       <div className={`w-full ${isSidebarCollapsed ? 'md:w-[80px]' : 'md:w-64'} bg-white border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden transition-all duration-300 ease-in-out`}>
         <div className="relative z-10 flex flex-col h-full">
-          <div className={`p-4 flex items-center justify-center border-b border-slate-100 transition-all duration-300 ${isSidebarCollapsed ? 'h-16' : 'h-16 md:h-auto'}`}>
-            <ResilientLogo collapsed={isSidebarCollapsed} className={`transition-all duration-300 ${isSidebarCollapsed ? 'h-10 w-10 rounded-lg' : 'h-12 w-full rounded-xl'} shadow-sm`} />
-          </div>
-          <nav className="px-3 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
+          {/* 🚀 ซ่อนโลโก้ 100% เมือ Sidebar ถูกย่อ */}
+          {!isSidebarCollapsed && (
+             <div className="p-4 flex items-center justify-center border-b border-slate-100 transition-all duration-300">
+               <ResilientLogo className="h-12 w-full rounded-xl shadow-sm" />
+             </div>
+          )}
+          <nav className={`px-3 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x ${isSidebarCollapsed ? 'md:pt-6' : ''}`}>
             {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "Dashboard" : ""}><LayoutDashboard size={20} className={activeTab !== 'dashboard' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>Dashboard</span></button>}
             {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการสินค้า" : ""}><Package size={20} className={activeTab !== 'products' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>การจัดการสินค้า</span></button>}
             {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "สต๊อกสินค้า" : ""}><Boxes size={20} className={activeTab !== 'stock' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>สต๊อกสินค้า</span></button>}
@@ -1526,7 +1541,6 @@ export default function App() {
              >
                 <Menu size={18} />
              </button>
-             {/* ❌ เอา text-slate-800 font-black ตรงนี้ออกแล้วครับ */}
           </div>
           <div className="flex items-center space-x-3 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-2 text-xs md:text-sm text-slate-700 py-1.5 px-3 rounded-full border border-slate-200 bg-slate-50"><User size={14} className="text-blue-600" /><span className="font-bold">{loggedInUser.username}</span><span className="text-slate-400 font-medium text-[10px] md:text-xs uppercase ml-1 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-100">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span></div>
