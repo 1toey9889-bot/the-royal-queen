@@ -12,7 +12,7 @@ import {
   Save, X, TrendingUp, CalendarDays, DollarSign, Boxes, Users, 
   LogOut, Lock, User, Download, History, BarChart3, ShieldCheck, 
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
-  Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon
+  Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon, Menu
 } from 'lucide-react';
 // 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
@@ -20,11 +20,11 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import Tesseract from 'tesseract.js';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic 
+// 🎨 โลโก้ The Resilient Clinic (รองรับการย่อขนาด)
 // ==========================================
-const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg ${className}`}>
-    <svg viewBox="0 0 320 100" className="h-full w-auto py-2 drop-shadow-md" fill="none" xmlns="http://www.w3.org/2000/svg">
+const ResilientLogo = ({ className = "", collapsed = false }) => (
+  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 ${className}`}>
+    <svg viewBox={collapsed ? "25 15 50 70" : "0 0 320 100"} className="h-full w-auto py-2 drop-shadow-md transition-all duration-500" fill="none" xmlns="http://www.w3.org/2000/svg">
       <g transform="translate(15, 12) scale(0.75)">
         <path d="M50 15 C 30 40 35 75 50 85 C 65 75 70 40 50 15 Z" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
         <circle cx="50" cy="55" r="7.5" fill="#FFFFFF"/>
@@ -33,9 +33,13 @@ const ResilientLogo = ({ className = "" }) => (
         <path d="M 38 85 C 10 85 -5 65 2 45 C 5 60 18 65 25 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
         <path d="M 62 85 C 90 85 105 65 98 45 C 95 60 82 65 75 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
       </g>
-      <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
-      <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
-      <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
+      {!collapsed && (
+        <g className="animate-in fade-in duration-500">
+          <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
+          <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
+          <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
+        </g>
+      )}
     </svg>
   </div>
 );
@@ -73,6 +77,9 @@ export default function App() {
   const [loggedInUser, setLoggedInUser] = useState(null); 
   const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
   
+  // 💡 State สำหรับควบคุมการย่อ/ขยาย Sidebar
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [users, setUsers] = useState([]);
@@ -163,7 +170,6 @@ export default function App() {
     document.body.appendChild(link); link.click(); setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 1000);
   };
 
-  // 🚀 จัดกลุ่มออเดอร์ตามเวลาที่ทำรายการ (Transaction Grouping)
   const groupSalesByTransaction = (salesArray) => {
     const grouped = {};
     salesArray.forEach(sale => {
@@ -373,7 +379,7 @@ export default function App() {
     );
   };
 
-  // 🛒 [View 7] บันทึกรายการขาย (POS) 🚀 ENTERPRISE ATOMIC (CART SYSTEM)
+  // 🛒 [View 7] บันทึกรายการขาย (POS)
   const SalesView = () => {
     const [selectedStore, setSelectedStore] = useState(STORE_OPTIONS[0]);
     const [orderId, setOrderId] = useState(''); 
@@ -570,7 +576,7 @@ export default function App() {
 
     return (
       <>
-        {/* 🚀 แก้ไขข้อ 3: นำ Modal ออกมานอก Grid หลัก และตั้งค่า z-[9999] เพื่อให้ทับ Sidebar ได้สมบูรณ์แบบ */}
+        {/* 🚀 Modal ยืนยันทำรายการ */}
         {showConfirmModal && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
@@ -627,7 +633,6 @@ export default function App() {
                   <button onClick={() => setScanMode('text')} className={`flex-1 py-3 text-xs md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><FileText size={16} className="mr-1.5"/> วางข้อความ</button>
                </div>
 
-               {/* โหมด 1: สแกนบาร์โค้ดปกติ */}
                {scanMode === 'camera' && (
                  <>
                    <div className="text-center">
@@ -640,14 +645,12 @@ export default function App() {
                  </>
                )}
 
-               {/* โหมด 2: ถ่ายรูป หรือ อัปโหลดรูป ให้ AI อ่านข้อมูล */}
                {scanMode === 'ocr_camera' && (
                  <div className="flex flex-col items-center space-y-5 w-full">
                     <div className="text-center">
                       <h3 className="font-black text-2xl text-teal-700">ดึงข้อมูลด้วย AI</h3>
                       <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">ถ่ายภาพสด หรือเลือกรูปจากคลังภาพได้เลย</p>
                     </div>
-                    
                     <div className="w-full relative rounded-2xl overflow-hidden bg-slate-900 aspect-video border-4 border-teal-100 shadow-inner">
                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-90"></video>
                        <canvas ref={canvasRef} className="hidden"></canvas>
@@ -658,7 +661,6 @@ export default function App() {
                           </div>
                        )}
                     </div>
-
                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
                        <button type="button" onClick={captureAndRead} disabled={isOcrProcessing} className="flex-1 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-teal-500/25 flex items-center justify-center transition disabled:opacity-50 transform hover:-translate-y-0.5 active:translate-y-0">
                           <Aperture size={20} className="mr-2" /> ถ่ายภาพจากกล้อง
@@ -671,7 +673,6 @@ export default function App() {
                  </div>
                )}
 
-               {/* โหมด 3: ดึงข้อความจากการวาง (Smart Text / Live Text) */}
                {scanMode === 'text' && (
                  <div className="flex-1 flex flex-col min-h-[250px]">
                     <div className="text-center mb-4">
@@ -695,21 +696,21 @@ export default function App() {
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 md:space-y-8 w-full">
             {message && <div className={`p-4 rounded-2xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
-            {/* 🚀 แก้ไขข้อ 1 & 2: เปลี่ยนเป็น flex-col เพื่อเรียงจากบนลงล่างตามรูปภาพเป๊ะๆ */}
-            <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto items-start">
+            {/* 🚀 ปรับเป็นบน-ล่าง (flex-col) 100% ตามรูปที่ส่งมาล่าสุด */}
+            <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto">
                
-               {/* 🛒 กล่องเลือกร้านค้า */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+               {/* 🛒 กล่องเลือกร้านค้า (บังคับ 5 คอลัมน์) */}
+               <div className="bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-orange-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 w-full flex flex-col justify-start">
-                     <div className="flex items-center space-x-3 mb-4 md:mb-5">
+                  <div className="relative z-10 w-full">
+                     <div className="flex items-center space-x-3 mb-5 md:mb-6">
                         <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-orange-500/30">
                            <Store size={22} className="md:w-6 md:h-6"/>
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     {/* 🚀 แก้ไขข้อ 1: ใช้ Grid เพื่อบังคับ 5 คอลัมน์ แถวเดียว ไม่ให้เละเทะ */}
-                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full">
+                     {/* 🚀 จัด Grid 5 คอลัมน์ แถวเดียว */}
+                     <div className="grid grid-cols-5 gap-2 md:gap-4 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -729,7 +730,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 rounded-xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words min-h-[3.5rem] leading-tight`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 md:px-3 py-3 md:py-5 rounded-xl md:rounded-2xl border-2 text-[10px] sm:text-xs md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full h-full min-h-[60px] md:min-h-[80px]`}>
                                 {s}
                              </button>
                            )
@@ -738,19 +739,19 @@ export default function App() {
                   </div>
                </div>
 
-               {/* 📝 กล่องรหัสออเดอร์ */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] h-fit">
+               {/* 📝 กล่องรหัสออเดอร์ (ลงมาอยู่ด้านล่าง แบบเต็มกรอบ) */}
+               <div className="bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 w-full flex flex-col justify-start">
-                     <div className="flex items-center space-x-3 mb-4 md:mb-5">
+                  <div className="relative z-10 w-full">
+                     <div className="flex items-center space-x-3 mb-5 md:mb-6">
                         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30">
                            <Barcode size={22} className="md:w-6 md:h-6"/>
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
                      </div>
-                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
-                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base font-black text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-bold shadow-inner" placeholder="ระบุรหัสออเดอร์..." />
-                        <button type="button" onClick={() => setScanMode('camera')} className="px-5 py-4 sm:py-0 bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-0.5" title="สแกน หรือ ดึงข้อมูล">
+                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full">
+                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 md:p-5 border-2 border-slate-100 focus:border-blue-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base md:text-lg font-black text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-bold shadow-inner" placeholder="ระบุรหัสออเดอร์ หรือ สแกน..." />
+                        <button type="button" onClick={() => setScanMode('camera')} className="px-6 py-4 md:py-5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-0.5" title="สแกน หรือ ดึงข้อมูล">
                            <Scan size={24} className="mr-2 sm:mr-0" /> <span className="sm:hidden font-bold">สแกนโค้ด</span>
                         </button>
                      </div>
@@ -758,12 +759,12 @@ export default function App() {
                </div>
             </div>
 
-            <div className="flex items-center justify-center py-1">
+            <div className="flex items-center justify-center py-2">
                <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full max-w-2xl"></div>
             </div>
 
-            {/* 🚀 แก้ไขข้อ 3: ปรับ z-[80] ให้กล่องค้นหาลอยทับตะกร้าที่อยู่ด้านล่างเสมอ */}
-            <div className="relative z-[80] bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+            {/* 🚀 UI ค้นหาสินค้า ปรับ z-[80] ให้ลอยทับเสมอ */}
+            <div className="relative z-[80] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
               <div className="flex items-center justify-center space-x-3 mb-6 md:mb-8">
                  <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                     <Package size={24} className="md:w-6 md:h-6" />
@@ -811,7 +812,6 @@ export default function App() {
               )}
             </div>
 
-            {/* ส่วนตะกร้าสินค้า ปรับให้อยู่ในชั้นปกติ */}
             {cart.length > 0 && (
                <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[2rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
                   <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-5 py-4 border-b border-blue-100 font-black text-blue-900 text-base md:text-lg flex items-center shadow-inner">
@@ -880,7 +880,7 @@ export default function App() {
             </div>
           </form>
 
-          {/* 🚀 UI ส่วนแสดงรายการที่เพิ่งขายไปวันนี้แบบตีกรอบแยกกล่องออเดอร์ */}
+          {/* 🚀 UI ส่วนแสดงรายการที่เพิ่งขายไปวันนี้ */}
           <div className="pt-8 w-full pb-10 relative z-10">
             <h3 className="text-xl font-black text-slate-800 mb-5 px-2 flex items-center tracking-tight"><History size={22} className="mr-2 text-blue-500"/>รายการที่เพิ่งขายไปวันนี้</h3>
             <div className="w-full overflow-x-auto p-2">
@@ -1510,33 +1510,46 @@ export default function App() {
 
   if (!loggedInUser && !isExecutiveView) return <LoginView />;
 
-  // 🎨 กำหนด Style ของปุ่มเมนู
-  const navItemBaseStyle = "snap-start flex-shrink-0 flex items-center space-x-3 w-auto md:w-full px-4 py-3 md:py-4 rounded-2xl transition-all duration-300 whitespace-nowrap text-sm md:text-base group border border-transparent";
-  const navItemActiveStyle = "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-500/20 transform md:scale-105 border-transparent";
+  // 🎨 กำหนด Style ของปุ่มเมนู (ปรับให้สอดคล้องกับตอนย่อ/ขยาย)
+  const navItemBaseStyle = `snap-start flex-shrink-0 flex items-center md:w-full py-3 md:py-4 rounded-2xl transition-all duration-300 text-sm md:text-base group border border-transparent ${isSidebarCollapsed ? 'md:justify-center px-4 md:px-0' : 'px-4'}`;
+  const navItemActiveStyle = "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-500/20 md:scale-[1.02] border-transparent";
   const navItemInactiveStyle = "text-slate-600 hover:bg-white hover:text-blue-600 font-bold hover:shadow-sm hover:border-slate-100";
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
       
-      <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      {/* 🚀 ปรับความกว้าง Sidebar อัตโนมัติตาม State (20 vs 72) */}
+      <div className={`w-full ${isSidebarCollapsed ? 'md:w-[90px]' : 'md:w-72'} bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 ease-in-out`}>
         <div className="relative z-10 flex flex-col h-full">
-          <div className="p-5 md:p-6 flex items-center justify-center border-b border-slate-200/60"><ResilientLogo className="h-16 w-full rounded-2xl shadow-sm" /></div>
+          <div className={`p-4 md:p-5 flex items-center justify-center border-b border-slate-200/60 transition-all duration-300 ${isSidebarCollapsed ? 'h-20' : 'h-20 md:h-auto'}`}>
+            <ResilientLogo collapsed={isSidebarCollapsed} className={`transition-all duration-300 ${isSidebarCollapsed ? 'h-12 w-12 rounded-xl' : 'h-16 w-full rounded-2xl'} shadow-sm`} />
+          </div>
           <nav className="px-4 py-5 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
-            {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={22} className={activeTab !== 'dashboard' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>Dashboard</span></button>}
-            {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={22} className={activeTab !== 'products' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>การจัดการสินค้า</span></button>}
-            {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`}><Boxes size={22} className={activeTab !== 'stock' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>สต๊อกสินค้า</span></button>}
-            {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`}><Users size={22} className={activeTab !== 'users' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>การจัดการผู้ใช้</span></button>}
-            {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`}><History size={22} className={activeTab !== 'history' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>ประวัติการขาย</span></button>}
-            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`}><ShoppingCart size={22} className={activeTab !== 'sales' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>บันทึกการขาย (POS)</span></button>}
+            {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "Dashboard" : ""}><LayoutDashboard size={22} className={activeTab !== 'dashboard' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>Dashboard</span></button>}
+            {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการสินค้า" : ""}><Package size={22} className={activeTab !== 'products' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>การจัดการสินค้า</span></button>}
+            {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "สต๊อกสินค้า" : ""}><Boxes size={22} className={activeTab !== 'stock' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>สต๊อกสินค้า</span></button>}
+            {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการผู้ใช้" : ""}><Users size={22} className={activeTab !== 'users' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>การจัดการผู้ใช้</span></button>}
+            {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "ประวัติการขาย" : ""}><History size={22} className={activeTab !== 'history' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>ประวัติการขาย</span></button>}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "บันทึกการขาย (POS)" : ""}><ShoppingCart size={22} className={activeTab !== 'sales' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2 md:ml-3'}`}>บันทึกการขาย (POS)</span></button>}
           </nav>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-slate-50/50">
-        <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-6 md:px-8 flex-shrink-0 shadow-sm z-[60] w-full">
-          <div className="text-slate-800 font-black text-lg hidden sm:block tracking-wide">
-            {activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'products' ? 'การจัดการสินค้า' : activeTab === 'stock' ? 'สต๊อกสินค้า' : activeTab === 'users' ? 'การจัดการผู้ใช้' : activeTab === 'history' ? 'ประวัติการขาย' : 'บันทึกการขาย (POS)'}
+        <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-4 md:px-8 flex-shrink-0 shadow-sm z-[60] w-full">
+          <div className="flex items-center space-x-3 md:space-x-4">
+             {/* 🚀 ปุ่ม Hamburger Menu สำหรับซ่อน/แสดง Sidebar */}
+             <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                className="p-2.5 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-xl transition-colors hidden md:flex items-center justify-center border border-slate-200 shadow-sm active:scale-95"
+                title={isSidebarCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
+             >
+                <Menu size={20} />
+             </button>
+             <div className="text-slate-800 font-black text-lg hidden sm:block tracking-wide">
+               {activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'products' ? 'การจัดการสินค้า' : activeTab === 'stock' ? 'สต๊อกสินค้า' : activeTab === 'users' ? 'การจัดการผู้ใช้' : activeTab === 'history' ? 'ประวัติการขาย' : 'บันทึกการขาย (POS)'}
+             </div>
           </div>
           <div className="flex items-center space-x-3 md:space-x-4 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-2.5 text-sm text-slate-700 bg-white shadow-sm py-2 px-4 rounded-full border border-slate-200"><User size={16} className="text-blue-600" /><span className="font-black">{loggedInUser.username}</span><span className="text-slate-400 font-bold text-xs uppercase tracking-wider ml-1 px-2 py-0.5 bg-slate-100 rounded-md">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span></div>
