@@ -20,11 +20,11 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import Tesseract from 'tesseract.js';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic (ปรับโครงสร้างใหม่)
+// 🎨 โลโก้ The Resilient Clinic 
 // ==========================================
-const ResilientLogo = ({ className = "" }) => (
-  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg ${className}`}>
-    <svg viewBox="0 0 320 100" className="h-full w-auto py-2 drop-shadow-md" fill="none" xmlns="http://www.w3.org/2000/svg">
+const ResilientLogo = ({ className = "", collapsed = false }) => (
+  <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 ${className}`}>
+    <svg viewBox={collapsed ? "25 15 50 70" : "0 0 320 100"} className="h-full w-auto py-2 drop-shadow-md transition-all duration-500" fill="none" xmlns="http://www.w3.org/2000/svg">
       <g transform="translate(15, 12) scale(0.75)">
         <path d="M50 15 C 30 40 35 75 50 85 C 65 75 70 40 50 15 Z" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinejoin="round"/>
         <circle cx="50" cy="55" r="7.5" fill="#FFFFFF"/>
@@ -33,11 +33,13 @@ const ResilientLogo = ({ className = "" }) => (
         <path d="M 38 85 C 10 85 -5 65 2 45 C 5 60 18 65 25 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
         <path d="M 62 85 C 90 85 105 65 98 45 C 95 60 82 65 75 58" stroke="#CEA85E" strokeWidth="4.5" fill="none" strokeLinecap="round"/>
       </g>
-      <g>
-        <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
-        <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
-        <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
-      </g>
+      {!collapsed && (
+        <g className="animate-in fade-in duration-500">
+          <text x="105" y="38" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="1.5">THE</text>
+          <text x="103" y="64" fontFamily="system-ui, -apple-system, sans-serif" fontSize="26" fontWeight="800" fill="#CEA85E" letterSpacing="1.5">RESILIENT</text>
+          <text x="105" y="84" fontFamily="system-ui, -apple-system, sans-serif" fontSize="13" fontWeight="500" fill="#FFFFFF" letterSpacing="2.5">CLINIC</text>
+        </g>
+      )}
     </svg>
   </div>
 );
@@ -326,7 +328,6 @@ export default function App() {
           </div>
         </div>
         
-        {/* 🚀 แก้ไขข้อ 1: ปรับลดขนาดตัวเลขใน Dashboard (จาก text-2xl/3xl เป็น text-xl/2xl) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
             <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 group-hover:w-2 transition-all"></div>
@@ -631,7 +632,6 @@ export default function App() {
                   <button onClick={() => setScanMode('text')} className={`flex-1 py-2.5 text-[11px] md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'text' ? 'bg-white text-purple-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><FileText size={16} className="mr-1"/> วางข้อความ</button>
                </div>
 
-               {/* โหมด 1: สแกนบาร์โค้ดปกติ */}
                {scanMode === 'camera' && (
                  <>
                    <div className="text-center">
@@ -644,7 +644,6 @@ export default function App() {
                  </>
                )}
 
-               {/* โหมด 2: ถ่ายรูป หรือ อัปโหลดรูป ให้ AI อ่านข้อมูล */}
                {scanMode === 'ocr_camera' && (
                  <div className="flex flex-col items-center space-y-4 w-full">
                     <div className="text-center">
@@ -673,7 +672,6 @@ export default function App() {
                  </div>
                )}
 
-               {/* โหมด 3: ดึงข้อความจากการวาง (Smart Text / Live Text) */}
                {scanMode === 'text' && (
                  <div className="flex-1 flex flex-col min-h-[200px]">
                     <div className="text-center mb-3">
@@ -690,27 +688,22 @@ export default function App() {
         )}
 
         <div className="relative space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
-          {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
-          <div className="mb-6">
-            <h2 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">บันทึกการขาย (POS)</h2>
-          </div>
-
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 w-full">
             {message && <div className={`p-3 rounded-xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
             <div className="flex flex-col gap-4 w-full mx-auto items-start">
                
-               {/* กล่องเลือกร้านค้า */}
-               <div className="bg-white p-4 md:p-6 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group w-full">
+               {/* กล่องเลือกร้านค้า (บังคับ 5 คอลัมน์) */}
+               <div className="bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-orange-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
                   <div className="relative z-10 w-full">
-                     <div className="flex items-center space-x-2.5 mb-4">
-                        <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2 rounded-xl text-white shadow-sm">
-                           <Store size={18} />
+                     <div className="flex items-center space-x-3 mb-5 md:mb-6">
+                        <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-orange-500/30">
+                           <Store size={22} className="md:w-6 md:h-6"/>
                         </div>
-                        {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
-                        <label className="text-sm md:text-base font-bold text-slate-800 tracking-wide">เลือกร้านค้า</label>
+                        <label className="text-lg md:text-xl font-bold text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     <div className="grid grid-cols-5 gap-2 w-full">
+                     <div className="grid grid-cols-5 gap-2 md:gap-4 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -719,10 +712,10 @@ export default function App() {
                            
                            let colorClass = "bg-slate-50 text-slate-500 hover:bg-slate-100 border-transparent hover:border-slate-200";
                            if (isActive) {
-                              if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-sm border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
-                              else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-sm border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
-                              else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-sm border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
-                              else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm border-transparent ring-2 ring-blue-500/30 ring-offset-1";
+                              if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-md shadow-[#EE4D2D]/30 border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
+                              else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-md shadow-blue-900/30 border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
+                              else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-md shadow-[#00C300]/30 border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
+                              else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md border-transparent ring-2 ring-blue-500/30 ring-offset-1";
                            } else {
                               if (isShopee) colorClass = "bg-[#FFF0ED] text-[#EE4D2D] hover:bg-[#FFE4DF] border-[#FFE4DF]";
                               else if (isLazada) colorClass = "bg-[#F2F3FF] text-[#0F146D] hover:bg-[#E6E8FF] border-[#E6E8FF]";
@@ -730,7 +723,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 py-2.5 md:py-3 rounded-xl border-2 text-[10px] md:text-xs font-bold transition-all duration-200 transform active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full h-full min-h-[48px] md:min-h-[56px]`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 md:px-3 py-3 md:py-5 rounded-xl md:rounded-2xl border-2 text-[10px] sm:text-xs md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full h-full min-h-[60px] md:min-h-[80px]`}>
                                 {s}
                              </button>
                            )
@@ -739,66 +732,69 @@ export default function App() {
                   </div>
                </div>
 
-               {/* กล่องรหัสออเดอร์ */}
-               <div className="bg-white p-4 md:p-6 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group w-full h-fit">
+               {/* 📝 กล่องรหัสออเดอร์ */}
+               <div className="bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
                   <div className="relative z-10 w-full">
-                     <div className="flex items-center space-x-2.5 mb-4">
-                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-sm">
-                           <Barcode size={18} />
+                     <div className="flex items-center space-x-3 mb-5 md:mb-6">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30">
+                           <Barcode size={22} className="md:w-6 md:h-6"/>
                         </div>
-                        {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
-                        <label className="text-sm md:text-base font-bold text-slate-800 tracking-wide">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
+                        <label className="text-lg md:text-xl font-bold text-slate-800 tracking-wide">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
                      </div>
-                     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full">
-                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-3 border-2 border-slate-100 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white outline-none text-sm md:text-base font-bold text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="ระบุรหัสออเดอร์ หรือ สแกน..." />
-                        <button type="button" onClick={() => setScanMode('camera')} className="px-4 py-3 sm:py-0 bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition-all flex items-center justify-center shrink-0 transform active:scale-95 text-sm" title="สแกน หรือ ดึงข้อมูล">
-                           <Scan size={18} className="mr-1.5 sm:mr-0" /> <span className="sm:hidden font-bold">สแกนโค้ด</span>
+                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full">
+                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 md:p-5 border-2 border-slate-100 focus:border-blue-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base md:text-lg font-black text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-bold shadow-inner" placeholder="ระบุรหัสออเดอร์ หรือ สแกน..." />
+                        <button type="button" onClick={() => setScanMode('camera')} className="px-6 py-4 md:py-5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-0.5" title="สแกน หรือ ดึงข้อมูล">
+                           <Scan size={24} className="mr-2 sm:mr-0" /> <span className="sm:hidden font-bold">สแกนโค้ด</span>
                         </button>
                      </div>
                   </div>
                </div>
             </div>
 
-            {/* กล่องค้นหาสินค้า */}
-            <div className="relative z-[80] bg-white p-4 md:p-6 rounded-[1.5rem] border border-slate-100 shadow-sm w-full" ref={dropdownRef}>
-              <div className="flex items-center justify-center space-x-2.5 mb-4 md:mb-5">
-                 <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2 rounded-xl text-white shadow-sm">
-                    <Package size={18} />
+            <div className="flex items-center justify-center py-2">
+               <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full max-w-2xl"></div>
+            </div>
+
+            {/* 🚀 UI ค้นหาสินค้า */}
+            <div className="relative z-[80] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+              <div className="flex items-center justify-center space-x-3 mb-6 md:mb-8">
+                 <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
+                    <Package size={24} className="md:w-6 md:h-6" />
                  </div>
-                 {/* 🚀 แก้ไขข้อ 3: ปรับขนาดตัวอักษรหัวข้อลง */}
                  <h3 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 tracking-tight">เลือกสินค้าลงตะกร้า</h3>
               </div>
               
-              <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-3 border-2 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all shadow-sm relative group ${isDropdownOpen ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-white'} ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex items-center space-x-2.5">
-                   <Search size={18} className={`transition-colors ${isDropdownOpen ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-400'}`} />
-                   <span className={`${isDropdownOpen ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium group-hover:text-slate-700'}`}>คลิกเพื่อค้นหาและเลือกสินค้า...</span>
+              <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-4 md:p-5 border-2 rounded-xl text-sm md:text-base cursor-pointer flex justify-between items-center transition-all shadow-sm relative group ${isDropdownOpen ? 'border-emerald-500 bg-emerald-50/30 ring-4 ring-emerald-500/10' : 'border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-white hover:shadow-md'} ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center space-x-3">
+                   <Search size={22} className={`transition-colors ${isDropdownOpen ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-400'}`} />
+                   <span className={`${isDropdownOpen ? 'text-emerald-700 font-black' : 'text-slate-500 font-bold group-hover:text-slate-700'} tracking-wide`}>คลิกเพื่อค้นหาและเลือกสินค้า...</span>
                 </div>
-                <ChevronDown size={20} className={`transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`} />
+                <ChevronDown size={24} className={`transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400 group-hover:text-emerald-400'}`} />
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg max-h-[250px] md:max-h-[300px] flex flex-col top-full left-0 z-[100] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
-                  <div className="p-2.5 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                <div className="absolute w-full mt-3 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[1.5rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[350px] md:max-h-[400px] flex flex-col top-full left-0 z-[100] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input type="text" className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all shadow-sm placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input type="text" className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm md:text-base font-black focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm placeholder:text-slate-400 placeholder:font-bold" placeholder="พิมพ์ชื่อสินค้าที่ต้องการ..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
                     </div>
                   </div>
-                  <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white relative z-10">
+                  <ul className="overflow-y-auto flex-1 p-3 space-y-2 scrollbar-hide bg-white relative z-10">
                     {filteredProductsForSelect.map(p => {
                       const stockAmount = Number(p.stock) || 0;
                       const isOutOfStock = stockAmount <= 0;
                       const isLowStock = stockAmount <= 5 && !isOutOfStock;
 
                       return (
-                        <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-3 py-2 rounded-lg text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 cursor-not-allowed bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100"}`}>
-                          <div className="flex items-center space-x-2 mb-1.5 sm:mb-0 pr-2">
-                             {isLowStock && <AlertCircle size={14} className="text-red-500 shrink-0" />}
-                             <span className="font-bold text-sm text-slate-800">{p.name}</span>
+                        <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-4 py-3 md:p-4 rounded-xl text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 cursor-not-allowed bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 hover:shadow-md transform hover:-translate-y-0.5"}`}>
+                          <div className="flex items-center space-x-2 mb-2 sm:mb-0 pr-2">
+                             {isLowStock && <AlertCircle size={16} className="text-red-500 shrink-0" />}
+                             <span className="font-black text-sm md:text-base text-slate-800 tracking-tight">{p.name}</span>
                           </div>
                           
-                          <span className={`text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          <span className={`text-[11px] md:text-xs font-black px-3 py-1.5 rounded-lg shrink-0 border shadow-sm ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                             {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${stockAmount} ชิ้น (฿${formatMoney(p.price)})`}
                           </span>
                         </li>
@@ -809,32 +805,32 @@ export default function App() {
               )}
             </div>
 
-            {/* ตะกร้าสินค้า */}
+            {/* ส่วนตะกร้าสินค้า ปรับให้อยู่ในชั้นปกติ */}
             {cart.length > 0 && (
-               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[1.5rem] overflow-hidden w-full shadow-sm mt-4">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-blue-100 font-bold text-blue-900 text-sm flex items-center">
-                    <ShoppingCart size={16} className="mr-1.5 text-blue-600"/> รายการในตะกร้า ({cart.length})
+               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[2rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
+                  <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-5 py-4 border-b border-blue-100 font-black text-blue-900 text-base md:text-lg flex items-center shadow-inner">
+                    <ShoppingCart size={20} className="mr-2 text-blue-600"/> รายการในตะกร้า ({cart.length})
                   </div>
-                  <div className="p-2 md:p-3 w-full space-y-2">
+                  <div className="p-3 md:p-4 w-full space-y-3">
                      {cart.map((item, index) => (
-                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-3 gap-3 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all hover:border-blue-100 group">
-                           <div className="flex-1 font-bold text-slate-800 break-words w-full lg:w-auto text-sm">{item.name}</div>
+                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-4 md:p-5 gap-4 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all hover:shadow-md hover:border-blue-100 group">
+                           <div className="flex-1 font-black text-slate-800 break-words w-full lg:w-auto text-base md:text-lg leading-tight tracking-tight group-hover:text-blue-900 transition-colors">{item.name}</div>
                            
-                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-3 shrink-0">
-                              <div className="flex items-center space-x-1.5">
-                                 <span className="text-[10px] text-slate-500 font-bold lg:hidden uppercase">ราคา/ชิ้น</span>
-                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-16 md:w-20 p-1.5 text-center border border-slate-200 rounded-md text-xs font-bold focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all text-blue-700" placeholder="ราคา"/>
+                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-4 md:gap-5 shrink-0">
+                              <div className="flex items-center space-x-2">
+                                 <span className="text-[11px] md:text-xs text-slate-500 font-bold lg:hidden uppercase tracking-wider">ราคา/ชิ้น</span>
+                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-20 md:w-28 p-2 md:p-2.5 text-center border-2 border-slate-100 rounded-lg text-sm md:text-base font-black focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all shadow-inner text-blue-700" placeholder="ราคา"/>
                               </div>
 
-                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md p-0.5 shrink-0">
-                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-1.5 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Minus size={14}/></button>
-                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-10 text-center bg-transparent font-bold outline-none text-sm text-slate-800"/>
-                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-1.5 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Plus size={14}/></button>
+                              <div className="flex items-center bg-slate-50 border-2 border-slate-100 rounded-lg p-1 shrink-0 shadow-sm">
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-2 bg-white rounded-md shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Minus size={16}/></button>
+                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-12 md:w-16 text-center bg-transparent font-black outline-none text-base md:text-lg text-slate-800"/>
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-2 bg-white rounded-md shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Plus size={16}/></button>
                               </div>
                               
-                              <div className="flex items-center justify-end gap-2 min-w-[80px] shrink-0">
-                                 <span className="font-bold text-blue-700 text-right text-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
-                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-md transition-all" title="ลบรายการนี้"><Trash2 size={16}/></button>
+                              <div className="flex items-center justify-end gap-3 md:gap-4 min-w-[120px] shrink-0">
+                                 <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-right text-lg md:text-xl drop-shadow-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
+                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-2.5 rounded-lg transition-all border border-transparent hover:border-red-100 active:scale-95" title="ลบรายการนี้"><Trash2 size={20}/></button>
                               </div>
                            </div>
                         </div>
@@ -844,38 +840,44 @@ export default function App() {
             )}
 
             <div className="pt-2 w-full relative z-10">
-              <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-5 md:p-6 rounded-[1.5rem] border border-blue-100 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm w-full">
-                <div className="text-center sm:text-left w-full sm:w-auto flex flex-col items-center sm:items-start">
-                  <p className="text-xs font-bold text-blue-500 mb-1.5 uppercase">ราคารวมสุทธิ {cart.length > 0 ? `(${cart.length} รายการ)` : ''}</p>
-                  <div className="flex items-center relative w-full sm:w-auto justify-center sm:justify-start">
-                    <span className="text-2xl font-black text-blue-700 absolute left-4 select-none opacity-80">฿</span>
+              <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-6 md:p-8 rounded-[2rem] border border-blue-100 flex flex-col lg:flex-row justify-between items-center gap-6 shadow-[0_8px_30px_rgb(55,97,233,0.08)] w-full relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-200/40 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-200/40 rounded-full blur-3xl -ml-10 -mb-10"></div>
+                
+                <div className="text-center lg:text-left w-full lg:w-auto flex flex-col items-center lg:items-start relative z-10">
+                  <p className="text-sm font-black text-blue-500 mb-2 md:mb-3 tracking-widest uppercase">ราคารวมสุทธิ {cart.length > 0 ? `(${cart.length} รายการ)` : ''}</p>
+                  <div className="flex items-center relative w-full lg:w-auto justify-center lg:justify-start">
+                    <span className="text-3xl md:text-4xl font-black text-blue-700 absolute left-5 select-none opacity-80">฿</span>
                     <input 
                       type="number" 
                       value={customGrandTotal} 
                       placeholder={posTotal}    
                       onChange={(e) => setCustomGrandTotal(e.target.value)}
-                      className="w-full sm:w-56 pl-10 pr-3 py-2.5 text-2xl font-black text-blue-800 bg-white/90 border-2 border-blue-200 rounded-xl outline-none focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-sm"
+                      className="w-full lg:w-72 pl-14 md:pl-16 pr-4 py-4 md:py-5 text-3xl md:text-4xl font-black text-blue-800 bg-white/90 backdrop-blur-sm border-2 border-blue-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-blue-500/30 focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-md"
                       disabled={cart.length === 0}
                     />
                   </div>
                   {customGrandTotal !== '' && Number(customGrandTotal) !== posTotal && (
-                    <p className="text-[10px] text-orange-600 mt-2 font-bold bg-orange-100/80 px-2 py-1 rounded border border-orange-200 inline-flex items-center">
-                      <AlertCircle size={12} className="mr-1" /> แก้ไขจากปกติ ฿{formatMoney(posTotal)}
+                    <p className="text-xs md:text-sm text-orange-600 mt-3 font-bold bg-orange-100/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-orange-200 inline-flex items-center shadow-sm animate-in fade-in zoom-in">
+                      <AlertCircle size={16} className="mr-1.5" /> แก้ไขจากปกติ ฿{formatMoney(posTotal)}
                     </p>
                   )}
                 </div>
 
-                <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3.5 rounded-xl text-base font-bold transition-all disabled:opacity-50 shadow-md flex items-center justify-center">
-                  {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={18} className="mr-1.5"/> บันทึกการขาย</>}
+                <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full lg:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 md:px-12 py-4 md:py-5 rounded-[1.5rem] text-lg md:text-xl font-black transition-all disabled:opacity-50 shadow-[0_10px_40px_rgba(37,99,235,0.3)] transform hover:-translate-y-1 active:translate-y-0 whitespace-nowrap relative z-10 overflow-hidden group">
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out"></div>
+                  <span className="relative flex items-center justify-center">
+                     {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={24} className="mr-2"/> บันทึกการขาย</>}
+                  </span>
                 </button>
               </div>
             </div>
           </form>
 
           {/* 🚀 รายการที่เพิ่งขายไปวันนี้ */}
-          <div className="pt-6 w-full pb-8 relative z-10">
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><History size={18} className="mr-1.5 text-blue-500"/>รายการขายวันนี้</h3>
-            <div className="w-full overflow-x-auto pb-2">
+          <div className="pt-8 w-full pb-10 relative z-10">
+            <h3 className="text-xl font-black text-slate-800 mb-5 px-2 flex items-center tracking-tight"><History size={22} className="mr-2 text-blue-500"/>รายการขายวันนี้</h3>
+            <div className="w-full overflow-x-auto p-2">
               <table className="w-full text-left border-separate min-w-full" style={{ borderSpacing: '0 8px' }}>
                 <thead>
                   <tr className="text-slate-400 text-[10px] md:text-xs uppercase">
@@ -901,9 +903,15 @@ export default function App() {
                           return (
                             <tr key={sale.id} className="bg-white">
                               <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
-                                 {isFirstRow ? <span className="font-medium flex items-center"><CalendarDays size={10} className="mr-1"/> {timeString}</span> : ''}
+                                 {isFirstRow ? (
+                                    <div className="flex flex-col space-y-1">
+                                       <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
+                                       <span className="font-medium flex items-center text-[10px] md:text-xs"><CalendarDays size={10} className="mr-1"/> {timeString}</span>
+                                    </div>
+                                 ) : ''}
                               </td>
-                              <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isFirstRow ? (sale.orderId || '-') : ''}</td>
+                              {/* 🚀 แก้ไขให้แสดง รหัสออเดอร์ ทุกแถว */}
+                              <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
                               <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
                               <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
                               <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
@@ -1051,7 +1059,7 @@ export default function App() {
           </div>
         </div>
         
-        {/* 🚀 แก้ไขตารางให้กะทัดรัดขึ้น บีบให้พอดีจอ ไม่ต้องเลื่อนบ่อย */}
+        {/* 🚀 ตารางบีบอัดให้พอดีจอ ไม่ต้องเลื่อนบ่อย */}
         <div className="w-full overflow-x-auto pb-4 pt-1">
           <table className="w-full text-left border-separate min-w-full" style={{ borderSpacing: '0 6px' }}>
             <thead>
@@ -1087,11 +1095,15 @@ export default function App() {
                                <input type="datetime-local" className="w-full p-1 border border-blue-200 rounded focus:border-blue-500 outline-none bg-white text-[10px]" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/> 
                             ) : (
                                isFirstRow ? (
-                                  <span className="font-medium flex items-center"><CalendarDays size={10} className="mr-1"/> {timeString}</span>
+                                  <div className="flex flex-col space-y-1">
+                                     <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ที่ {groupedHistorySales.length - groupIndex}</span>
+                                     <span className="font-medium flex items-center text-[10px] md:text-xs"><CalendarDays size={10} className="mr-1"/> {timeString}</span>
+                                  </div>
                                ) : ''
                             )}
                           </td>
-                          <td className={`p-2 text-slate-700 font-bold ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="text" className="w-16 p-1 border border-blue-200 rounded focus:border-blue-500 outline-none text-[10px]" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/> : (isFirstRow ? (sale.orderId || '-') : '')}</td>
+                          {/* 🚀 แก้ไขให้แสดง รหัสออเดอร์ ทุกแถว */}
+                          <td className={`p-2 text-slate-700 font-bold ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="text" className="w-16 p-1 border border-blue-200 rounded focus:border-blue-500 outline-none text-[10px]" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/> : (sale.orderId || '-')}</td>
                           <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.store} onChange={e => setEditForm({...editForm, store: e.target.value})} className="w-full p-1 border border-blue-200 rounded focus:border-blue-500 outline-none bg-white text-[10px]">{STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select> : <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span>}</td>
                           <td className={`p-2 min-w-[100px] whitespace-normal md:whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <select value={editForm.productId} onChange={e => setEditForm({...editForm, productId: e.target.value, customPrice: getProduct(e.target.value)?.price||0})} className="w-full p-1 border border-blue-200 rounded focus:border-blue-500 outline-none bg-white text-[10px]">{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select> : <span className="font-medium text-slate-800 break-words">{getProduct(sale.productId)?.name || 'ลบแล้ว'}</span>}</td>
                           <td className={`p-2 text-center ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isCurrentRowEditing ? <input type="number" className="w-10 mx-auto p-1 border border-blue-200 rounded text-center focus:border-blue-500 outline-none text-[10px]" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} /> : <span className="font-bold text-slate-700">{sale.quantity}</span>}</td>
