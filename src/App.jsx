@@ -569,10 +569,10 @@ export default function App() {
     };
 
     return (
-      <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300 w-full">
-        {/* Modal ยืนยันทำรายการ (แก้ปัญหาเรื่องโดน Sidebar ทับ ด้วย z-[200]) */}
+      <>
+        {/* 🚀 แก้ไขข้อ 3: ย้าย Modal ออกมานอก div "animate-in" เพื่อปลดล็อก Stacking Context ให้มันทะลุครอบคลุมเต็มหน้าจอได้ */}
         {showConfirmModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 md:p-6 text-center text-white shrink-0 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -581,7 +581,7 @@ export default function App() {
                <div className="p-5 md:p-6 space-y-5 overflow-y-auto flex-1 w-full bg-slate-50/50">
                   <div className="grid grid-cols-2 gap-4 text-sm bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                      <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">ร้านค้า</span><span className={`inline-block px-3.5 py-1.5 rounded-xl font-black text-xs md:text-sm shadow-sm border ${selectedStore.includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (selectedStore === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{selectedStore}</span></div>
-                     <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">รหัสออเดอร์</span><span className="font-black text-slate-800 text-sm md:text-base bg-slate-100 px-3 py-1.5 rounded-xl block border border-slate-200 truncate">{orderId || '-'}</span></div>
+                     <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">รหัสออเดอร์</span><span className="font-black text-slate-800 text-sm md:text-base bg-slate-100 px-3 py-1.5 rounded-xl block border border-slate-200 break-words">{orderId || '-'}</span></div>
                   </div>
                   <div>
                     <h4 className="font-black text-slate-700 mb-3 text-base md:text-lg flex items-center"><Package size={18} className="mr-2"/>รายการสินค้า ({cart.length})</h4>
@@ -617,9 +617,9 @@ export default function App() {
           </div>
         )}
 
-        {/* 🚀 Modal สแกน Barcode และ Smart Extract (กล้อง + เลือกรูป) */}
+        {/* 🚀 Modal สแกน Barcode และ Smart Extract */}
         {scanMode && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] w-full max-w-lg space-y-6 shadow-2xl flex flex-col max-h-[90vh] border border-slate-100">
                <div className="flex bg-slate-100/80 p-1.5 rounded-2xl shrink-0 gap-1.5 border border-slate-200/60 shadow-inner">
                   <button onClick={() => setScanMode('camera')} className={`flex-1 py-3 text-xs md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Barcode size={16} className="mr-1.5"/> สแกนโค้ด</button>
@@ -640,7 +640,7 @@ export default function App() {
                  </>
                )}
 
-               {/* 🚀 โหมด 2: ถ่ายรูป หรือ อัปโหลดรูป ให้ AI อ่านข้อมูล */}
+               {/* โหมด 2: ถ่ายรูป หรือ อัปโหลดรูป ให้ AI อ่านข้อมูล */}
                {scanMode === 'ocr_camera' && (
                  <div className="flex flex-col items-center space-y-5 w-full">
                     <div className="text-center">
@@ -687,7 +687,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="w-full">
+        <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300 w-full">
           <div className="text-center mb-8 md:mb-10">
             <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-600 tracking-tight drop-shadow-sm">บันทึกการขาย (POS)</h2>
           </div>
@@ -695,7 +695,6 @@ export default function App() {
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 md:space-y-8 w-full">
             {message && <div className={`p-4 rounded-2xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
-            {/* 🚀 UI เลือกร้านค้าและรหัสออเดอร์ */}
             <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 w-full max-w-5xl mx-auto">
                <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-orange-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
@@ -706,8 +705,8 @@ export default function App() {
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     {/* 🚀 แก้ไขข้อ 1: ปรับ Grid ให้รองรับ 5 ตัวเลือก, ใช้ whitespace-normal และจัดการระยะให้พอดี ไม่ให้ตกขอบ */}
-                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3 w-full">
+                     {/* 🚀 แก้ไขข้อ 1: ใช้ flex-wrap และ break-words เพื่อให้ปุ่มตัดข้อความได้อย่างสวยงาม ไม่ตกขอบ */}
+                     <div className="flex flex-wrap gap-2.5 md:gap-3 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -727,7 +726,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 sm:px-2 py-3 md:py-4 rounded-2xl border-2 text-[11px] sm:text-xs md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} whitespace-normal break-words leading-tight w-full flex items-center justify-center min-h-[64px]`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3.5 md:py-4 rounded-2xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex-1 min-w-[75px] sm:min-w-[90px] flex items-center justify-center text-center whitespace-normal break-words leading-tight shadow-sm hover:shadow-md h-full min-h-[60px]`}>
                                 {s}
                              </button>
                            )
@@ -759,9 +758,8 @@ export default function App() {
                <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full max-w-2xl"></div>
             </div>
 
-            {/* 🚀 UI ค้นหาสินค้า */}
-            {/* 🚀 แก้ไขข้อ 2: เปลี่ยนจาก z-10 เป็น z-[60] เพื่อให้ Dropdown แสดงทับกล่องตะกร้าที่อยู่ด้านล่างเสมอ */}
-            <div className="relative z-[60] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+            {/* 🚀 แก้ไขข้อ 2: ปรับ z-[90] ให้กล่องค้นหาลอยทับทุกส่วนด้านล่างเสมอ */}
+            <div className="relative z-[90] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
               <div className="flex items-center justify-center space-x-3.5 mb-6 md:mb-8">
                  <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                     <Package size={26} />
@@ -778,14 +776,14 @@ export default function App() {
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute w-full mt-4 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[2rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[400px] flex flex-col top-full left-0 z-50 origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                <div className="absolute w-full mt-4 bg-white border border-slate-200 rounded-[2rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[400px] flex flex-col top-full left-0 z-[100] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
                   <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
                     <div className="relative">
                       <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                       <input type="text" className="w-full pl-14 pr-5 py-4 bg-white border-2 border-slate-200 rounded-2xl text-base font-black focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm placeholder:text-slate-400 placeholder:font-bold" placeholder="พิมพ์ชื่อสินค้าที่ต้องการ..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
                     </div>
                   </div>
-                  <ul className="overflow-y-auto flex-1 p-3 md:p-4 space-y-2.5 scrollbar-hide">
+                  <ul className="overflow-y-auto flex-1 p-3 md:p-4 space-y-2.5 scrollbar-hide bg-white">
                     {filteredProductsForSelect.map(p => {
                       const stockAmount = Number(p.stock) || 0;
                       const isOutOfStock = stockAmount <= 0;
@@ -810,7 +808,7 @@ export default function App() {
             </div>
 
             {cart.length > 0 && (
-               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[2.5rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
+               <div className="border border-blue-100 bg-blue-50/40 rounded-[2.5rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
                   <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-6 py-5 border-b border-blue-100 font-black text-blue-900 text-lg flex items-center shadow-inner">
                     <ShoppingCart size={22} className="mr-3 text-blue-600"/> รายการในตะกร้า ({cart.length})
                   </div>
@@ -842,7 +840,7 @@ export default function App() {
                </div>
             )}
 
-            <div className="pt-4 w-full mt-8 relative z-10">
+            <div className="pt-4 w-full mt-8">
               <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-6 md:p-10 rounded-[2.5rem] border border-blue-100 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-[0_8px_30px_rgb(55,97,233,0.08)] w-full relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-200/40 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-200/40 rounded-full blur-3xl -ml-10 -mb-10"></div>
@@ -934,11 +932,12 @@ export default function App() {
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
   const SalesHistoryView = () => {
+    // ... [ส่วนฟังก์ชันภายใน SalesHistoryView คงเดิม] ...
     const [filterDate, setFilterDate] = useState(getLocalISODate());
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
@@ -1164,6 +1163,7 @@ export default function App() {
   };
 
   const ProductsView = () => {
+    // ... [โค้ดส่วน ProductsView เหมือนเดิม] ...
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
     const [isAdding, setIsAdding] = useState(false);
@@ -1277,6 +1277,7 @@ export default function App() {
   };
 
   const StockView = () => {
+    // ... [โค้ดส่วน StockView เหมือนเดิม] ...
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -1361,6 +1362,7 @@ export default function App() {
   };
 
   const UsersManagementView = () => {
+    // ... [โค้ดส่วน UsersManagementView เหมือนเดิม] ...
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
     const [isAdding, setIsAdding] = useState(false);
@@ -1516,10 +1518,10 @@ export default function App() {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
       
-      <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-20 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      {/* 🚀 แก้ไขข้อ 3 (ส่วนที่ 2): ปรับ z-index ของ Sidebar เป็น z-10 เพื่อให้เนื้อหาหลักซ้อนทับได้ */}
+      <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-5 md:p-6 flex items-center justify-center border-b border-slate-200/60"><ResilientLogo className="h-16 w-full rounded-2xl shadow-sm" /></div>
-          {/* ✅ เมนูด้านข้าง อัปเดตชื่อให้ตรงกับโจทย์ทั้งหมด */}
           <nav className="px-4 py-5 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
             {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`}><LayoutDashboard size={22} className={activeTab !== 'dashboard' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>Dashboard</span></button>}
             {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`}><Package size={22} className={activeTab !== 'products' && "text-slate-400 group-hover:text-blue-500 transition-colors"}/><span>การจัดการสินค้า</span></button>}
@@ -1531,7 +1533,8 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative w-full bg-slate-50/50">
+      {/* 🚀 แก้ไขข้อ 3 (ส่วนที่ 3): ปรับ Main Panel เป็น z-20 เพื่อให้มันและลูกๆ (เช่น Modal) ซ้อนทับเหนือ Sidebar */}
+      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-20 w-full bg-slate-50/50">
         <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-6 md:px-8 flex-shrink-0 shadow-sm z-10 w-full">
           <div className="text-slate-800 font-black text-lg hidden sm:block tracking-wide">
             {activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'products' ? 'การจัดการสินค้า' : activeTab === 'stock' ? 'สต๊อกสินค้า' : activeTab === 'users' ? 'การจัดการผู้ใช้' : activeTab === 'history' ? 'ประวัติการขาย' : 'บันทึกการขาย (POS)'}
@@ -1543,8 +1546,7 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-8 pb-32 relative w-full">
-          {/* 🚀 แก้ไขข้อ 3: เปลี่ยนจาก z-10 เป็น z-[100] เพื่อให้ Modal ที่ถูกเรียกใช้ข้างใน สามารถทะลุออกไปทับ Sidebar ด้านซ้ายได้ */}
-          <div className="max-w-6xl mx-auto relative z-[100] w-full">
+          <div className="max-w-6xl mx-auto w-full">
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
             {activeTab === 'products' && canAccess('products') && <ProductsView />}
             {activeTab === 'stock' && canAccess('stock') && <StockView />}
