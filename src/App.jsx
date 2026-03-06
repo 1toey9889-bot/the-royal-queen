@@ -163,7 +163,6 @@ export default function App() {
     document.body.appendChild(link); link.click(); setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 1000);
   };
 
-  // 🚀 จัดกลุ่มออเดอร์ตามเวลาที่ทำรายการ (Transaction Grouping)
   const groupSalesByTransaction = (salesArray) => {
     const grouped = {};
     salesArray.forEach(sale => {
@@ -293,7 +292,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 bg-white p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/60">
           <div className="flex items-center space-x-3 md:space-x-4">
             <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><BarChart3 size={24} className="md:w-6 md:h-6" /></div>
@@ -570,7 +569,7 @@ export default function App() {
 
     return (
       <>
-        {/* 🚀 แก้ไขข้อ 3: ย้าย Modal ออกมานอก div "animate-in" เพื่อปลดล็อก Stacking Context ให้มันทะลุครอบคลุมเต็มหน้าจอได้ */}
+        {/* 🚀 แก้ไขข้อ 3: นำ Modal ออกมานอก Grid หลัก และตั้งค่า z-[9999] เพื่อให้ทับ Sidebar ได้สมบูรณ์แบบ */}
         {showConfirmModal && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
@@ -687,7 +686,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300 w-full">
+        <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
           <div className="text-center mb-8 md:mb-10">
             <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-600 tracking-tight drop-shadow-sm">บันทึกการขาย (POS)</h2>
           </div>
@@ -695,18 +694,20 @@ export default function App() {
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 md:space-y-8 w-full">
             {message && <div className={`p-4 rounded-2xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
-            <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 w-full max-w-5xl mx-auto">
-               <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+            {/* 🚀 แก้ไขข้อ 1 & 2: ใช้ Items-start เพื่อไม่ให้กล่องยืดตามกัน และเปลี่ยน Grid เลือกร้านค้า */}
+            <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 w-full max-w-5xl mx-auto items-start">
+               {/* 🛒 กล่องเลือกร้านค้า */}
+               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-orange-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 h-full flex flex-col justify-center">
-                     <div className="flex items-center space-x-3.5 mb-5 md:mb-6">
-                        <div className="bg-gradient-to-br from-orange-400 to-red-500 p-3 rounded-2xl text-white shadow-lg shadow-orange-500/30">
-                           <Store size={24} />
+                  <div className="relative z-10 h-full flex flex-col justify-start">
+                     <div className="flex items-center space-x-3 mb-4 md:mb-5">
+                        <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-orange-500/30">
+                           <Store size={22} className="md:w-6 md:h-6"/>
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     {/* 🚀 แก้ไขข้อ 1: ใช้ flex-wrap และ break-words เพื่อให้ปุ่มตัดข้อความได้อย่างสวยงาม ไม่ตกขอบ */}
-                     <div className="flex flex-wrap gap-2.5 md:gap-3 w-full">
+                     {/* 🚀 แก้ไขข้อ 1: ใช้ Grid แบ่งคอลัมน์ชัดเจน ช่วยป้องกันการบีบอัดจนเละ */}
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 md:gap-3 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -715,10 +716,10 @@ export default function App() {
                            
                            let colorClass = "bg-slate-50 text-slate-500 hover:bg-slate-100 border-transparent hover:border-slate-200";
                            if (isActive) {
-                              if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-lg shadow-[#EE4D2D]/30 border-transparent ring-2 ring-[#EE4D2D]/50 ring-offset-2";
-                              else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-lg shadow-blue-900/30 border-transparent ring-2 ring-[#0F146D]/50 ring-offset-2";
-                              else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-lg shadow-[#00C300]/30 border-transparent ring-2 ring-[#00C300]/50 ring-offset-2";
-                              else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg border-transparent ring-2 ring-blue-500/50 ring-offset-2";
+                              if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-md shadow-[#EE4D2D]/30 border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
+                              else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-md shadow-blue-900/30 border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
+                              else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-md shadow-[#00C300]/30 border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
+                              else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md border-transparent ring-2 ring-blue-500/30 ring-offset-1";
                            } else {
                               if (isShopee) colorClass = "bg-[#FFF0ED] text-[#EE4D2D] hover:bg-[#FFE4DF] border-[#FFE4DF]";
                               else if (isLazada) colorClass = "bg-[#F2F3FF] text-[#0F146D] hover:bg-[#E6E8FF] border-[#E6E8FF]";
@@ -726,7 +727,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3.5 md:py-4 rounded-2xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex-1 min-w-[75px] sm:min-w-[90px] flex items-center justify-center text-center whitespace-normal break-words leading-tight shadow-sm hover:shadow-md h-full min-h-[60px]`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 rounded-xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center break-words min-h-[3.5rem] leading-tight`}>
                                 {s}
                              </button>
                            )
@@ -735,18 +736,19 @@ export default function App() {
                   </div>
                </div>
 
-               <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+               {/* 📝 กล่องรหัสออเดอร์ */}
+               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] h-fit">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 h-full flex flex-col justify-center">
-                     <div className="flex items-center space-x-3.5 mb-5 md:mb-6">
-                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30">
-                           <Barcode size={24} />
+                  <div className="relative z-10 flex flex-col justify-start">
+                     <div className="flex items-center space-x-3 mb-4 md:mb-5">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30">
+                           <Barcode size={22} className="md:w-6 md:h-6"/>
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
                      </div>
-                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full mt-auto">
-                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-blue-500 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base md:text-lg font-black text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-bold shadow-inner" placeholder="ระบุรหัสออเดอร์..." />
-                        <button type="button" onClick={() => setScanMode('camera')} className="px-6 py-4 sm:py-0 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-1" title="สแกน หรือ ดึงข้อมูล">
+                     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
+                        <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-4 border-2 border-slate-100 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none text-base font-black text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-bold shadow-inner" placeholder="ระบุรหัสออเดอร์..." />
+                        <button type="button" onClick={() => setScanMode('camera')} className="px-5 py-4 sm:py-0 bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-800/20 transition-all flex items-center justify-center shrink-0 transform active:scale-95 hover:-translate-y-0.5" title="สแกน หรือ ดึงข้อมูล">
                            <Scan size={24} className="mr-2 sm:mr-0" /> <span className="sm:hidden font-bold">สแกนโค้ด</span>
                         </button>
                      </div>
@@ -754,20 +756,20 @@ export default function App() {
                </div>
             </div>
 
-            <div className="flex items-center justify-center py-2">
+            <div className="flex items-center justify-center py-1">
                <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full max-w-2xl"></div>
             </div>
 
-            {/* 🚀 แก้ไขข้อ 2: ปรับ z-[90] ให้กล่องค้นหาลอยทับทุกส่วนด้านล่างเสมอ */}
-            <div className="relative z-[90] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
-              <div className="flex items-center justify-center space-x-3.5 mb-6 md:mb-8">
-                 <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
-                    <Package size={26} />
+            {/* 🚀 แก้ไขข้อ 2: ปรับ z-[60] ให้กล่องค้นหาลอยทับตะกร้าที่อยู่ด้านล่างเสมอ */}
+            <div className="relative z-[60] bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+              <div className="flex items-center justify-center space-x-3 mb-6 md:mb-8">
+                 <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
+                    <Package size={24} className="md:w-6 md:h-6" />
                  </div>
-                 <h3 className="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 tracking-tight">เลือกสินค้าลงตะกร้า</h3>
+                 <h3 className="text-xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 tracking-tight">เลือกสินค้าลงตะกร้า</h3>
               </div>
               
-              <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-4 md:p-5 border-2 rounded-2xl text-sm md:text-base cursor-pointer flex justify-between items-center transition-all shadow-sm relative group ${isDropdownOpen ? 'border-emerald-500 bg-emerald-50/30 ring-4 ring-emerald-500/10' : 'border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-white hover:shadow-md'} ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-4 md:p-5 border-2 rounded-xl text-sm md:text-base cursor-pointer flex justify-between items-center transition-all shadow-sm relative group ${isDropdownOpen ? 'border-emerald-500 bg-emerald-50/30 ring-4 ring-emerald-500/10' : 'border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-white hover:shadow-md'} ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="flex items-center space-x-3">
                    <Search size={22} className={`transition-colors ${isDropdownOpen ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-400'}`} />
                    <span className={`${isDropdownOpen ? 'text-emerald-700 font-black' : 'text-slate-500 font-bold group-hover:text-slate-700'} tracking-wide`}>คลิกเพื่อค้นหาและเลือกสินค้า...</span>
@@ -776,27 +778,27 @@ export default function App() {
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute w-full mt-4 bg-white border border-slate-200 rounded-[2rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[400px] flex flex-col top-full left-0 z-[100] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
-                  <div className="p-4 md:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                <div className="absolute w-full mt-3 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[1.5rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[350px] md:max-h-[400px] flex flex-col top-full left-0 z-[70] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
                     <div className="relative">
-                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                      <input type="text" className="w-full pl-14 pr-5 py-4 bg-white border-2 border-slate-200 rounded-2xl text-base font-black focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm placeholder:text-slate-400 placeholder:font-bold" placeholder="พิมพ์ชื่อสินค้าที่ต้องการ..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input type="text" className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm md:text-base font-black focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm placeholder:text-slate-400 placeholder:font-bold" placeholder="พิมพ์ชื่อสินค้าที่ต้องการ..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
                     </div>
                   </div>
-                  <ul className="overflow-y-auto flex-1 p-3 md:p-4 space-y-2.5 scrollbar-hide bg-white">
+                  <ul className="overflow-y-auto flex-1 p-3 space-y-2 scrollbar-hide bg-white">
                     {filteredProductsForSelect.map(p => {
                       const stockAmount = Number(p.stock) || 0;
                       const isOutOfStock = stockAmount <= 0;
                       const isLowStock = stockAmount <= 5 && !isOutOfStock;
 
                       return (
-                        <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-5 py-4 rounded-2xl text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 cursor-not-allowed bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 hover:shadow-md transform hover:-translate-y-0.5"}`}>
-                          <div className="flex items-center space-x-3 mb-3 sm:mb-0 pr-2">
-                             {isLowStock && <AlertCircle size={18} className="text-red-500 shrink-0" />}
-                             <span className="font-black text-base md:text-lg text-slate-800 tracking-tight">{p.name}</span>
+                        <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-4 py-3 md:p-4 rounded-xl text-sm flex flex-col sm:flex-row sm:justify-between sm:items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 cursor-not-allowed bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 hover:shadow-md transform hover:-translate-y-0.5"}`}>
+                          <div className="flex items-center space-x-2 mb-2 sm:mb-0 pr-2">
+                             {isLowStock && <AlertCircle size={16} className="text-red-500 shrink-0" />}
+                             <span className="font-black text-sm md:text-base text-slate-800 tracking-tight">{p.name}</span>
                           </div>
                           
-                          <span className={`text-[11px] md:text-sm font-black px-4 py-2 rounded-xl shrink-0 border shadow-sm ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          <span className={`text-[11px] md:text-xs font-black px-3 py-1.5 rounded-lg shrink-0 border shadow-sm ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                             {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${stockAmount} ชิ้น (฿${formatMoney(p.price)})`}
                           </span>
                         </li>
@@ -807,31 +809,32 @@ export default function App() {
               )}
             </div>
 
+            {/* ส่วนตะกร้าสินค้า ปรับให้อยู่ในชั้นปกติ */}
             {cart.length > 0 && (
-               <div className="border border-blue-100 bg-blue-50/40 rounded-[2.5rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
-                  <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-6 py-5 border-b border-blue-100 font-black text-blue-900 text-lg flex items-center shadow-inner">
-                    <ShoppingCart size={22} className="mr-3 text-blue-600"/> รายการในตะกร้า ({cart.length})
+               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[2rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
+                  <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-5 py-4 border-b border-blue-100 font-black text-blue-900 text-base md:text-lg flex items-center shadow-inner">
+                    <ShoppingCart size={20} className="mr-2 text-blue-600"/> รายการในตะกร้า ({cart.length})
                   </div>
-                  <div className="p-4 md:p-5 w-full space-y-3 md:space-y-4">
+                  <div className="p-3 md:p-4 w-full space-y-3">
                      {cart.map((item, index) => (
-                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-5 md:p-6 gap-5 bg-white rounded-2xl shadow-sm border border-slate-100 w-full transition-all hover:shadow-md hover:border-blue-100 group">
-                           <div className="flex-1 font-black text-slate-800 break-words w-full lg:w-auto text-lg md:text-xl leading-tight tracking-tight group-hover:text-blue-900 transition-colors">{item.name}</div>
+                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-4 md:p-5 gap-4 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all hover:shadow-md hover:border-blue-100 group">
+                           <div className="flex-1 font-black text-slate-800 break-words w-full lg:w-auto text-base md:text-lg leading-tight tracking-tight group-hover:text-blue-900 transition-colors">{item.name}</div>
                            
-                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-4 md:gap-6 shrink-0">
-                              <div className="flex items-center space-x-2.5">
-                                 <span className="text-xs text-slate-500 font-bold lg:hidden uppercase tracking-wider">ราคา/ชิ้น</span>
-                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-24 md:w-32 p-3 text-center border-2 border-slate-100 rounded-xl text-sm md:text-base font-black focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all shadow-inner text-blue-700" placeholder="ราคา"/>
+                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-4 md:gap-5 shrink-0">
+                              <div className="flex items-center space-x-2">
+                                 <span className="text-[11px] md:text-xs text-slate-500 font-bold lg:hidden uppercase tracking-wider">ราคา/ชิ้น</span>
+                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-20 md:w-28 p-2 md:p-2.5 text-center border-2 border-slate-100 rounded-lg text-sm md:text-base font-black focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all shadow-inner text-blue-700" placeholder="ราคา"/>
                               </div>
 
-                              <div className="flex items-center bg-slate-50 border-2 border-slate-100 rounded-xl p-1.5 shrink-0 shadow-sm">
-                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-2.5 bg-white rounded-lg shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Minus size={18}/></button>
-                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-14 md:w-16 text-center bg-transparent font-black outline-none text-lg md:text-xl text-slate-800"/>
-                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-2.5 bg-white rounded-lg shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Plus size={18}/></button>
+                              <div className="flex items-center bg-slate-50 border-2 border-slate-100 rounded-lg p-1 shrink-0 shadow-sm">
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-2 bg-white rounded-md shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Minus size={16}/></button>
+                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-12 md:w-16 text-center bg-transparent font-black outline-none text-base md:text-lg text-slate-800"/>
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-2 bg-white rounded-md shadow-sm border border-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95"><Plus size={16}/></button>
                               </div>
                               
-                              <div className="flex items-center justify-end gap-5 min-w-[140px] shrink-0">
-                                 <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-right text-xl md:text-2xl drop-shadow-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
-                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-3.5 rounded-xl transition-all border border-transparent hover:border-red-100 active:scale-95" title="ลบรายการนี้"><Trash2 size={22}/></button>
+                              <div className="flex items-center justify-end gap-3 md:gap-4 min-w-[120px] shrink-0">
+                                 <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-right text-lg md:text-xl drop-shadow-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
+                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-2.5 rounded-lg transition-all border border-transparent hover:border-red-100 active:scale-95" title="ลบรายการนี้"><Trash2 size={20}/></button>
                               </div>
                            </div>
                         </div>
@@ -840,35 +843,35 @@ export default function App() {
                </div>
             )}
 
-            <div className="pt-4 w-full mt-8">
-              <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-6 md:p-10 rounded-[2.5rem] border border-blue-100 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-[0_8px_30px_rgb(55,97,233,0.08)] w-full relative overflow-hidden">
+            <div className="pt-2 w-full relative z-10">
+              <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-6 md:p-8 rounded-[2rem] border border-blue-100 flex flex-col lg:flex-row justify-between items-center gap-6 shadow-[0_8px_30px_rgb(55,97,233,0.08)] w-full relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-200/40 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-200/40 rounded-full blur-3xl -ml-10 -mb-10"></div>
                 
                 <div className="text-center lg:text-left w-full lg:w-auto flex flex-col items-center lg:items-start relative z-10">
-                  <p className="text-sm md:text-base font-black text-blue-500 mb-3 tracking-widest uppercase">ราคารวมสุทธิ {cart.length > 0 ? `(${cart.length} รายการ)` : ''}</p>
+                  <p className="text-sm font-black text-blue-500 mb-2 md:mb-3 tracking-widest uppercase">ราคารวมสุทธิ {cart.length > 0 ? `(${cart.length} รายการ)` : ''}</p>
                   <div className="flex items-center relative w-full lg:w-auto justify-center lg:justify-start">
-                    <span className="text-4xl md:text-5xl font-black text-blue-700 absolute left-6 select-none opacity-80">฿</span>
+                    <span className="text-3xl md:text-4xl font-black text-blue-700 absolute left-5 select-none opacity-80">฿</span>
                     <input 
                       type="number" 
                       value={customGrandTotal} 
                       placeholder={posTotal}    
                       onChange={(e) => setCustomGrandTotal(e.target.value)}
-                      className="w-full lg:w-80 pl-16 md:pl-20 pr-5 py-5 md:py-6 text-4xl md:text-5xl font-black text-blue-800 bg-white/90 backdrop-blur-sm border-2 border-blue-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-blue-500/30 focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-lg"
+                      className="w-full lg:w-72 pl-14 md:pl-16 pr-4 py-4 md:py-5 text-3xl md:text-4xl font-black text-blue-800 bg-white/90 backdrop-blur-sm border-2 border-blue-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-blue-500/30 focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-md"
                       disabled={cart.length === 0}
                     />
                   </div>
                   {customGrandTotal !== '' && Number(customGrandTotal) !== posTotal && (
-                    <p className="text-sm text-orange-600 mt-4 font-bold bg-orange-100/80 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-orange-200 inline-flex items-center shadow-sm animate-in fade-in zoom-in">
-                      <AlertCircle size={18} className="mr-2" /> แก้ไขจากราคาปกติ ฿{formatMoney(posTotal)}
+                    <p className="text-xs md:text-sm text-orange-600 mt-3 font-bold bg-orange-100/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-orange-200 inline-flex items-center shadow-sm animate-in fade-in zoom-in">
+                      <AlertCircle size={16} className="mr-1.5" /> แก้ไขจากปกติ ฿{formatMoney(posTotal)}
                     </p>
                   )}
                 </div>
 
-                <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full lg:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-10 md:px-14 py-5 md:py-6 rounded-[1.5rem] text-xl md:text-2xl font-black transition-all disabled:opacity-50 shadow-[0_10px_40px_rgba(37,99,235,0.3)] transform hover:-translate-y-1 active:translate-y-0 whitespace-nowrap relative z-10 overflow-hidden group">
+                <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full lg:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 md:px-12 py-4 md:py-5 rounded-[1.5rem] text-lg md:text-xl font-black transition-all disabled:opacity-50 shadow-[0_10px_40px_rgba(37,99,235,0.3)] transform hover:-translate-y-1 active:translate-y-0 whitespace-nowrap relative z-10 overflow-hidden group">
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out"></div>
                   <span className="relative flex items-center justify-center">
-                     {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={28} className="mr-3"/> บันทึกการขาย</>}
+                     {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={24} className="mr-2"/> บันทึกการขาย</>}
                   </span>
                 </button>
               </div>
@@ -876,8 +879,8 @@ export default function App() {
           </form>
 
           {/* 🚀 UI ส่วนแสดงรายการที่เพิ่งขายไปวันนี้แบบตีกรอบแยกกล่องออเดอร์ */}
-          <div className="pt-8 w-full pb-10">
-            <h3 className="text-xl md:text-2xl font-black text-slate-800 mb-6 px-2 flex items-center tracking-tight"><History size={24} className="mr-3 text-blue-500"/>รายการที่เพิ่งขายไปวันนี้</h3>
+          <div className="pt-8 w-full pb-10 relative z-10">
+            <h3 className="text-xl font-black text-slate-800 mb-5 px-2 flex items-center tracking-tight"><History size={22} className="mr-2 text-blue-500"/>รายการที่เพิ่งขายไปวันนี้</h3>
             <div className="w-full overflow-x-auto p-2">
               <table className="w-full text-left border-separate min-w-[700px]" style={{ borderSpacing: '0 16px' }}>
                 <thead>
@@ -891,7 +894,7 @@ export default function App() {
                   </tr>
                 </thead>
                 {groupedRecentSales.length === 0 ? (
-                  <tbody><tr><td colSpan="6" className="p-12 text-center text-slate-400 text-base font-bold bg-white rounded-[2rem] shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
+                  <tbody><tr><td colSpan="6" className="p-10 text-center text-slate-400 text-sm font-bold bg-white rounded-[2rem] shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
                 ) : (
                   groupedRecentSales.map((group, groupIndex) => {
                     let timeString = '-'; 
@@ -903,26 +906,26 @@ export default function App() {
                           const isFirstRow = itemIdx === 0;
                           return (
                             <tr key={sale.id} className="bg-white hover:bg-slate-50/80 transition-colors">
-                              <td className={`p-4 md:p-5 text-slate-500 font-bold whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                              <td className={`p-4 text-slate-500 font-bold whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>
                                  {isFirstRow ? (
-                                    <div className="flex flex-col space-y-2">
-                                       <span className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-[10px] md:text-xs font-black px-3 py-1.5 rounded-lg shadow-sm text-center">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
-                                       <span className="text-slate-500 font-bold text-xs md:text-sm flex items-center justify-center"><CalendarDays size={14} className="mr-1.5"/> {timeString}</span>
+                                    <div className="flex flex-col space-y-1.5">
+                                       <span className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm text-center">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
+                                       <span className="text-slate-500 font-bold text-[11px] md:text-xs flex items-center justify-center"><CalendarDays size={12} className="mr-1"/> {timeString}</span>
                                     </div>
                                  ) : ''}
                               </td>
-                              <td className={`p-4 md:p-5 font-black text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isFirstRow ? (sale.orderId || '-') : ''}</td>
-                              <td className={`p-4 md:p-5 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-3 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-black border shadow-sm ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
-                              <td className={`p-4 md:p-5 font-bold text-slate-800 text-sm md:text-base ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}</td>
-                              <td className={`p-4 md:p-5 text-center font-black text-slate-700 text-base ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
-                              <td className={`p-4 md:p-5 text-right text-slate-700 font-black whitespace-nowrap text-base border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
+                              <td className={`p-4 font-black text-slate-700 text-sm ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{isFirstRow ? (sale.orderId || '-') : ''}</td>
+                              <td className={`p-4 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black border shadow-sm ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
+                              <td className={`p-4 font-bold text-slate-800 text-sm ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'สินค้าถูกลบ'}</td>
+                              <td className={`p-4 text-center font-black text-slate-700 text-sm ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
+                              <td className={`p-4 text-right text-slate-700 font-black whitespace-nowrap text-sm border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
                             </tr>
                           );
                         })}
                         <tr className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80">
-                          <td colSpan="4" className="p-4 md:p-5 text-right text-indigo-800 font-black text-xs md:text-sm border-l border-b border-indigo-100 rounded-bl-[1.5rem] uppercase tracking-wider">ราคารวมสุทธิออเดอร์นี้</td>
-                          <td className="p-4 md:p-5 text-center text-indigo-900 font-black text-lg border-b border-indigo-100 bg-indigo-100/30">{group.totalItems}</td>
-                          <td className="p-4 md:p-5 text-right text-blue-700 font-black whitespace-nowrap text-xl md:text-2xl border-r border-b border-indigo-100 rounded-br-[1.5rem] drop-shadow-sm bg-blue-100/30">฿{formatMoney(group.totalOrderValue)}</td>
+                          <td colSpan="4" className="p-4 text-right text-indigo-800 font-black text-xs border-l border-b border-indigo-100 rounded-bl-[1.5rem] uppercase tracking-wider">ราคารวมสุทธิออเดอร์นี้</td>
+                          <td className="p-4 text-center text-indigo-900 font-black text-base border-b border-indigo-100 bg-indigo-100/30">{group.totalItems}</td>
+                          <td className="p-4 text-right text-blue-700 font-black whitespace-nowrap text-lg border-r border-b border-indigo-100 rounded-br-[1.5rem] drop-shadow-sm bg-blue-100/30">฿{formatMoney(group.totalOrderValue)}</td>
                         </tr>
                       </tbody>
                     );
@@ -937,7 +940,6 @@ export default function App() {
   };
 
   const SalesHistoryView = () => {
-    // ... [ส่วนฟังก์ชันภายใน SalesHistoryView คงเดิม] ...
     const [filterDate, setFilterDate] = useState(getLocalISODate());
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
@@ -1042,7 +1044,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 bg-white p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/60 mb-6 relative overflow-hidden group hover:shadow-md transition-shadow">
           <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-blue-500 to-indigo-600 group-hover:w-3 transition-all"></div>
           <div className="flex items-center space-x-4 pl-3">
@@ -1163,7 +1165,6 @@ export default function App() {
   };
 
   const ProductsView = () => {
-    // ... [โค้ดส่วน ProductsView เหมือนเดิม] ...
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
     const [isAdding, setIsAdding] = useState(false);
@@ -1225,7 +1226,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col bg-white p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/60 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">การจัดการสินค้า</h2>
@@ -1277,7 +1278,6 @@ export default function App() {
   };
 
   const StockView = () => {
-    // ... [โค้ดส่วน StockView เหมือนเดิม] ...
     const [editingStockId, setEditingStockId] = useState(null);
     const [newStock, setNewStock] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -1323,7 +1323,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col bg-white p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/60 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">สต๊อกสินค้า</h2>
@@ -1362,7 +1362,6 @@ export default function App() {
   };
 
   const UsersManagementView = () => {
-    // ... [โค้ดส่วน UsersManagementView เหมือนเดิม] ...
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
     const [isAdding, setIsAdding] = useState(false);
@@ -1400,7 +1399,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100">
           <div><h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">การจัดการผู้ใช้</h2><p className="text-xs md:text-sm text-slate-500 mt-1 font-medium">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงเมนูต่างๆ ของพนักงาน</p></div>
           {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-3 rounded-xl flex items-center space-x-2 text-sm font-black w-full sm:w-auto justify-center shadow-lg shadow-blue-500/30 transform hover:-translate-y-0.5 active:translate-y-0 transition-all"><Plus size={18} /><span>เพิ่มผู้ใช้</span></button>}
@@ -1488,7 +1487,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50/50 font-sans flex flex-col">
         <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
-        <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-10 sticky top-0">
+        <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-[50] sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-2xl shadow-sm px-4 w-[200px] md:w-[250px]" /></div>
             <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
@@ -1518,8 +1517,8 @@ export default function App() {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
       
-      {/* 🚀 แก้ไขข้อ 3 (ส่วนที่ 2): ปรับ z-index ของ Sidebar เป็น z-10 เพื่อให้เนื้อหาหลักซ้อนทับได้ */}
-      <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-10 relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      {/* 🚀 ปรับ z-index ของ Sidebar ให้น้อยกว่าเนื้อหาหลัก เพื่อไม่ให้ไปทับ Modal */}
+      <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-5 md:p-6 flex items-center justify-center border-b border-slate-200/60"><ResilientLogo className="h-16 w-full rounded-2xl shadow-sm" /></div>
           <nav className="px-4 py-5 space-x-2 md:space-x-0 md:space-y-2 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x">
@@ -1533,9 +1532,9 @@ export default function App() {
         </div>
       </div>
 
-      {/* 🚀 แก้ไขข้อ 3 (ส่วนที่ 3): ปรับ Main Panel เป็น z-20 เพื่อให้มันและลูกๆ (เช่น Modal) ซ้อนทับเหนือ Sidebar */}
-      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-20 w-full bg-slate-50/50">
-        <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-6 md:px-8 flex-shrink-0 shadow-sm z-10 w-full">
+      {/* 🚀 ส่วนเนื้อหาหลัก */}
+      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-slate-50/50">
+        <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-6 md:px-8 flex-shrink-0 shadow-sm z-[60] w-full">
           <div className="text-slate-800 font-black text-lg hidden sm:block tracking-wide">
             {activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'products' ? 'การจัดการสินค้า' : activeTab === 'stock' ? 'สต๊อกสินค้า' : activeTab === 'users' ? 'การจัดการผู้ใช้' : activeTab === 'history' ? 'ประวัติการขาย' : 'บันทึกการขาย (POS)'}
           </div>
@@ -1546,7 +1545,7 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-8 pb-32 relative w-full">
-          <div className="max-w-6xl mx-auto w-full">
+          <div className="max-w-6xl mx-auto relative w-full">
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
             {activeTab === 'products' && canAccess('products') && <ProductsView />}
             {activeTab === 'stock' && canAccess('stock') && <StockView />}
