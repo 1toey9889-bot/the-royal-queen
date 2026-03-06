@@ -62,7 +62,6 @@ const defaultPermissions = {
   history: false, historyEdit: false
 };
 
-// 💡 เพิ่ม 'LINE' เข้าไปในตัวเลือกร้านค้า
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE'];
 
 // ==========================================
@@ -571,9 +570,9 @@ export default function App() {
 
     return (
       <div className="relative space-y-6 md:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-300 w-full">
-        {/* Modal ยืนยันทำรายการ */}
+        {/* Modal ยืนยันทำรายการ (แก้ปัญหาเรื่องโดน Sidebar ทับ ด้วย z-[200]) */}
         {showConfirmModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 md:p-6 text-center text-white shrink-0 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -620,7 +619,7 @@ export default function App() {
 
         {/* 🚀 Modal สแกน Barcode และ Smart Extract (กล้อง + เลือกรูป) */}
         {scanMode && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] w-full max-w-lg space-y-6 shadow-2xl flex flex-col max-h-[90vh] border border-slate-100">
                <div className="flex bg-slate-100/80 p-1.5 rounded-2xl shrink-0 gap-1.5 border border-slate-200/60 shadow-inner">
                   <button onClick={() => setScanMode('camera')} className={`flex-1 py-3 text-xs md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Barcode size={16} className="mr-1.5"/> สแกนโค้ด</button>
@@ -707,7 +706,8 @@ export default function App() {
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4 w-full">
+                     {/* 🚀 แก้ไขข้อ 1: ปรับ Grid ให้รองรับ 5 ตัวเลือก, ใช้ whitespace-normal และจัดการระยะให้พอดี ไม่ให้ตกขอบ */}
+                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -727,7 +727,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-4 rounded-2xl border-2 text-sm md:text-base font-black transition-all duration-300 transform active:scale-95 ${colorClass} truncate w-full ${isLine ? 'col-span-2 sm:col-span-1' : ''}`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 sm:px-2 py-3 md:py-4 rounded-2xl border-2 text-[11px] sm:text-xs md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} whitespace-normal break-words leading-tight w-full flex items-center justify-center min-h-[64px]`}>
                                 {s}
                              </button>
                            )
@@ -760,7 +760,8 @@ export default function App() {
             </div>
 
             {/* 🚀 UI ค้นหาสินค้า */}
-            <div className="relative z-10 bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+            {/* 🚀 แก้ไขข้อ 2: เปลี่ยนจาก z-10 เป็น z-[60] เพื่อให้ Dropdown แสดงทับกล่องตะกร้าที่อยู่ด้านล่างเสมอ */}
+            <div className="relative z-[60] bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
               <div className="flex items-center justify-center space-x-3.5 mb-6 md:mb-8">
                  <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                     <Package size={26} />
@@ -809,7 +810,7 @@ export default function App() {
             </div>
 
             {cart.length > 0 && (
-               <div className="border border-blue-100 bg-blue-50/40 rounded-[2.5rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
+               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-[2.5rem] overflow-hidden w-full shadow-[0_8px_30px_rgb(0,0,0,0.03)] mt-6 animate-in slide-in-from-bottom-4">
                   <div className="bg-gradient-to-r from-blue-100/80 to-indigo-100/80 px-6 py-5 border-b border-blue-100 font-black text-blue-900 text-lg flex items-center shadow-inner">
                     <ShoppingCart size={22} className="mr-3 text-blue-600"/> รายการในตะกร้า ({cart.length})
                   </div>
@@ -841,7 +842,7 @@ export default function App() {
                </div>
             )}
 
-            <div className="pt-4 w-full mt-8">
+            <div className="pt-4 w-full mt-8 relative z-10">
               <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-6 md:p-10 rounded-[2.5rem] border border-blue-100 flex flex-col lg:flex-row justify-between items-center gap-8 shadow-[0_8px_30px_rgb(55,97,233,0.08)] w-full relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-200/40 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-200/40 rounded-full blur-3xl -ml-10 -mb-10"></div>
@@ -1542,7 +1543,8 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-8 pb-32 relative w-full">
-          <div className="max-w-6xl mx-auto relative z-10 w-full">
+          {/* 🚀 แก้ไขข้อ 3: เปลี่ยนจาก z-10 เป็น z-[100] เพื่อให้ Modal ที่ถูกเรียกใช้ข้างใน สามารถทะลุออกไปทับ Sidebar ด้านซ้ายได้ */}
+          <div className="max-w-6xl mx-auto relative z-[100] w-full">
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
             {activeTab === 'products' && canAccess('products') && <ProductsView />}
             {activeTab === 'stock' && canAccess('stock') && <StockView />}
