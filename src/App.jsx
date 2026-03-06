@@ -163,6 +163,7 @@ export default function App() {
     document.body.appendChild(link); link.click(); setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 1000);
   };
 
+  // 🚀 จัดกลุ่มออเดอร์ตามเวลาที่ทำรายการ (Transaction Grouping)
   const groupSalesByTransaction = (salesArray) => {
     const grouped = {};
     salesArray.forEach(sale => {
@@ -694,20 +695,21 @@ export default function App() {
           <form onSubmit={handleCheckoutPreflight} className="space-y-6 md:space-y-8 w-full">
             {message && <div className={`p-4 rounded-2xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
             
-            {/* 🚀 แก้ไขข้อ 1 & 2: ใช้ Items-start เพื่อไม่ให้กล่องยืดตามกัน และเปลี่ยน Grid เลือกร้านค้า */}
-            <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 w-full max-w-5xl mx-auto items-start">
+            {/* 🚀 แก้ไขข้อ 1 & 2: เปลี่ยนเป็น flex-col เพื่อเรียงจากบนลงล่างตามรูปภาพเป๊ะๆ */}
+            <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto items-start">
+               
                {/* 🛒 กล่องเลือกร้านค้า */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-orange-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 h-full flex flex-col justify-start">
+                  <div className="relative z-10 w-full flex flex-col justify-start">
                      <div className="flex items-center space-x-3 mb-4 md:mb-5">
                         <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-orange-500/30">
                            <Store size={22} className="md:w-6 md:h-6"/>
                         </div>
                         <label className="text-xl md:text-2xl font-black text-slate-800 tracking-wide">เลือกร้านค้า</label>
                      </div>
-                     {/* 🚀 แก้ไขข้อ 1: ใช้ Grid แบ่งคอลัมน์ชัดเจน ช่วยป้องกันการบีบอัดจนเละ */}
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 md:gap-3 w-full">
+                     {/* 🚀 แก้ไขข้อ 1: ใช้ Grid เพื่อบังคับ 5 คอลัมน์ แถวเดียว ไม่ให้เละเทะ */}
+                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full">
                         {STORE_OPTIONS.map(s => {
                            const isShopee = s.includes('Shopee');
                            const isLazada = s.includes('Lazada');
@@ -727,7 +729,7 @@ export default function App() {
                            }
 
                            return (
-                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 rounded-xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center break-words min-h-[3.5rem] leading-tight`}>
+                             <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-2 py-3 rounded-xl border-2 text-[12px] md:text-sm font-black transition-all duration-300 transform active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words min-h-[3.5rem] leading-tight`}>
                                 {s}
                              </button>
                            )
@@ -737,9 +739,9 @@ export default function App() {
                </div>
 
                {/* 📝 กล่องรหัสออเดอร์ */}
-               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group flex-1 w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] h-fit">
+               <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] h-fit">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
-                  <div className="relative z-10 flex flex-col justify-start">
+                  <div className="relative z-10 w-full flex flex-col justify-start">
                      <div className="flex items-center space-x-3 mb-4 md:mb-5">
                         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30">
                            <Barcode size={22} className="md:w-6 md:h-6"/>
@@ -760,8 +762,8 @@ export default function App() {
                <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full max-w-2xl"></div>
             </div>
 
-            {/* 🚀 แก้ไขข้อ 2: ปรับ z-[60] ให้กล่องค้นหาลอยทับตะกร้าที่อยู่ด้านล่างเสมอ */}
-            <div className="relative z-[60] bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
+            {/* 🚀 แก้ไขข้อ 3: ปรับ z-[80] ให้กล่องค้นหาลอยทับตะกร้าที่อยู่ด้านล่างเสมอ */}
+            <div className="relative z-[80] bg-white p-5 md:p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]" ref={dropdownRef}>
               <div className="flex items-center justify-center space-x-3 mb-6 md:mb-8">
                  <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-2.5 md:p-3 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                     <Package size={24} className="md:w-6 md:h-6" />
@@ -778,14 +780,14 @@ export default function App() {
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute w-full mt-3 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[1.5rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[350px] md:max-h-[400px] flex flex-col top-full left-0 z-[70] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                <div className="absolute w-full mt-3 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[1.5rem] shadow-[0_20px_60px_rgb(0,0,0,0.15)] max-h-[350px] md:max-h-[400px] flex flex-col top-full left-0 z-[100] origin-top animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
                     <div className="relative">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                       <input type="text" className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm md:text-base font-black focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm placeholder:text-slate-400 placeholder:font-bold" placeholder="พิมพ์ชื่อสินค้าที่ต้องการ..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
                     </div>
                   </div>
-                  <ul className="overflow-y-auto flex-1 p-3 space-y-2 scrollbar-hide bg-white">
+                  <ul className="overflow-y-auto flex-1 p-3 space-y-2 scrollbar-hide bg-white relative z-10">
                     {filteredProductsForSelect.map(p => {
                       const stockAmount = Number(p.stock) || 0;
                       const isOutOfStock = stockAmount <= 0;
@@ -906,7 +908,7 @@ export default function App() {
                           const isFirstRow = itemIdx === 0;
                           return (
                             <tr key={sale.id} className="bg-white hover:bg-slate-50/80 transition-colors">
-                              <td className={`p-4 text-slate-500 font-bold whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                              <td className={`p-4 md:p-5 text-slate-500 font-bold whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-[1.5rem] bg-slate-50/50' : 'border-t border-slate-50'}`}>
                                  {isFirstRow ? (
                                     <div className="flex flex-col space-y-1.5">
                                        <span className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm text-center">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
@@ -1517,7 +1519,6 @@ export default function App() {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
       
-      {/* 🚀 ปรับ z-index ของ Sidebar ให้น้อยกว่าเนื้อหาหลัก เพื่อไม่ให้ไปทับ Modal */}
       <div className="w-full md:w-72 bg-slate-50/80 backdrop-blur-xl border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="relative z-10 flex flex-col h-full">
           <div className="p-5 md:p-6 flex items-center justify-center border-b border-slate-200/60"><ResilientLogo className="h-16 w-full rounded-2xl shadow-sm" /></div>
@@ -1532,7 +1533,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* 🚀 ส่วนเนื้อหาหลัก */}
       <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-slate-50/50">
         <header className="bg-white/80 backdrop-blur-xl h-20 border-b border-slate-200 flex items-center justify-between px-6 md:px-8 flex-shrink-0 shadow-sm z-[60] w-full">
           <div className="text-slate-800 font-black text-lg hidden sm:block tracking-wide">
