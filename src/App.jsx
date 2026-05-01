@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, increment, setDoc, runTransaction, query, where
+  deleteDoc, doc, increment, setDoc, runTransaction
 } from "firebase/firestore";
 import { 
   LayoutDashboard, Package, ShoppingCart, Plus, Edit2, Trash2, 
@@ -113,17 +113,7 @@ export default function App() {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    // 🌟 จำกัดการดึงข้อมูลยอดขายย้อนหลัง 90 วัน
-    const fetchLimitDate = new Date();
-    fetchLimitDate.setDate(fetchLimitDate.getDate() - 90);
-    const startDateString = fetchLimitDate.toISOString();
-
-    const salesQuery = query(
-      collection(db, "sales"),
-      where("date", ">=", startDateString)
-    );
-
-    const unsubscribeSales = onSnapshot(salesQuery, (snapshot) => {
+    const unsubscribeSales = onSnapshot(collection(db, "sales"), (snapshot) => {
       setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setIsLoading(false); setLoadError('');
     });
@@ -1027,43 +1017,24 @@ export default function App() {
       setIsProcessing(false);
     };
 
-    // บันทึกการแก้ไขรายการย่อย (Item) - 🛠 REFACTORED TO PREVENT READ-AFTER-WRITE
+    // บันทึกการแก้ไขรายการย่อย (Item)
     const handleSaveEdit = async (sale) => {
       setIsProcessing(true);
       try {
-        const oldQty = Number(sale.quantity) || 0; 
-        const newQty = Math.max(1, Number(editForm.quantity) || 1);
-        const oldProductId = sale.productId; 
-        const newProductId = editForm.productId;
-        const newPData = getProduct(newProductId); 
-        if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
+        const oldQty = Number(sale.quantity) || 0; const newQty = Math.max(1, Number(editForm.quantity) || 1);
+        const oldProductId = sale.productId; const newProductId = editForm.productId;
+        const newPData = getProduct(newProductId); if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
 
         await runTransaction(db, async (transaction) => {
-          const oldPRef = doc(db, "products", oldProductId); 
-          const newPRef = doc(db, "products", newProductId);
-          
-          let oldPDoc = null;
-          let newPDoc = null;
-
-          // 1. 📖 READS: ควรอ่านข้อมูลก่อนเขียนเสมอใน Transaction
+          const oldPRef = doc(db, "products", oldProductId); const newPRef = doc(db, "products", newProductId);
           if (oldProductId !== newProductId) {
-            oldPDoc = await transaction.get(oldPRef);
-            newPDoc = await transaction.get(newPRef);
-          } else if (oldQty !== newQty) {
-            oldPDoc = await transaction.get(oldPRef);
-          }
-
-          // 2. ✏️ WRITES
-          if (oldProductId !== newProductId) {
-            if (oldPDoc && oldPDoc.exists()) transaction.update(oldPRef, { stock: (Number(oldPDoc.data().stock) || 0) + oldQty });
-            if (newPDoc && newPDoc.exists()) transaction.update(newPRef, { stock: (Number(newPDoc.data().stock) || 0) - newQty });
+            const oldP = await transaction.get(oldPRef); if(oldP.exists()) transaction.update(oldPRef, { stock: (Number(oldP.data().stock)||0) + oldQty });
+            const newP = await transaction.get(newPRef); if(newP.exists()) transaction.update(newPRef, { stock: (Number(newP.data().stock)||0) - newQty });
           } else if (oldQty !== newQty) {
             const diff = newQty - oldQty;
-            if (oldPDoc && oldPDoc.exists()) transaction.update(oldPRef, { stock: (Number(oldPDoc.data().stock) || 0) - diff });
+            const p = await transaction.get(oldPRef); if(p.exists()) transaction.update(oldPRef, { stock: (Number(p.data().stock)||0) - diff });
           }
-
-          let newDateIso = sale.date; 
-          try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
+          let newDateIso = sale.date; try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
           
           transaction.update(doc(db, "sales", sale.id), {
             productId: newProductId, quantity: newQty, total: Number(editForm.customPrice) * newQty, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
@@ -1511,4 +1482,171 @@ export default function App() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
           <div>
             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
-            <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้ง
+            <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
+          </div>
+          {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14} /><span>เพิ่มผู้ใช้</span></button>}
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs uppercase"><th className="p-3 md:p-4 font-bold">Username</th><th className="p-3 md:p-4 font-bold">รหัสผ่าน</th><th className="p-3 md:p-4 font-bold">ระดับสิทธิ์</th><th className="p-3 md:p-4 font-bold">ตั้งค่าความสามารถ (Permissions)</th><th className="p-3 md:p-4 font-bold text-right">จัดการ</th></tr>
+            </thead>
+            <tbody className="text-xs md:text-sm">
+              {isAdding && (
+                <tr className="bg-blue-50/60 align-top border-b border-blue-100">
+                  <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
+                  <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} /></td>
+                  <td className="p-3"><select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select></td>
+                  <td className="p-3">
+                    {editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px]">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                      <div className="flex flex-col space-y-2">
+                        <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
+                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap space-x-1"><button onClick={handleAdd} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16} /></button><button onClick={() => setIsAdding(false)} disabled={isProcessing} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><X size={16} /></button></td>
+                </tr>
+              )}
+              {users.map(u => (
+                <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 align-top transition-colors">
+                  <td className="p-3 md:p-4 font-bold text-slate-800 pt-5">{u.username}</td>
+                  <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} />) : (<span className="text-slate-400 tracking-widest">••••••</span>)}</td>
+                  <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select>) : (<span className={`px-2 py-1 rounded text-[9px] font-bold border ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role.toUpperCase()}</span>)}</td>
+                  <td className="p-3 md:p-4">
+                    {isEditing === u.id ? (editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                        <div className="flex flex-col space-y-2 mt-1">
+                          <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
+                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
+                        </div>
+                      )
+                    ) : (u.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-50 border border-purple-100 px-2 py-1 rounded text-[9px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <span className="bg-blue-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded">ขาย (POS)</span>
+                          {u.permissions?.dashboard && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">Dashboard</span>}
+                          {u.permissions?.products && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">การจัดการสินค้า</span>}
+                          {u.permissions?.stock && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">สต๊อกสินค้า</span>}
+                          {u.permissions?.history && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">ประวัติการขาย</span>}
+                        </div>
+                      )
+                    )}
+                  </td>
+                  <td className="p-3 md:p-4 text-right space-x-1 whitespace-nowrap pt-4">
+                    {isEditing === u.id ? (<><button onClick={() => handleSave(u.id)} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16} /></button><button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-500 hover:bg-slate-100 p-1.5 rounded"><X size={16} /></button></>) : (<><button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role, permissions: u.permissions || defaultPermissions}); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button><button onClick={async () => { if(confirm('ลบผู้ใช้นี้ออกจากระบบ?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-500 hover:bg-red-50 p-1.5 rounded ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={16} /></button></>)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // 🎨 5. โครงสร้างหน้าจอหลัก (Main Layout Render)
+  // ==========================================
+  if (!isUsersLoaded || isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-5 font-sans px-4 text-center relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100 rounded-full blur-3xl -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-100 rounded-full blur-3xl -ml-20 -mb-20"></div>
+        <div className="w-12 h-12 md:w-16 md:h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-lg shadow-blue-500/30 z-10"></div>
+        <p className="text-slate-600 text-sm md:text-base font-bold tracking-wide z-10">กำลังเตรียมระบบ The Resilient Clinic...</p>
+        {loadError && (<div className="mt-4 p-4 bg-red-50/80 backdrop-blur-sm text-red-600 rounded-2xl max-w-sm border border-red-200 shadow-sm text-sm z-10"><p className="font-black mb-1">พบปัญหาการเชื่อมต่อ</p><p className="font-medium">{loadError}</p></div>)}
+      </div>
+    );
+  }
+
+  // หน้าต่างสำหรับผู้บริหาร (Executive view)
+  if (isExecutiveView) {
+    return (
+      <div className="min-h-screen bg-slate-50/50 font-sans flex flex-col">
+        <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
+        <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-[50] sticky top-0">
+          <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
+            <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-2xl shadow-sm px-4 w-[200px] md:w-[250px]" /></div>
+            <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+               <button onClick={() => setActiveTab('dashboard')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><LayoutDashboard size={18} /><span>Dashboard</span></button>
+               <button onClick={() => setActiveTab('stock')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Boxes size={18} /><span>สต๊อกสินค้า</span></button>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4 md:p-8 pb-24">
+          <div className="max-w-5xl mx-auto space-y-6 relative">
+            <div className="flex items-center mb-2"><div className="bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-full text-xs font-bold flex items-center shadow-sm tracking-wide"><span className="text-amber-500 mr-1.5 text-base leading-none">👑</span> Executive View</div></div>
+            {activeTab === 'dashboard' && <DashboardView />}{activeTab === 'stock' && <StockView />}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loggedInUser && !isExecutiveView) return <LoginView />;
+
+  // 🎨 กำหนด Style ของปุ่มเมนู (ปรับให้สอดคล้องกับตอนย่อ/ขยาย)
+  const navItemBaseStyle = `snap-start flex-shrink-0 flex items-center md:w-full py-3 md:py-3.5 rounded-xl transition-all duration-200 text-sm group border border-transparent ${isSidebarCollapsed ? 'md:justify-center px-4 md:px-0' : 'px-4'}`;
+  const navItemActiveStyle = "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20 border-transparent";
+  const navItemInactiveStyle = "text-slate-600 hover:bg-slate-100 hover:text-blue-600 font-medium hover:border-slate-200";
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
+      <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
+      
+      {/* 🚀 ปรับความกว้าง Sidebar อัตโนมัติตาม State */}
+      <div className={`w-full ${isSidebarCollapsed ? 'md:w-[80px]' : 'md:w-64'} bg-white border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden transition-all duration-300 ease-in-out`}>
+        <div className="relative z-10 flex flex-col h-full">
+          {/* ซ่อนโลโก้ 100% เมือ Sidebar ถูกย่อ */}
+          {!isSidebarCollapsed && (
+             <div className="p-4 flex items-center justify-center border-b border-slate-100 transition-all duration-300">
+               <ResilientLogo className="h-12 w-full rounded-xl shadow-sm" />
+             </div>
+          )}
+          <nav className={`px-3 py-4 space-x-2 md:space-x-0 md:space-y-1.5 flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-hide snap-x ${isSidebarCollapsed ? 'md:pt-6' : ''}`}>
+            {canAccess('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`${navItemBaseStyle} ${activeTab === 'dashboard' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "Dashboard" : ""}><LayoutDashboard size={20} className={activeTab !== 'dashboard' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>Dashboard</span></button>}
+            {canAccess('products') && <button onClick={() => setActiveTab('products')} className={`${navItemBaseStyle} ${activeTab === 'products' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการสินค้า" : ""}><Package size={20} className={activeTab !== 'products' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>การจัดการสินค้า</span></button>}
+            {canAccess('stock') && <button onClick={() => setActiveTab('stock')} className={`${navItemBaseStyle} ${activeTab === 'stock' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "สต๊อกสินค้า" : ""}><Boxes size={20} className={activeTab !== 'stock' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>สต๊อกสินค้า</span></button>}
+            {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการผู้ใช้" : ""}><Users size={20} className={activeTab !== 'users' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>การจัดการผู้ใช้</span></button>}
+            {canAccess('history') && <button onClick={() => setActiveTab('history')} className={`${navItemBaseStyle} ${activeTab === 'history' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "ประวัติการขาย" : ""}><History size={20} className={activeTab !== 'history' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>ประวัติการขาย</span></button>}
+            {canAccess('sales') && <button onClick={() => setActiveTab('sales')} className={`${navItemBaseStyle} ${activeTab === 'sales' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "บันทึกการขาย (POS)" : ""}><ShoppingCart size={20} className={activeTab !== 'sales' ? "text-slate-400 group-hover:text-blue-500 transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>บันทึกการขาย (POS)</span></button>}
+          </nav>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-slate-50">
+        <header className="bg-white h-16 border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full">
+          <div className="flex items-center space-x-3">
+             <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                className="p-2 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors hidden md:flex items-center justify-center border border-slate-200 active:scale-95"
+                title={isSidebarCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
+             >
+                <Menu size={18} />
+             </button>
+          </div>
+          <div className="flex items-center space-x-3 ml-auto w-full sm:w-auto justify-between sm:justify-end">
+            <div className="flex items-center space-x-2 text-xs md:text-sm text-slate-700 py-1.5 px-3 rounded-full border border-slate-200 bg-slate-50"><User size={14} className="text-blue-600" /><span className="font-bold">{loggedInUser.username}</span><span className="text-slate-400 font-medium text-[10px] md:text-xs uppercase ml-1 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-100">({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})</span></div>
+            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1.5 text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-lg transition-all text-xs font-bold" title="ออกจากระบบ"><LogOut size={16} /></button>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-3 md:p-6 pb-24 relative w-full">
+          <div className="max-w-6xl mx-auto relative w-full">
+            {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView />}
+            {activeTab === 'products' && canAccess('products') && <ProductsView />}
+            {activeTab === 'stock' && canAccess('stock') && <StockView />}
+            {activeTab === 'users' && canAccess('users') && <UsersManagementView />}
+            {activeTab === 'history' && canAccess('history') && <SalesHistoryView />}
+            {activeTab === 'sales' && canAccess('sales') && <SalesView />}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
