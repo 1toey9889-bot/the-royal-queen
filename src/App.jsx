@@ -1,11 +1,12 @@
 // ==========================================
 // 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
 // ==========================================
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, increment, setDoc, runTransaction
+  deleteDoc, doc, increment, setDoc, runTransaction,
+  getDocs, query, orderBy, limit
 } from "firebase/firestore";
 import { 
   LayoutDashboard, Package, ShoppingCart, Plus, Edit2, Trash2, 
@@ -75,7 +76,7 @@ export default function App() {
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
 
   const [loggedInUser, setLoggedInUser] = useState(null); 
-  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
+  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');   
   
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -83,8 +84,12 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [users, setUsers] = useState([]);
   
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUsersLoaded, setIsUsersLoaded] = useState(false);
+  // 🚀 แยก Loading State เพื่อลด Read และป้องกัน Memory Leak
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingSales, setIsLoadingSales] = useState(false);
+  const [salesLoadedOnce, setSalesLoadedOnce] = useState(false);
+  
   const [loadError, setLoadError] = useState('');
 
   const productMap = useMemo(() => {
@@ -94,42 +99,85 @@ export default function App() {
     }, {});
   }, [products]);
 
+  // 🚀 โหลด Users (ครั้งเดียว) และ Products (Real-time) ตอนเปิดแอป
   useEffect(() => {
-    const connectionTimeout = setTimeout(() => {
-      if (!isUsersLoaded || isLoading) setLoadError("การเชื่อมต่อใช้เวลานานผิดปกติ กรุณาตรวจสอบอินเทอร์เน็ตหรือรีเฟรชหน้าจอใหม่");
-    }, 10000);
+    let isMounted = true;
 
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      if (snapshot.empty) {
-        setDoc(doc(db, "users", "default_admin"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
-        setDoc(doc(db, "users", "default_user"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
-      } else {
-        setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setIsUsersLoaded(true); setLoadError('');
+    const fetchUsers = async () => {
+      try {
+        const usersSnap = await getDocs(collection(db, "users"));
+        if (usersSnap.empty) {
+          await setDoc(doc(db, "users", "default_admin"), { username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions });
+          await setDoc(doc(db, "users", "default_user"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
+          if (isMounted) {
+            setUsers([
+              { id: "default_admin", username: 'admin', password: '123456', role: 'admin', permissions: defaultPermissions },
+              { id: "default_user", username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions }
+            ]);
+          }
+        } else {
+          if (isMounted) setUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }
+      } catch (error) {
+        console.error("Users Error:", error);
+        if (isMounted) setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้");
+      } finally {
+        if (isMounted) setIsLoadingUsers(false);
       }
-    }, (error) => { console.error("Users Error:", error); setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้"); setIsUsersLoaded(true); });
+    };
+
+    fetchUsers();
 
     const unsubscribeProducts = onSnapshot(collection(db, "products"), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      if (isMounted) {
+        setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setIsLoadingProducts(false);
+      }
+    }, (error) => { 
+      console.error("Products Error:", error); 
+      if (isMounted) { setLoadError("ไม่สามารถดึงข้อมูลสินค้าได้"); setIsLoadingProducts(false); }
     });
 
-    const unsubscribeSales = onSnapshot(collection(db, "sales"), (snapshot) => {
-      setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setIsLoading(false); setLoadError('');
-    });
+    return () => { 
+      isMounted = false; 
+      unsubscribeProducts(); 
+    };
+  }, []);
 
-    return () => { clearTimeout(connectionTimeout); unsubscribeUsers(); unsubscribeProducts(); unsubscribeSales(); };
-  }, [isUsersLoaded, isLoading]);
+  // 🚀 ฟังก์ชันโหลด Sales แบบ On-Demand (ไม่ Real-time) + Limit 50
+  const fetchSales = useCallback(async () => {
+    setIsLoadingSales(true);
+    try {
+      const q = query(collection(db, "sales"), orderBy("date", "desc"), limit(50));
+      const salesSnap = await getDocs(q);
+      setSales(salesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setSalesLoadedOnce(true);
+    } catch (error) {
+      console.error("Sales Error:", error);
+      setLoadError("ไม่สามารถดึงข้อมูลการขายได้");
+    } finally {
+      setIsLoadingSales(false);
+    }
+  }, []);
+
+  // 🚀 โหลด Sales เมื่อสลับหน้าไปยังหน้าที่จำเป็น
+  useEffect(() => {
+    if (loggedInUser || isExecutiveView) {
+      if (['dashboard', 'history', 'sales'].includes(activeTab)) {
+        fetchSales();
+      }
+    }
+  }, [activeTab, loggedInUser, isExecutiveView, fetchSales]);
 
   useEffect(() => {
-    if (loggedInUser) {
+    if (loggedInUser && !isLoadingUsers) {
       const updatedUser = users.find(u => u.id === loggedInUser.id);
       if (updatedUser) {
         setLoggedInUser(updatedUser);
         if (activeTab !== 'sales' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) setActiveTab('sales');
       } else { setLoggedInUser(null); }
     }
-  }, [users, activeTab, loggedInUser]);
+  }, [users, activeTab, loggedInUser, isLoadingUsers]);
 
   // --- 🛠️ ฟังก์ชันช่วยเหลือ (Helpers) ---
   const canAccess = (tabName) => {
@@ -303,6 +351,7 @@ export default function App() {
           <div className="flex items-center space-x-3 md:space-x-4">
             <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><BarChart3 size={24} className="w-5 h-5 md:w-6 md:h-6" /></div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">สรุปยอดขาย</h2>
+            {isLoadingSales && <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin ml-2"></div>}
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 shadow-inner">
@@ -568,7 +617,9 @@ export default function App() {
         });
         
         setCart([]); setOrderId(''); setCustomGrandTotal(''); setShowConfirmModal(false);
-        setIsError(false); setMessage('บันทึกออเดอร์สำเร็จ!'); setTimeout(() => setMessage(''), 3000);
+        setIsError(false); setMessage('บันทึกออเดอร์สำเร็จ!'); 
+        await fetchSales(); // 🚀 อัปเดต Sales ล่าสุดหลังจากซื้อเสร็จ
+        setTimeout(() => setMessage(''), 3000);
       } catch (err) { setShowConfirmModal(false); setMessage(err.message); setIsError(true); }
       setIsProcessing(false);
     };
@@ -897,7 +948,6 @@ export default function App() {
                                   </div>
                                ) : ''}
                             </td>
-                            {/* 🚀 แก้ไขให้แสดง รหัสออเดอร์ ทุกแถว */}
                             <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
                             <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
                             <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
@@ -991,6 +1041,7 @@ export default function App() {
           if (pDoc.exists()) transaction.update(productRef, { stock: (Number(pDoc.data().stock) || 0) + Number(sale.quantity) });
           transaction.delete(doc(db, "sales", sale.id));
         });
+        await fetchSales(); // 🚀 อัปเดต Sales ล่าสุด
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1013,6 +1064,7 @@ export default function App() {
           }
           for (const sale of group.items) { transaction.delete(doc(db, "sales", sale.id)); }
         });
+        await fetchSales(); // 🚀 อัปเดต Sales ล่าสุด
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1041,6 +1093,7 @@ export default function App() {
           });
         });
         setIsEditing(null);
+        await fetchSales(); // 🚀 อัปเดต Sales ล่าสุด
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1061,6 +1114,7 @@ export default function App() {
           }
         });
         setIsEditingGroup(null);
+        await fetchSales(); // 🚀 อัปเดต Sales ล่าสุด
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1076,7 +1130,10 @@ export default function App() {
                 <History size={24} />
               </div>
               <div>
-                <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">ประวัติการขาย</h2>
+                <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center">
+                  ประวัติการขาย
+                  {isLoadingSales && <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin ml-2"></div>}
+                </h2>
                 <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5">สามารถแก้ไขข้อมูล หรือลบออเดอร์ย่อยที่คีย์ผิดได้</p>
               </div>
             </div>
@@ -1552,7 +1609,9 @@ export default function App() {
   // ==========================================
   // 🎨 5. โครงสร้างหน้าจอหลัก (Main Layout Render)
   // ==========================================
-  if (!isUsersLoaded || isLoading) {
+  const isAppReady = !isLoadingUsers && !isLoadingProducts;
+
+  if (!isAppReady) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-5 font-sans px-4 text-center relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100 rounded-full blur-3xl -mr-20 -mt-20"></div>
