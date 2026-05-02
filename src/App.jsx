@@ -1029,9 +1029,17 @@ export default function App() {
                    <div className="text-center">
                       <h3 className="font-bold text-xl text-slate-800">สแกน Barcode</h3>
                       <p className="text-xs text-slate-500 font-medium mt-1">นำกล้องไปส่องที่บาร์โค้ดใบปะหน้า</p>
+                      {scanMode === 'camera' && (
+                 <>
+                   <div className="text-center">
+                      <h3 className="font-bold text-xl text-slate-800">สแกน Barcode</h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1">นำกล้องไปส่องที่บาร์โค้ดใบปะหน้า</p>
                    </div>
                    <div className="rounded-2xl overflow-hidden border-4 border-slate-100 shadow-inner bg-black aspect-square w-full relative shrink-0">
-                      <Scanner onResult="{(text)"> { setOrderId(text); setScanMode(null); }} onError={(error) => console.log(error?.message)} />
+                      <Scanner 
+                         onResult={(text) => { setOrderId(text); setScanMode(null); }} 
+                         onError={(error) => console.log(error?.message)} 
+                      />
                    </div>
                  </>
                )}
