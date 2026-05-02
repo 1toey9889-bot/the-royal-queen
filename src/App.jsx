@@ -368,16 +368,15 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-4xl mx-auto">
-        
-        {/* 🚀 Modal แจ้งเตือนบันทึกเวลาสำเร็จ */}
+      <>
+        {/* 🚀 Modal แจ้งเตือนบันทึกเวลาสำเร็จ (ดึงออกมาไว้นอกสุดเพื่อไม่ให้โดน animate-in บัง) */}
         {showSuccessPopup && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 w-full h-full">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 w-screen h-screen m-0 top-0 left-0" style={{ position: 'fixed' }}>
             <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full flex flex-col items-center animate-in zoom-in-95 duration-300 border border-emerald-100">
                <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-teal-500 text-white rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/40">
                   <CheckCircle2 size={56} />
                </div>
-               <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">บันทึกเวลาสำเร็จ</h3>
+               <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">บันทึกเวลาสำเร็จ</h3>
                <p className="text-slate-500 font-medium mb-8">ระบบได้บันทึกข้อมูลของคุณเรียบร้อยแล้ว</p>
                <button onClick={() => setShowSuccessPopup(false)} className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors">
                   ตกลง
@@ -386,129 +385,131 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
-          <div className="flex items-center space-x-3">
-            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">ระบบลงเวลาทำงาน</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">ยืนยันตัวตนด้วยใบหน้า (Face Verification)</p>
+        <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-4xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
+            <div className="flex items-center space-x-3">
+              <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">ระบบลงเวลาทำงาน</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">ยืนยันตัวตนด้วยใบหน้า (Face Verification)</p>
+              </div>
+            </div>
+            <div className="flex bg-slate-100 p-1.5 rounded-xl w-full md:w-auto">
+              <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
+              <button onClick={() => setLocalActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ประวัติ</button>
             </div>
           </div>
-          <div className="flex bg-slate-100 p-1.5 rounded-xl w-full md:w-auto">
-            <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
-            <button onClick={() => setLocalActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ประวัติ</button>
-          </div>
-        </div>
 
-        {activeTab === 'checkin' && (
-          loggedInUser?.employeeData ? (
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
-                <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
-              </div>
+          {activeTab === 'checkin' && (
+            loggedInUser?.employeeData ? (
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
+                  <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
+                </div>
 
-              <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
-                <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
-                {isVerifying && (
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                    <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
+                <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
+                  <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
+                  {isVerifying && (
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                      <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                      <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
+                    </div>
+                  )}
+                </div>
+
+                {message.text && (
+                  <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
+                    {message.text}
                   </div>
                 )}
-              </div>
 
-              {message.text && (
-                <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
-                  {message.text}
+                <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
+                  <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                    <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
+                  </button>
+                  <button onClick={() => handleVerifyAndRecord('start_live')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                    <Camera size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
+                  </button>
+                  <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                    <LogOut size={20} className="mr-1.5"/> <span className="text-sm">ออกงาน</span>
+                  </button>
                 </div>
-              )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
+                <UserCircle size={64} className="text-slate-300 mb-4"/>
+                <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
+                <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                  บัญชีผู้ใช้นี้ยังไม่ได้ผูกกับโปรไฟล์พนักงานสำหรับการสแกนใบหน้า<br/>
+                  กรุณาไปที่เมนู <strong className="text-indigo-600">"การจัดการพนักงาน"</strong> เพื่อเพิ่มข้อมูลและผูกบัญชีให้เรียบร้อย
+                </p>
+              </div>
+            )
+          )}
 
-              <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
-                <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
-                </button>
-                <button onClick={() => handleVerifyAndRecord('start_live')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <Camera size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
-                </button>
-                <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <LogOut size={20} className="mr-1.5"/> <span className="text-sm">ออกงาน</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
-              <UserCircle size={64} className="text-slate-300 mb-4"/>
-              <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
-              <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                บัญชีผู้ใช้นี้ยังไม่ได้ผูกกับโปรไฟล์พนักงานสำหรับการสแกนใบหน้า<br/>
-                กรุณาไปที่เมนู <strong className="text-indigo-600">"การจัดการพนักงาน"</strong> เพื่อเพิ่มข้อมูลและผูกบัญชีให้เรียบร้อย
-              </p>
-            </div>
-          )
-        )}
-
-        {activeTab === 'history' && (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50/50 gap-4">
-              <div className="flex items-center space-x-3">
-                <CalendarDays size={20} className="text-slate-400"/>
-                <h3 className="text-base font-bold text-slate-800">ประวัติการลงเวลา</h3>
-              </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white" />
-                {loggedInUser.role === 'admin' && (
-                  <label className="flex items-center space-x-2 text-sm font-bold text-slate-600 cursor-pointer bg-white px-3 py-2 border border-slate-200 rounded-xl">
-                    <input type="checkbox" checked={viewAll} onChange={(e) => setViewAll(e.target.checked)} className="rounded text-indigo-600 w-4 h-4" />
-                    <span>ดูของทุกคน</span>
-                  </label>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-0 overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[500px]">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-[10px] md:text-xs uppercase border-b border-slate-200">
-                    <th className="p-4 font-bold text-center">เวลา</th>
-                    <th className="p-4 font-bold">พนักงาน</th>
-                    <th className="p-4 font-bold text-center">สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody className="text-xs md:text-sm">
-                  {filteredLogs.length === 0 ? (
-                    <tr><td colSpan="3" className="p-8 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในวันที่เลือก</td></tr>
-                  ) : (
-                    filteredLogs.map(log => {
-                      const logDate = new Date(log.timestamp);
-                      const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
-                      return (
-                        <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
-                          <td className="p-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
-                                {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
-                                  <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
-                                ) : <User size={16}/>}
-                              </div>
-                              <span className="font-bold text-slate-800">{log.employeeName}</span>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center">
-                            {getStatusBadge(log.type)}
-                          </td>
-                        </tr>
-                      )
-                    })
+          {activeTab === 'history' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50/50 gap-4">
+                <div className="flex items-center space-x-3">
+                  <CalendarDays size={20} className="text-slate-400"/>
+                  <h3 className="text-base font-bold text-slate-800">ประวัติการลงเวลา</h3>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white" />
+                  {loggedInUser.role === 'admin' && (
+                    <label className="flex items-center space-x-2 text-sm font-bold text-slate-600 cursor-pointer bg-white px-3 py-2 border border-slate-200 rounded-xl">
+                      <input type="checkbox" checked={viewAll} onChange={(e) => setViewAll(e.target.checked)} className="rounded text-indigo-600 w-4 h-4" />
+                      <span>ดูของทุกคน</span>
+                    </label>
                   )}
-                </tbody>
-              </table>
+                </div>
+              </div>
+              
+              <div className="p-0 overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-[10px] md:text-xs uppercase border-b border-slate-200">
+                      <th className="p-4 font-bold text-center">เวลา</th>
+                      <th className="p-4 font-bold">พนักงาน</th>
+                      <th className="p-4 font-bold text-center">สถานะ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs md:text-sm">
+                    {filteredLogs.length === 0 ? (
+                      <tr><td colSpan="3" className="p-8 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในวันที่เลือก</td></tr>
+                    ) : (
+                      filteredLogs.map(log => {
+                        const logDate = new Date(log.timestamp);
+                        const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
+                        return (
+                          <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
+                            <td className="p-4">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                                  {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
+                                    <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : <User size={16}/>}
+                                </div>
+                                <span className="font-bold text-slate-800">{log.employeeName}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 text-center">
+                              {getStatusBadge(log.type)}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </>
     );
   };
 
@@ -963,19 +964,10 @@ export default function App() {
     };
 
     return (
-      <div className="relative space-y-4 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
-        <div className="flex items-center space-x-3 mb-2">
-           <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600">
-             <ShoppingCart size={24}/>
-           </div>
-           <div>
-             <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">บันทึกการขาย (POS)</h2>
-             <p className="text-xs text-slate-500 font-medium mt-0.5">ทำรายการสั่งซื้อและชำระเงิน</p>
-           </div>
-        </div>
-
+      <>
+        {/* ย้าย Modal ทั้งหมดออกมานอกสุด เพื่อไม่ให้โดนบังโดยกล่องอื่นๆ */}
         {showConfirmModal && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-screen h-screen top-0 left-0 m-0" style={{ position: 'fixed' }}>
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 md:p-5 text-center text-white shrink-0 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -1021,7 +1013,7 @@ export default function App() {
         )}
 
         {scanMode && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-screen h-screen top-0 left-0 m-0" style={{ position: 'fixed' }}>
             <div className="bg-white p-5 md:p-6 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh] border border-slate-100">
                <div className="flex bg-slate-100/80 p-1.5 rounded-2xl shrink-0 gap-1.5 border border-slate-200/60 shadow-inner">
                   <button onClick={() => setScanMode('camera')} className={`flex-1 py-2.5 text-[11px] md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Barcode size={16} className="mr-1"/> สแกนโค้ด</button>
@@ -1087,221 +1079,234 @@ export default function App() {
           </div>
         )}
 
-        <form onSubmit={handleCheckoutPreflight} className="space-y-3 w-full">
-          {message && <div className={`p-3 rounded-xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
-          
-          <div className="flex flex-col gap-3 w-full mx-auto">
-             
-             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
-                <div className="flex items-center space-x-2 mb-3">
-                   <Store size={18} className="text-orange-500"/>
-                   <label className="text-sm font-bold text-slate-700">เลือกร้านค้า</label>
+        {/* ส่วนที่เป็นเนื้อหาหลักของระบบ POS */}
+        <div className="relative space-y-4 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
+          <div className="flex items-center space-x-3 mb-2">
+             <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600">
+               <ShoppingCart size={24}/>
+             </div>
+             <div>
+               <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">บันทึกการขาย (POS)</h2>
+               <p className="text-xs text-slate-500 font-medium mt-0.5">ทำรายการสั่งซื้อและชำระเงิน</p>
+             </div>
+          </div>
+
+          <form onSubmit={handleCheckoutPreflight} className="space-y-3 w-full">
+            {message && <div className={`p-3 rounded-xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
+            
+            <div className="flex flex-col gap-3 w-full mx-auto">
+               
+               <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
+                  <div className="flex items-center space-x-2 mb-3">
+                     <Store size={18} className="text-orange-500"/>
+                     <label className="text-sm font-bold text-slate-700">เลือกร้านค้า</label>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2 w-full">
+                     {STORE_OPTIONS.map(s => {
+                        const isShopee = s.includes('Shopee');
+                        const isLazada = s.includes('Lazada');
+                        const isLine = s === 'LINE';
+                        const isActive = selectedStore === s;
+                        
+                        let colorClass = "bg-slate-50 text-slate-500 hover:bg-slate-100 border-transparent hover:border-slate-200";
+                        if (isActive) {
+                           if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-sm border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
+                           else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-sm border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
+                           else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-sm border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
+                           else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm border-transparent ring-2 ring-blue-500/30 ring-offset-1";
+                        } else {
+                           if (isShopee) colorClass = "bg-[#FFF0ED] text-[#EE4D2D] border-[#FFE4DF]";
+                           else if (isLazada) colorClass = "bg-[#F2F3FF] text-[#0F146D] border-[#E6E8FF]";
+                           else if (isLine) colorClass = "bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]";
+                        }
+
+                        return (
+                          <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 py-2 rounded-xl border-2 text-[10px] md:text-xs font-bold transition-all active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full min-h-[44px]`}>
+                             {s}
+                          </button>
+                        )
+                     })}
+                  </div>
+               </div>
+
+               <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
+                  <div className="flex items-center space-x-2 mb-3">
+                     <Barcode size={18} className="text-blue-500"/>
+                     <label className="text-sm font-bold text-slate-700">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
+                  </div>
+                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full">
+                     <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-2.5 border border-slate-200 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white outline-none text-sm font-bold text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="ระบุรหัสออเดอร์ หรือ สแกน..." />
+                     <button type="button" onClick={() => setScanMode('camera')} className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition-all flex items-center justify-center shrink-0 active:scale-95 text-sm" title="สแกน หรือ ดึงข้อมูล">
+                        <Scan size={16} className="mr-1.5"/> <span className="font-bold">สแกนโค้ด</span>
+                     </button>
+                  </div>
+               </div>
+            </div>
+
+            <div className="relative z-[80] bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full" ref={dropdownRef}>
+              <div className="flex items-center space-x-2 mb-3">
+                 <Package size={18} className="text-emerald-500"/>
+                 <h3 className="text-sm font-bold text-slate-700">เลือกสินค้าลงตะกร้า</h3>
+              </div>
+              
+              <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-2.5 border border-slate-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all bg-slate-50 hover:border-emerald-300 hover:bg-white ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center space-x-2.5">
+                   <Search size={18} className={`transition-colors ${isDropdownOpen ? 'text-emerald-500' : 'text-slate-400'}`}/>
+                   <span className={`${isDropdownOpen ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'}`}>คลิกค้นหาสินค้า...</span>
                 </div>
-                <div className="grid grid-cols-5 gap-2 w-full">
-                   {STORE_OPTIONS.map(s => {
-                      const isShopee = s.includes('Shopee');
-                      const isLazada = s.includes('Lazada');
-                      const isLine = s === 'LINE';
-                      const isActive = selectedStore === s;
-                      
-                      let colorClass = "bg-slate-50 text-slate-500 hover:bg-slate-100 border-transparent hover:border-slate-200";
-                      if (isActive) {
-                         if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-sm border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
-                         else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-sm border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
-                         else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-sm border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
-                         else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm border-transparent ring-2 ring-blue-500/30 ring-offset-1";
-                      } else {
-                         if (isShopee) colorClass = "bg-[#FFF0ED] text-[#EE4D2D] border-[#FFE4DF]";
-                         else if (isLazada) colorClass = "bg-[#F2F3FF] text-[#0F146D] border-[#E6E8FF]";
-                         else if (isLine) colorClass = "bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]";
-                      }
+                <ChevronDown size={18} className={`transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`}/>
+              </div>
+
+              {isDropdownOpen && (
+                <div className="absolute w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg max-h-[250px] flex flex-col top-full left-0 z-[100] animate-in fade-in overflow-hidden">
+                  <div className="p-2 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                      <input type="text" className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
+                    </div>
+                  </div>
+                  <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white relative z-10">
+                    {filteredProductsForSelect.map(p => {
+                      const stockAmount = Number(p.stock) || 0;
+                      const isOutOfStock = stockAmount <= 0;
+                      const isLowStock = stockAmount <= 5 && !isOutOfStock;
 
                       return (
-                        <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 py-2 rounded-xl border-2 text-[10px] md:text-xs font-bold transition-all active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full min-h-[44px]`}>
-                           {s}
-                        </button>
-                      )
-                   })}
+                        <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-3 py-2 rounded-lg text-sm flex justify-between items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100"}`}>
+                          <div className="flex items-center space-x-2 pr-2">
+                             {isLowStock && <AlertCircle size={14} className="text-red-500 shrink-0"/>}
+                             <span className="font-bold text-sm text-slate-800">{p.name}</span>
+                          </div>
+                          <span className={`text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${stockAmount} ชิ้น (฿${formatMoney(p.price)})`}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-             </div>
-
-             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
-                <div className="flex items-center space-x-2 mb-3">
-                   <Barcode size={18} className="text-blue-500"/>
-                   <label className="text-sm font-bold text-slate-700">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
-                </div>
-                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full">
-                   <input type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} className="w-full p-2.5 border border-slate-200 focus:border-blue-500 rounded-xl bg-slate-50 focus:bg-white outline-none text-sm font-bold text-slate-800 transition-all placeholder:text-slate-400 placeholder:font-medium" placeholder="ระบุรหัสออเดอร์ หรือ สแกน..." />
-                   <button type="button" onClick={() => setScanMode('camera')} className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition-all flex items-center justify-center shrink-0 active:scale-95 text-sm" title="สแกน หรือ ดึงข้อมูล">
-                      <Scan size={16} className="mr-1.5"/> <span className="font-bold">สแกนโค้ด</span>
-                   </button>
-                </div>
-             </div>
-          </div>
-
-          <div className="relative z-[80] bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full" ref={dropdownRef}>
-            <div className="flex items-center space-x-2 mb-3">
-               <Package size={18} className="text-emerald-500"/>
-               <h3 className="text-sm font-bold text-slate-700">เลือกสินค้าลงตะกร้า</h3>
-            </div>
-            
-            <div onClick={() => !isProcessing && setIsDropdownOpen(!isDropdownOpen)} className={`w-full p-2.5 border border-slate-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all bg-slate-50 hover:border-emerald-300 hover:bg-white ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-              <div className="flex items-center space-x-2.5">
-                 <Search size={18} className={`transition-colors ${isDropdownOpen ? 'text-emerald-500' : 'text-slate-400'}`}/>
-                 <span className={`${isDropdownOpen ? 'text-emerald-700 font-bold' : 'text-slate-500 font-medium'}`}>คลิกค้นหาสินค้า...</span>
-              </div>
-              <ChevronDown size={18} className={`transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`}/>
-            </div>
-
-            {isDropdownOpen && (
-              <div className="absolute w-full mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg max-h-[250px] flex flex-col top-full left-0 z-[100] animate-in fade-in overflow-hidden">
-                <div className="p-2 border-b border-slate-100 bg-slate-50/80 shrink-0">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                    <input type="text" className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={productSearchTerm} onChange={(e) => setProductSearchTerm(e.target.value)} autoFocus />
-                  </div>
-                </div>
-                <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white relative z-10">
-                  {filteredProductsForSelect.map(p => {
-                    const stockAmount = Number(p.stock) || 0;
-                    const isOutOfStock = stockAmount <= 0;
-                    const isLowStock = stockAmount <= 5 && !isOutOfStock;
-
-                    return (
-                      <li key={p.id} onClick={() => { if (!isOutOfStock) addToCart(p); }} className={`px-3 py-2 rounded-lg text-sm flex justify-between items-center cursor-pointer transition-all ${isOutOfStock ? "opacity-50 bg-slate-50 border border-slate-100" : "bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100"}`}>
-                        <div className="flex items-center space-x-2 pr-2">
-                           {isLowStock && <AlertCircle size={14} className="text-red-500 shrink-0"/>}
-                           <span className="font-bold text-sm text-slate-800">{p.name}</span>
-                        </div>
-                        <span className={`text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border ${isOutOfStock ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                          {isOutOfStock ? 'สินค้าหมด' : `เหลือ ${stockAmount} ชิ้น (฿${formatMoney(p.price)})`}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {cart.length > 0 && (
-             <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-2xl overflow-hidden w-full shadow-sm mt-4">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2 border-b border-blue-100 font-bold text-blue-800 text-sm flex items-center">
-                  <ShoppingCart size={16} className="mr-1.5 text-blue-600"/> ตะกร้า ({cart.length})
-                </div>
-                <div className="p-3 w-full space-y-2">
-                   {cart.map((item, index) => (
-                      <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-3 gap-2 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all">
-                         <div className="flex-1 font-bold text-slate-800 break-words w-full lg:w-auto text-sm">{item.name}</div>
-                         
-                         <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-3 shrink-0">
-                            <div className="flex items-center space-x-1.5">
-                               <span className="text-[10px] text-slate-500 font-bold lg:hidden uppercase">ราคา</span>
-                               <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-16 md:w-20 p-1.5 text-center border border-slate-200 rounded-md text-xs font-bold focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all text-blue-700"/>
-                            </div>
-
-                            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md p-0.5 shrink-0">
-                               <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-1 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Minus size={14}/></button>
-                               <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-8 text-center bg-transparent font-bold outline-none text-sm text-slate-800"/>
-                               <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-1 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Plus size={14}/></button>
-                            </div>
-                            
-                            <div className="flex items-center justify-end gap-2 min-w-[70px] shrink-0">
-                               <span className="font-bold text-blue-700 text-right text-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
-                               <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-md transition-all" title="ลบรายการนี้"><Trash2 size={16}/></button>
-                            </div>
-                         </div>
-                      </div>
-                   ))}
-                </div>
-             </div>
-          )}
-
-          <div className="pt-2 w-full relative z-10">
-            <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-4 md:p-5 rounded-2xl border border-blue-100 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm w-full">
-              <div className="text-center sm:text-left w-full sm:w-auto flex flex-col items-center sm:items-start">
-                <p className="text-xs font-bold text-blue-500 mb-1 uppercase">รวมสุทธิ</p>
-                <div className="flex items-center relative w-full sm:w-auto justify-center sm:justify-start">
-                  <span className="text-xl font-black text-blue-700 absolute left-3 select-none opacity-80">฿</span>
-                  <input 
-                    type="number" 
-                    value={customGrandTotal} 
-                    placeholder={posTotal}    
-                    onChange={(e) => setCustomGrandTotal(e.target.value)}
-                    className="w-full sm:w-48 pl-8 pr-3 py-2 text-xl font-black text-blue-800 bg-white/90 border border-blue-200 rounded-xl outline-none focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-sm"
-                    disabled={cart.length === 0}
-                  />
-                </div>
-                {customGrandTotal !== '' && Number(customGrandTotal) !== posTotal && (
-                  <p className="text-[10px] text-orange-600 mt-1.5 font-bold bg-orange-100/80 px-2 py-1 rounded border border-orange-200 inline-flex items-center">
-                    <AlertCircle size={12} className="mr-1"/> แก้ไขจากปกติ ฿{formatMoney(posTotal)}
-                  </p>
-                )}
-              </div>
-
-              <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-md flex items-center justify-center">
-                {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={16} className="mr-1.5"/> บันทึกการขาย</>}
-              </button>
-            </div>
-          </div>
-        </form>
-
-        <div className="pt-4 w-full pb-8 relative z-10">
-          <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center"><History size={16} className="mr-1.5 text-blue-500"/>รายการขายวันนี้</h3>
-          <div className="w-full overflow-x-auto pb-2">
-            <table className="w-full text-left border-separate min-w-full" style={{ borderSpacing: '0 6px' }}>
-              <thead>
-                <tr className="text-slate-400 text-[10px] uppercase">
-                  <th className="px-2 pb-1 font-bold whitespace-nowrap">เวลา</th>
-                  <th className="px-2 pb-1 font-bold">ออเดอร์</th>
-                  <th className="px-2 pb-1 font-bold">ร้านค้า</th>
-                  <th className="px-2 pb-1 font-bold">สินค้า</th>
-                  <th className="px-2 pb-1 font-bold text-center">จน.</th>
-                  <th className="px-2 pb-1 font-bold text-right">ยอดรวม</th>
-                </tr>
-              </thead>
-              {groupedRecentSales.length === 0 ? (
-                <tbody><tr><td colSpan="6" className="p-4 text-center text-slate-400 text-xs font-medium bg-white rounded-xl shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
-              ) : (
-                groupedRecentSales.map((group, groupIndex) => {
-                  let timeString = '-'; 
-                  try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
-                  
-                  return (
-                    <tbody key={group.id} className="shadow-sm rounded-xl bg-white relative text-xs">
-                      {group.items.map((sale, itemIdx) => {
-                        const isFirstRow = itemIdx === 0;
-                        return (
-                          <tr key={sale.id} className="bg-white">
-                            <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
-                               {isFirstRow ? (
-                                  <div className="flex flex-col space-y-1">
-                                     <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
-                                     <span className="font-medium flex items-center text-[10px]"><CalendarDays size={10} className="mr-1"/> {timeString}</span>
-                                  </div>
-                               ) : ''}
-                            </td>
-                            <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
-                            <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
-                            <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
-                            <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
-                            <td className={`p-2 text-right text-slate-700 font-bold whitespace-nowrap border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="bg-slate-50">
-                        <td colSpan="4" className="p-2 text-right text-slate-600 font-bold text-[10px] border-l border-b border-slate-100 rounded-bl-xl">ยอดสุทธิออเดอร์นี้</td>
-                        <td className="p-2 text-center text-slate-700 font-bold border-b border-slate-100">{group.totalItems}</td>
-                        <td className="p-2 text-right text-blue-600 font-bold whitespace-nowrap border-r border-b border-slate-100 rounded-br-xl">฿{formatMoney(group.totalOrderValue)}</td>
-                      </tr>
-                    </tbody>
-                  );
-                })
               )}
-            </table>
+            </div>
+
+            {cart.length > 0 && (
+               <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-2xl overflow-hidden w-full shadow-sm mt-4">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2 border-b border-blue-100 font-bold text-blue-800 text-sm flex items-center">
+                    <ShoppingCart size={16} className="mr-1.5 text-blue-600"/> ตะกร้า ({cart.length})
+                  </div>
+                  <div className="p-3 w-full space-y-2">
+                     {cart.map((item, index) => (
+                        <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-3 gap-2 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all">
+                           <div className="flex-1 font-bold text-slate-800 break-words w-full lg:w-auto text-sm">{item.name}</div>
+                           
+                           <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-3 shrink-0">
+                              <div className="flex items-center space-x-1.5">
+                                 <span className="text-[10px] text-slate-500 font-bold lg:hidden uppercase">ราคา</span>
+                                 <input type="number" value={item.price} onChange={e => updateCartItem(item.productId, 'price', e.target.value)} className="w-16 md:w-20 p-1.5 text-center border border-slate-200 rounded-md text-xs font-bold focus:border-blue-500 outline-none bg-slate-50 hover:bg-white transition-all text-blue-700"/>
+                              </div>
+
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md p-0.5 shrink-0">
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Math.max(1, Number(item.quantity) - 1))} className="p-1 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Minus size={14}/></button>
+                                 <input type="number" value={item.quantity} onChange={e => updateCartItem(item.productId, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-8 text-center bg-transparent font-bold outline-none text-sm text-slate-800"/>
+                                 <button type="button" onClick={() => updateCartItem(item.productId, 'quantity', Number(item.quantity) + 1)} className="p-1 bg-white rounded shadow-sm border border-slate-100 hover:text-blue-600 transition-all"><Plus size={14}/></button>
+                              </div>
+                              
+                              <div className="flex items-center justify-end gap-2 min-w-[70px] shrink-0">
+                                 <span className="font-bold text-blue-700 text-right text-sm">฿{formatMoney(Number(item.price) * Number(item.quantity))}</span>
+                                 <button type="button" onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-md transition-all" title="ลบรายการนี้"><Trash2 size={16}/></button>
+                              </div>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            )}
+
+            <div className="pt-2 w-full relative z-10">
+              <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-4 md:p-5 rounded-2xl border border-blue-100 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm w-full">
+                <div className="text-center sm:text-left w-full sm:w-auto flex flex-col items-center sm:items-start">
+                  <p className="text-xs font-bold text-blue-500 mb-1 uppercase">รวมสุทธิ</p>
+                  <div className="flex items-center relative w-full sm:w-auto justify-center sm:justify-start">
+                    <span className="text-xl font-black text-blue-700 absolute left-3 select-none opacity-80">฿</span>
+                    <input 
+                      type="number" 
+                      value={customGrandTotal} 
+                      placeholder={posTotal}    
+                      onChange={(e) => setCustomGrandTotal(e.target.value)}
+                      className="w-full sm:w-48 pl-8 pr-3 py-2 text-xl font-black text-blue-800 bg-white/90 border border-blue-200 rounded-xl outline-none focus:border-blue-500 text-left disabled:bg-transparent disabled:border-transparent placeholder:text-blue-300 transition-all shadow-sm"
+                      disabled={cart.length === 0}
+                    />
+                  </div>
+                  {customGrandTotal !== '' && Number(customGrandTotal) !== posTotal && (
+                    <p className="text-[10px] text-orange-600 mt-1.5 font-bold bg-orange-100/80 px-2 py-1 rounded border border-orange-200 inline-flex items-center">
+                      <AlertCircle size={12} className="mr-1"/> แก้ไขจากปกติ ฿{formatMoney(posTotal)}
+                    </p>
+                  )}
+                </div>
+
+                <button type="submit" disabled={cart.length === 0 || isProcessing} className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-md flex items-center justify-center">
+                  {isProcessing ? 'กำลังบันทึก...' : <><ShoppingCart size={16} className="mr-1.5"/> บันทึกการขาย</>}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div className="pt-4 w-full pb-8 relative z-10">
+            <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center"><History size={16} className="mr-1.5 text-blue-500"/>รายการขายวันนี้</h3>
+            <div className="w-full overflow-x-auto pb-2">
+              <table className="w-full text-left border-separate min-w-full" style={{ borderSpacing: '0 6px' }}>
+                <thead>
+                  <tr className="text-slate-400 text-[10px] uppercase">
+                    <th className="px-2 pb-1 font-bold whitespace-nowrap">เวลา</th>
+                    <th className="px-2 pb-1 font-bold">ออเดอร์</th>
+                    <th className="px-2 pb-1 font-bold">ร้านค้า</th>
+                    <th className="px-2 pb-1 font-bold">สินค้า</th>
+                    <th className="px-2 pb-1 font-bold text-center">จน.</th>
+                    <th className="px-2 pb-1 font-bold text-right">ยอดรวม</th>
+                  </tr>
+                </thead>
+                {groupedRecentSales.length === 0 ? (
+                  <tbody><tr><td colSpan="6" className="p-4 text-center text-slate-400 text-xs font-medium bg-white rounded-xl shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
+                ) : (
+                  groupedRecentSales.map((group, groupIndex) => {
+                    let timeString = '-'; 
+                    try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
+                    
+                    return (
+                      <tbody key={group.id} className="shadow-sm rounded-xl bg-white relative text-xs">
+                        {group.items.map((sale, itemIdx) => {
+                          const isFirstRow = itemIdx === 0;
+                          return (
+                            <tr key={sale.id} className="bg-white">
+                              <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                                 {isFirstRow ? (
+                                    <div className="flex flex-col space-y-1">
+                                       <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ที่ {totalTodayOrders - groupIndex}</span>
+                                       <span className="font-medium flex items-center text-[10px]"><CalendarDays size={10} className="mr-1"/> {timeString}</span>
+                                    </div>
+                                 ) : ''}
+                              </td>
+                              <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
+                              <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
+                              <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
+                              <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
+                              <td className={`p-2 text-right text-slate-700 font-bold whitespace-nowrap border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-slate-50">
+                          <td colSpan="4" className="p-2 text-right text-slate-600 font-bold text-[10px] border-l border-b border-slate-100 rounded-bl-xl">ยอดสุทธิออเดอร์นี้</td>
+                          <td className="p-2 text-center text-slate-700 font-bold border-b border-slate-100">{group.totalItems}</td>
+                          <td className="p-2 text-right text-blue-600 font-bold whitespace-nowrap border-r border-b border-slate-100 rounded-br-xl">฿{formatMoney(group.totalOrderValue)}</td>
+                        </tr>
+                      </tbody>
+                    );
+                  })
+                )}
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
