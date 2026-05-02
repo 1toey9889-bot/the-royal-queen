@@ -267,6 +267,10 @@ export default function App() {
   const AttendanceView = () => {
     const [isVerifying, setIsVerifying] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
+    
+    // 🚀 เพิ่ม State สำหรับ Popup แจ้งเตือนเมื่อบันทึกเวลาสำเร็จ
+    const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+    
     const [activeTab, setLocalActiveTab] = useState('checkin'); 
     const videoRef = useRef(null);
 
@@ -344,9 +348,11 @@ export default function App() {
           timestamp: new Date().toISOString()
         });
         
-        // แจ้งเตือนข้อความว่า "บันทึกเวลาสำเร็จ" ตามความต้องการ
-        setMessage({ text: 'บันทึกเวลาสำเร็จ', type: 'success' });
-        setTimeout(() => setMessage({text:'', type:''}), 5000);
+        // 🚀 แสดง Popup Modal "บันทึกเวลาสำเร็จ" เมื่อทำงานเสร็จสมบูรณ์
+        setMessage({ text: '', type: '' });
+        setShowSuccessPopup(true);
+        setTimeout(() => setShowSuccessPopup(false), 4000);
+        
       } catch (err) {
         console.error(err);
         setMessage({ text: err.message || 'เกิดข้อผิดพลาดในการตรวจสอบใบหน้า', type: 'error' });
@@ -363,6 +369,23 @@ export default function App() {
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-4xl mx-auto">
+        
+        {/* 🚀 Modal แจ้งเตือนบันทึกเวลาสำเร็จ */}
+        {showSuccessPopup && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 w-full h-full">
+            <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full flex flex-col items-center animate-in zoom-in-95 duration-300 border border-emerald-100">
+               <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-teal-500 text-white rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/40">
+                  <CheckCircle2 size={56} />
+               </div>
+               <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">บันทึกเวลาสำเร็จ</h3>
+               <p className="text-slate-500 font-medium mb-8">ระบบได้บันทึกข้อมูลของคุณเรียบร้อยแล้ว</p>
+               <button onClick={() => setShowSuccessPopup(false)} className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors">
+                  ตกลง
+               </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
           <div className="flex items-center space-x-3">
             <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
@@ -402,7 +425,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* ขยายความกว้างและเพิ่มปุ่มเริ่มไลฟ์สด */}
               <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
                 <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
                   <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
