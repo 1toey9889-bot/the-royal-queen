@@ -1,7 +1,7 @@
 // ==========================================
 // 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
 // ==========================================
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
@@ -281,14 +281,7 @@ export default function App() {
       return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
     }, [attendanceLogs, filterDate, viewAll, loggedInUser]);
 
-    useEffect(() => {
-      if (activeTab === 'checkin' && loggedInUser?.employeeData) {
-        startCamera();
-      }
-      return () => stopCamera();
-    }, [activeTab, loggedInUser]);
-
-    const startCamera = async () => {
+    const startCamera = useCallback(async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         if (videoRef.current) {
@@ -297,13 +290,22 @@ export default function App() {
       } catch (err) {
         setMessage({ text: 'ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตให้เบราว์เซอร์เข้าถึงกล้อง', type: 'error' });
       }
-    };
+    }, []);
 
-    const stopCamera = () => {
+    const stopCamera = useCallback(() => {
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
-    };
+    }, []);
+
+    useEffect(() => {
+      if (activeTab === 'checkin' && loggedInUser?.employeeData) {
+        startCamera();
+      } else {
+        stopCamera();
+      }
+      return () => stopCamera();
+    }, [activeTab, loggedInUser, startCamera, stopCamera]);
 
     const handleVerifyAndRecord = async (type) => {
       if (!loggedInUser?.employeeData) {
@@ -322,53 +324,35 @@ export default function App() {
         const video = videoRef.current;
         const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
         
-        if (!detections) {
-          setMessage({ text: 'ไม่พบใบหน้า กรุณามองตรงไปที่กล้องและให้อยู่ในแสงที่สว่างเพียงพอ', type: 'error' });
-          setIsVerifying(false);
-          return;
-        }
+        if (!detections) throw new Error('ไม่พบใบหน้า กรุณามองตรงไปที่กล้องและให้อยู่ในแสงที่สว่างเพียงพอ');
 
         const refImage = await faceapi.fetchImage(loggedInUser.employeeData.imageUrl);
         const refDetections = await faceapi.detectSingleFace(refImage, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
 
-        if (!refDetections) {
-          setMessage({ text: 'รูปภาพอ้างอิงในฐานข้อมูลไม่ชัดเจน กรุณาให้ Admin เปลี่ยนรูปใหม่', type: 'error' });
-          setIsVerifying(false);
-          return;
-        }
+        if (!refDetections) throw new Error('รูปภาพอ้างอิงในฐานข้อมูลไม่ชัดเจน กรุณาให้ Admin เปลี่ยนรูปใหม่');
 
         const distance = faceapi.euclideanDistance(detections.descriptor, refDetections.descriptor);
         const threshold = 0.55; 
 
-        if (distance < threshold) {
-          await addDoc(collection(db, "attendance"), {
-            userId: loggedInUser.id,
-            employeeId: loggedInUser.employeeData.id,
-            employeeName: loggedInUser.employeeData.fullName,
-            type: type, 
-            timestamp: new Date().toISOString()
-          });
-          setMessage({ text: `บันทึก${type === 'checkin' ? 'เข้า' : 'ออก'}งานสำเร็จ! (ความแม่นยำ: ${((1-distance)*100).toFixed(0)}%)`, type: 'success' });
-          setTimeout(() => setMessage({text:'', type:''}), 5000);
-        } else {
-          setMessage({ text: 'ใบหน้าไม่ตรงกับฐานข้อมูล กรุณาลองอีกครั้ง', type: 'error' });
-        }
+        if (distance >= threshold) throw new Error('ใบหน้าไม่ตรงกับฐานข้อมูล กรุณาลองอีกครั้ง');
+
+        await addDoc(collection(db, "attendance"), {
+          userId: loggedInUser.id,
+          employeeId: loggedInUser.employeeData.id,
+          employeeName: loggedInUser.employeeData.fullName,
+          type: type, 
+          timestamp: new Date().toISOString()
+        });
+        
+        setMessage({ text: `บันทึก${type === 'checkin' ? 'เข้า' : 'ออก'}งานสำเร็จ! (ความแม่นยำ: ${((1-distance)*100).toFixed(0)}%)`, type: 'success' });
+        setTimeout(() => setMessage({text:'', type:''}), 5000);
       } catch (err) {
         console.error(err);
-        setMessage({ text: 'เกิดข้อผิดพลาดในการตรวจสอบใบหน้า: ' + err.message, type: 'error' });
+        setMessage({ text: err.message || 'เกิดข้อผิดพลาดในการตรวจสอบใบหน้า', type: 'error' });
+      } finally {
+        setIsVerifying(false);
       }
-      setIsVerifying(false);
     };
-
-    if (!loggedInUser?.employeeData && loggedInUser.role !== 'admin') {
-      return (
-        <div className="flex flex-col items-center justify-center p-8 bg-white rounded-3xl shadow-sm border border-slate-100 text-center">
-          <UserCircle size={64} className="text-slate-300 mb-4"/>
-          <h2 className="text-xl font-bold text-slate-800">ไม่มีโปรไฟล์พนักงาน</h2>
-          <p className="text-slate-500 mt-2 text-sm">คุณยังไม่มีโปรไฟล์ที่ผูกกับระบบลงเวลา กรุณาติดต่อ Admin เพื่อตั้งค่า</p>
-        </div>
-      );
-    }
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-4xl mx-auto">
@@ -386,39 +370,50 @@ export default function App() {
           </div>
         </div>
 
-        {activeTab === 'checkin' && loggedInUser?.employeeData && (
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
-            <div className="text-center mb-6">
-              <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
-              <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
-            </div>
+        {activeTab === 'checkin' && (
+          loggedInUser?.employeeData ? (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
+                <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
+              </div>
 
-            <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
-              <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
-              {isVerifying && (
-                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-                  <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                  <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
+              <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
+                <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
+                {isVerifying && (
+                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
+                  </div>
+                )}
+              </div>
+
+              {message.text && (
+                <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
+                  {message.text}
                 </div>
               )}
-            </div>
 
-            {message.text && (
-              <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
-                {message.text}
+              <div className="flex w-full max-w-sm gap-4">
+                <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                  <CheckCircle2 size={20} className="mr-2"/> เข้างาน
+                </button>
+                <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                  <LogOut size={20} className="mr-2"/> ออกงาน
+                </button>
               </div>
-            )}
-
-            <div className="flex w-full max-w-sm gap-4">
-              <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                <CheckCircle2 size={20} className="mr-2"/> เข้างาน
-              </button>
-              <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                <LogOut size={20} className="mr-2"/> ออกงาน
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
+              <UserCircle size={64} className="text-slate-300 mb-4"/>
+              <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
+              <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                บัญชีผู้ใช้นี้ยังไม่ได้ผูกกับโปรไฟล์พนักงานสำหรับการสแกนใบหน้า<br/>
+                กรุณาไปที่เมนู <strong className="text-indigo-600">"การจัดการพนักงาน"</strong> เพื่อเพิ่มข้อมูลและผูกบัญชีให้เรียบร้อย
+              </p>
+            </div>
+          )
         )}
 
         {activeTab === 'history' && (
