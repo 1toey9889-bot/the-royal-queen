@@ -344,7 +344,8 @@ export default function App() {
           timestamp: new Date().toISOString()
         });
         
-        setMessage({ text: `บันทึก${type === 'checkin' ? 'เข้า' : 'ออก'}งานสำเร็จ! (ความแม่นยำ: ${((1-distance)*100).toFixed(0)}%)`, type: 'success' });
+        // แจ้งเตือนข้อความว่า "บันทึกเวลาสำเร็จ" ตามความต้องการ
+        setMessage({ text: 'บันทึกเวลาสำเร็จ', type: 'success' });
         setTimeout(() => setMessage({text:'', type:''}), 5000);
       } catch (err) {
         console.error(err);
@@ -352,6 +353,12 @@ export default function App() {
       } finally {
         setIsVerifying(false);
       }
+    };
+
+    const getStatusBadge = (type) => {
+      if (type === 'checkin') return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100">เข้างาน</span>;
+      if (type === 'start_live') return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100">เริ่มไลฟ์สด</span>;
+      return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100">ออกงาน</span>;
     };
 
     return (
@@ -395,12 +402,16 @@ export default function App() {
                 </div>
               )}
 
-              <div className="flex w-full max-w-sm gap-4">
+              {/* ขยายความกว้างและเพิ่มปุ่มเริ่มไลฟ์สด */}
+              <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
                 <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <CheckCircle2 size={20} className="mr-2"/> เข้างาน
+                  <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
+                </button>
+                <button onClick={() => handleVerifyAndRecord('start_live')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
+                  <Camera size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
                 </button>
                 <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <LogOut size={20} className="mr-2"/> ออกงาน
+                  <LogOut size={20} className="mr-1.5"/> <span className="text-sm">ออกงาน</span>
                 </button>
               </div>
             </div>
@@ -450,7 +461,6 @@ export default function App() {
                     filteredLogs.map(log => {
                       const logDate = new Date(log.timestamp);
                       const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
-                      const isCheckin = log.type === 'checkin';
                       return (
                         <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                           <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
@@ -465,9 +475,7 @@ export default function App() {
                             </div>
                           </td>
                           <td className="p-4 text-center">
-                            <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold border ${isCheckin ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                              {isCheckin ? 'เข้างาน' : 'ออกงาน'}
-                            </span>
+                            {getStatusBadge(log.type)}
                           </td>
                         </tr>
                       )
