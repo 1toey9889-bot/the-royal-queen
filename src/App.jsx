@@ -5,7 +5,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, increment, setDoc, runTransaction, query, orderBy 
+  deleteDoc, doc, increment, setDoc, query, orderBy,
+  writeBatch, getDoc 
 } from "firebase/firestore";
 import { 
   LayoutDashboard, Package, ShoppingCart, Plus, Edit2, Trash2, 
@@ -895,50 +896,56 @@ export default function App() {
       try {
         const checkoutTime = new Date().toISOString();
 
-        await runTransaction(db, async (transaction) => {
-          const productDocs = {};
-          for (const item of cart) {
-            const productRef = doc(db, "products", item.productId);
-            const productDoc = await transaction.get(productRef);
-            if (!productDoc.exists()) throw new Error(`ไม่พบข้อมูลสินค้า: ${item.name}`);
-            productDocs[item.productId] = { ref: productRef, data: productDoc.data() };
-          }
+        // 1. โหลดข้อมูลสต๊อกล่าสุดเพื่อป้องกันการขายเกิน
+        const productDocs = {};
+        for (const item of cart) {
+          const productRef = doc(db, "products", item.productId);
+          const pSnap = await getDoc(productRef);
+          if (!pSnap.exists()) throw new Error(`ไม่พบข้อมูลสินค้า: ${item.name}`);
+          productDocs[item.productId] = { ref: productRef, data: pSnap.data() };
+        }
 
-          for (const item of cart) {
-            const currentStock = Number(productDocs[item.productId].data.stock) || 0;
-            if (currentStock < item.quantity) throw new Error(`สต๊อกสินค้า "${item.name}" ไม่เพียงพอ`);
-          }
+        // 2. เช็คสต๊อกว่าพอไหม
+        for (const item of cart) {
+          const currentStock = Number(productDocs[item.productId].data.stock) || 0;
+          if (currentStock < item.quantity) throw new Error(`สต๊อกสินค้า "${item.name}" ไม่เพียงพอ (เหลือ ${currentStock})`);
+        }
 
-          const todayStr = getLocalISODate();
-          const summaryRef = doc(db, "daily_summary", todayStr);
-          let totalOrderRevenue = 0; let totalOrderProfit = 0; 
-          
-          const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
-          let remainingTotal = finalTotal;
+        const batch = writeBatch(db);
+        const todayStr = getLocalISODate();
+        const summaryRef = doc(db, "daily_summary", todayStr);
+        let totalOrderRevenue = 0; let totalOrderProfit = 0; 
+        
+        const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
+        let remainingTotal = finalTotal;
 
-          for (let i = 0; i < cart.length; i++) {
-             const item = cart[i]; const pData = productDocs[item.productId].data; const pRef = productDocs[item.productId].ref;
-             const itemCost = Number(pData.cost) || 0;
-             const isLastItem = i === cart.length - 1;
-             const baseItemTotal = Number(item.price) * Number(item.quantity);
-             let rowTotal = 0;
-             if (isLastItem) { rowTotal = remainingTotal; } 
-             else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
-             const unitPrice = Number(item.quantity) > 0 ? (rowTotal / Number(item.quantity)) : 0;
-             
-             transaction.update(pRef, { stock: Number(pData.stock) - Number(item.quantity), updatedAt: new Date().toISOString() });
+        for (let i = 0; i < cart.length; i++) {
+           const item = cart[i]; const pData = productDocs[item.productId].data; const pRef = productDocs[item.productId].ref;
+           const itemCost = Number(pData.cost) || 0;
+           const isLastItem = i === cart.length - 1;
+           const baseItemTotal = Number(item.price) * Number(item.quantity);
+           let rowTotal = 0;
+           if (isLastItem) { rowTotal = remainingTotal; } 
+           else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
+           const unitPrice = Number(item.quantity) > 0 ? (rowTotal / Number(item.quantity)) : 0;
+           
+           // ใช้ increment เพื่อตัดสต๊อกอย่างแม่นยำและไม่ติด Lock
+           batch.update(pRef, { stock: increment(-Number(item.quantity)), updatedAt: checkoutTime });
 
-             const salesRef = doc(collection(db, "sales"));
-             transaction.set(salesRef, {
-               orderId: orderId || '-', customerName: '-', store: selectedStore, productId: item.productId, quantity: Number(item.quantity), total: rowTotal, unitPrice: unitPrice, unitCost: itemCost, date: checkoutTime, soldBy: loggedInUser?.username || 'unknown'
-             });
+           const salesRef = doc(collection(db, "sales"));
+           batch.set(salesRef, {
+             orderId: orderId || '-', customerName: '-', store: selectedStore, productId: item.productId, quantity: Number(item.quantity), total: rowTotal, unitPrice: unitPrice, unitCost: itemCost, date: checkoutTime, soldBy: loggedInUser?.username || 'unknown'
+           });
 
-             totalOrderRevenue += rowTotal; totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
-          }
+           totalOrderRevenue += rowTotal; totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
+        }
 
-          transaction.set(summaryRef, { totalRevenue: increment(totalOrderRevenue), totalProfit: increment(totalOrderProfit), totalOrders: increment(1), date: todayStr }, { merge: true });
-          transaction.set(doc(collection(db, "audit_logs")), { action: "CREATE_ORDER", user: loggedInUser?.username || 'unknown', details: `สร้างออเดอร์ ${orderId||'ไม่มี ID'} ยอด ${totalOrderRevenue} (รวม ${cart.length} รายการย่อย)`, timestamp: new Date().toISOString() });
-        });
+        batch.set(summaryRef, { totalRevenue: increment(totalOrderRevenue), totalProfit: increment(totalOrderProfit), totalOrders: increment(1), date: todayStr }, { merge: true });
+        const auditRef = doc(collection(db, "audit_logs"));
+        batch.set(auditRef, { action: "CREATE_ORDER", user: loggedInUser?.username || 'unknown', details: `สร้างออเดอร์ ${orderId||'ไม่มี ID'} ยอด ${totalOrderRevenue} (รวม ${cart.length} รายการย่อย)`, timestamp: checkoutTime });
+
+        // 3. ยืนยันข้อมูลทั้งหมดลง Database (รับรองไม่ค้าง)
+        await batch.commit();
         
         setCart([]); setOrderId(''); setCustomGrandTotal(''); setShowConfirmModal(false);
         setIsError(false); setMessage('บันทึกออเดอร์สำเร็จ!'); setTimeout(() => setMessage(''), 3000);
@@ -1316,12 +1323,12 @@ export default function App() {
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์ย่อยนี้?\n\n*สต๊อกสินค้าจะถูกคืนกลับอัตโนมัติ*')) return;
       setIsProcessing(true);
       try {
-        await runTransaction(db, async (transaction) => {
-          const productRef = doc(db, "products", sale.productId);
-          const pDoc = await transaction.get(productRef);
-          if (pDoc.exists()) transaction.update(productRef, { stock: (Number(pDoc.data().stock) || 0) + Number(sale.quantity) });
-          transaction.delete(doc(db, "sales", sale.id));
-        });
+        const productRef = doc(db, "products", sale.productId);
+        const batch = writeBatch(db);
+        // คืนสต๊อกแบบไม่ต้องล็อคเพื่อป้องกันการค้าง
+        batch.update(productRef, { stock: increment(Number(sale.quantity)) });
+        batch.delete(doc(db, "sales", sale.id));
+        await batch.commit();
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1330,19 +1337,16 @@ export default function App() {
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้ทั้งหมด?\n\n*สต๊อกสินค้าทั้งหมดในออเดอร์จะถูกคืนกลับอัตโนมัติ*')) return;
       setIsProcessing(true);
       try {
-        await runTransaction(db, async (transaction) => {
-          const returnQuantities = {};
-          group.items.forEach(sale => { returnQuantities[sale.productId] = (returnQuantities[sale.productId] || 0) + Number(sale.quantity); });
-          const productReadDocs = {};
-          for (const productId of Object.keys(returnQuantities)) {
-            const pRef = doc(db, "products", productId); const pDoc = await transaction.get(pRef);
-            if (pDoc.exists()) { productReadDocs[productId] = { ref: pRef, currentStock: Number(pDoc.data().stock) || 0 }; }
-          }
-          for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
-            if (productReadDocs[productId]) { const pData = productReadDocs[productId]; transaction.update(pData.ref, { stock: pData.currentStock + qtyToReturn }); }
-          }
-          for (const sale of group.items) { transaction.delete(doc(db, "sales", sale.id)); }
-        });
+        const returnQuantities = {};
+        group.items.forEach(sale => { returnQuantities[sale.productId] = (returnQuantities[sale.productId] || 0) + Number(sale.quantity); });
+        
+        const batch = writeBatch(db);
+        for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
+           batch.update(doc(db, "products", productId), { stock: increment(qtyToReturn) });
+        }
+        for (const sale of group.items) { batch.delete(doc(db, "sales", sale.id)); }
+        
+        await batch.commit();
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
     };
@@ -1354,21 +1358,27 @@ export default function App() {
         const oldProductId = sale.productId; const newProductId = editForm.productId;
         const newPData = getProduct(newProductId); if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
 
-        await runTransaction(db, async (transaction) => {
-          const oldPRef = doc(db, "products", oldProductId); const newPRef = doc(db, "products", newProductId);
-          if (oldProductId !== newProductId) {
-            const oldP = await transaction.get(oldPRef); if(oldP.exists()) transaction.update(oldPRef, { stock: (Number(oldP.data().stock)||0) + oldQty });
-            const newP = await transaction.get(newPRef); if(newP.exists()) transaction.update(newPRef, { stock: (Number(newP.data().stock)||0) - newQty });
-          } else if (oldQty !== newQty) {
-            const diff = newQty - oldQty;
-            const p = await transaction.get(oldPRef); if(p.exists()) transaction.update(oldPRef, { stock: (Number(p.data().stock)||0) - diff });
-          }
-          let newDateIso = sale.date; try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
-          
-          transaction.update(doc(db, "sales", sale.id), {
-            productId: newProductId, quantity: newQty, total: Number(editForm.customPrice) * newQty, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
-          });
+        const oldPRef = doc(db, "products", oldProductId);
+        const newPRef = doc(db, "products", newProductId);
+
+        const batch = writeBatch(db);
+
+        // คำนวณสต๊อกแบบ increment ป้องกันปัญหาล็อค
+        if (oldProductId !== newProductId) {
+           batch.update(oldPRef, { stock: increment(oldQty) });
+           batch.update(newPRef, { stock: increment(-newQty) });
+        } else if (oldQty !== newQty) {
+           const diff = newQty - oldQty;
+           batch.update(oldPRef, { stock: increment(-diff) });
+        }
+
+        let newDateIso = sale.date; try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
+        
+        batch.update(doc(db, "sales", sale.id), {
+          productId: newProductId, quantity: newQty, total: Number(editForm.customPrice) * newQty, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
         });
+        
+        await batch.commit();
         setIsEditing(null);
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
@@ -1380,14 +1390,15 @@ export default function App() {
         const newFinalTotal = Number(groupEditTotal); const oldTotal = group.totalOrderValue;
         if (newFinalTotal === oldTotal) { setIsEditingGroup(null); setIsProcessing(false); return; }
         const ratio = oldTotal > 0 ? (newFinalTotal / oldTotal) : 1; let remainingTotal = newFinalTotal;
-        await runTransaction(db, async (transaction) => {
-          for (let i = 0; i < group.items.length; i++) {
-            const sale = group.items[i]; const isLastItem = i === group.items.length - 1; const baseItemTotal = Number(sale.total);
-            let rowTotal = 0; if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
-            const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
-            transaction.update(doc(db, "sales", sale.id), { total: rowTotal, unitPrice: unitPrice });
-          }
-        });
+
+        const batch = writeBatch(db);
+        for (let i = 0; i < group.items.length; i++) {
+          const sale = group.items[i]; const isLastItem = i === group.items.length - 1; const baseItemTotal = Number(sale.total);
+          let rowTotal = 0; if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
+          const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
+          batch.update(doc(db, "sales", sale.id), { total: rowTotal, unitPrice: unitPrice });
+        }
+        await batch.commit();
         setIsEditingGroup(null);
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
@@ -1724,11 +1735,17 @@ export default function App() {
       setIsProcessing(true);
       try {
         const productRef = doc(db, "products", id); const auditRef = doc(collection(db, "audit_logs")); const newStockValue = Number(newStock) || 0;
-        await runTransaction(db, async (transaction) => {
-           const pDoc = await transaction.get(productRef); const oldStock = pDoc.exists() ? (Number(pDoc.data().stock)||0) : 0; const pName = pDoc.exists() ? pDoc.data().name : 'ไม่ทราบชื่อ';
-           transaction.update(productRef, { stock: newStockValue });
-           transaction.set(auditRef, { action: "UPDATE_STOCK", user: loggedInUser?.username || 'unknown', details: `ปรับสต๊อก ${pName} จาก ${oldStock} เป็น ${newStockValue}`, timestamp: new Date().toISOString() });
-        });
+        
+        // ใช้ getDoc + writeBatch ทำงานไวกว่าและไม่ค้าง
+        const pSnap = await getDoc(productRef);
+        const oldStock = pSnap.exists() ? (Number(pSnap.data().stock)||0) : 0; 
+        const pName = pSnap.exists() ? pSnap.data().name : 'ไม่ทราบชื่อ';
+
+        const batch = writeBatch(db);
+        batch.update(productRef, { stock: newStockValue });
+        batch.set(auditRef, { action: "UPDATE_STOCK", user: loggedInUser?.username || 'unknown', details: `ปรับสต๊อก ${pName} จาก ${oldStock} เป็น ${newStockValue}`, timestamp: new Date().toISOString() });
+        await batch.commit();
+
         setEditingStockId(null);
       } catch (error) { alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message); }
       setIsProcessing(false);
