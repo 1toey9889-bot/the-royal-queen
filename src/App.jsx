@@ -1303,7 +1303,21 @@ export default function App() {
   };
 
   const SalesHistoryView = () => {
-    const [filterDate, setFilterDate] = useState(getLocalISODate());
+    // ---------------------------------------------
+    // ⭐ ส่วนที่เพิ่ม/ปรับปรุง State ของตัวกรอง
+    // ---------------------------------------------
+    const [timeframe, setTimeframe] = useState('daily'); 
+    const currentDateStr = getLocalISODate();
+    const [filterDate, setFilterDate] = useState(currentDateStr);
+    const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7));
+    const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
+    const [filterStore, setFilterStore] = useState('all');
+    const [filterProductId, setFilterProductId] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    const currentYearNum = new Date().getFullYear(); 
+    const yearOptions = Array.from({length: 8}, (_, i) => currentYearNum - 5 + i);
+
     const [isEditing, setIsEditing] = useState(null);
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
     
@@ -1316,7 +1330,32 @@ export default function App() {
       try { const d = new Date(isoString); if (isNaN(d.getTime())) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); } catch (e) { return ''; }
     };
 
-    const filteredSalesFlat = sales.filter(s => getLocalISODate(s.date) === filterDate);
+    // ---------------------------------------------
+    // ⭐ ระบบตัวกรองใหม่ทั้งหมด
+    // ---------------------------------------------
+    const filteredSalesFlat = useMemo(() => {
+      return sales.filter(s => {
+        const saleDateLocal = getLocalISODate(s.date);
+        const saleMonthLocal = saleDateLocal.substring(0, 7);
+        const saleYearLocal = saleDateLocal.substring(0, 4);
+
+        let isTimeMatch = false;
+        if (timeframe === 'daily') isTimeMatch = (saleDateLocal === filterDate);
+        else if (timeframe === 'monthly') isTimeMatch = (saleMonthLocal === filterMonth);
+        else if (timeframe === 'yearly') isTimeMatch = (saleYearLocal === filterYear);
+        else if (timeframe === 'all') isTimeMatch = true;
+
+        const isStoreMatch = filterStore === 'all' || s.store === filterStore;
+        const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
+        
+        const searchMatch = !searchTerm || 
+           (s.orderId && s.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+           (getProduct(s.productId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+        return isTimeMatch && isStoreMatch && isProductMatch && searchMatch;
+      });
+    }, [sales, timeframe, filterDate, filterMonth, filterYear, filterStore, filterProductId, searchTerm, productMap]);
+
     const groupedHistorySales = groupSalesByTransaction(filteredSalesFlat);
 
     const handleDelete = async (sale) => {
@@ -1325,7 +1364,6 @@ export default function App() {
       try {
         const productRef = doc(db, "products", sale.productId);
         const batch = writeBatch(db);
-        // คืนสต๊อกแบบไม่ต้องล็อคเพื่อป้องกันการค้าง
         batch.update(productRef, { stock: increment(Number(sale.quantity)) });
         batch.delete(doc(db, "sales", sale.id));
         await batch.commit();
@@ -1406,35 +1444,74 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
-          <div className="flex items-center space-x-3">
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center space-y-4 xl:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
+          <div className="flex items-center space-x-3 shrink-0">
             <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600">
               <History size={20}/>
             </div>
             <div>
               <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
-              <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">สามารถแก้ไขข้อมูล หรือลบออเดอร์ย่อยที่คีย์ผิดได้</p>
+              <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">ค้นหา กรองข้อมูล หรือแก้ไขออเดอร์</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 w-full md:w-auto justify-between md:justify-start">
-             <span className="text-xs text-slate-500 font-bold">ดูของวันที่</span>
-             <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-600 font-bold" />
+          
+          {/* --------------------------------------------- */}
+          {/* ⭐ แถบเครื่องมือ Filter และค้นหา */}
+          {/* --------------------------------------------- */}
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end mt-3 md:mt-0">
+             
+             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+               <span className="text-xs text-slate-500 font-bold">ดูแบบ</span>
+               <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
+                 <option value="daily">รายวัน</option>
+                 <option value="monthly">รายเดือน</option>
+                 <option value="yearly">รายปี</option>
+                 <option value="all">ทั้งหมด</option>
+               </select>
+             </div>
+
+             {timeframe !== 'all' && (
+               <div className="flex items-center space-x-2 bg-blue-50/80 px-3 py-2 rounded-xl border border-blue-100 shadow-inner">
+                 {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
+                 {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
+                 {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
+               </div>
+             )}
+
+             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+               <span className="text-xs text-slate-500 font-bold">ร้านค้า</span>
+               <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
+                 <option value="all">ทุกร้านค้า</option>
+                 {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+               </select>
+             </div>
+
+             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+               <span className="text-xs text-slate-500 font-bold">สินค้า</span>
+               <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none max-w-[120px] md:max-w-[150px] font-black text-blue-700">
+                 <option value="all">ดูทั้งหมด</option>
+                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+               </select>
+             </div>
+
+             <div className="relative flex-1 sm:max-w-xs min-w-[150px]">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+               <input type="text" placeholder="ค้นหาออเดอร์, สินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs md:text-sm focus:border-blue-500 outline-none transition-all" />
+             </div>
           </div>
         </div>
         
-        {/* เริ่มการแสดงผลแบบ Card สำหรับประวัติการขาย */}
         <div className="space-y-5">
           {groupedHistorySales.length === 0 ? (
             <div className="text-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
               <Info size={40} className="text-slate-300 mb-3"/>
-              <p className="text-slate-500 font-medium text-sm">ไม่มีรายการขายในวันที่คุณเลือก</p>
+              <p className="text-slate-500 font-medium text-sm">ไม่มีรายการขายในเงื่อนไขที่คุณเลือก</p>
             </div>
           ) : (
             groupedHistorySales.map((group, groupIndex) => {
               let timeString = '-'; 
               try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
               
-              // ตรวจสอบร้านค้าหลักของกลุ่ม
               const mainStore = group.store || group.items[0]?.store || '-';
               let gradientHeaderClass = "from-slate-50 to-white border-slate-200";
               let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
@@ -1465,7 +1542,6 @@ export default function App() {
                       <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
                         <Store size={12} className="inline mr-1"/> {mainStore}
                       </span>
-                      {/* ถ้ามีผู้ทำรายการให้แสดง */}
                       <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
                         <User size={12} className="mr-1"/> {group.soldBy || group.items[0]?.soldBy || '-'}
                       </span>
@@ -1501,7 +1577,7 @@ export default function App() {
                     <table className="w-full text-left min-w-[600px]">
                       <thead>
                         <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
-                          <th className="px-4 py-2 font-bold w-[120px]">รหัสออเดอร์</th>
+                          <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์ / เวลา</th>
                           <th className="px-4 py-2 font-bold">สินค้า</th>
                           <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
                           <th className="px-4 py-2 font-bold text-right w-[100px]">ราคา/ชิ้น</th>
@@ -1513,12 +1589,21 @@ export default function App() {
                         {group.items.map((sale) => {
                           const isCurrentRowEditing = isEditing === sale.id;
                           return (
-                            <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                            <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors align-top">
                               <td className="px-4 py-2 font-bold">
+                                {/* ⭐ เพิ่ม Input วันเวลาในการแก้ไขออเดอร์ย่อย */}
                                 {isCurrentRowEditing ? (
-                                  <input type="text" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/>
+                                  <div className="flex flex-col space-y-1.5">
+                                    <input type="text" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner" placeholder="รหัสออเดอร์" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/>
+                                    <input type="datetime-local" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner text-[10px] md:text-xs text-blue-700" title="แก้ไขวันเวลาออเดอร์" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/>
+                                  </div>
                                 ) : (
-                                  sale.orderId || '-'
+                                  <div className="flex flex-col">
+                                    <span>{sale.orderId || '-'}</span>
+                                    {timeframe !== 'daily' && (
+                                       <span className="text-[10px] text-slate-400 font-medium mt-0.5">{new Date(sale.date).toLocaleDateString('th-TH')}</span>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                               <td className="px-4 py-2 font-medium">
