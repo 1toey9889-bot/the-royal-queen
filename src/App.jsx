@@ -14,7 +14,8 @@ import {
   LogOut, Lock, User, Download, History, BarChart3, ShieldCheck, 
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
   Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon, Menu,
-  Clock, Briefcase, Fingerprint, UserPlus, Info
+  Clock, Briefcase, Fingerprint, UserPlus, Info, List, LayoutGrid, Calendar as CalendarIcon, 
+  ChevronLeft, ChevronRight, Video
 } from 'lucide-react';
 
 // 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
@@ -69,10 +70,11 @@ const defaultPermissions = {
   products: false, productsEdit: false, productsExport: false,
   stock: false, stockEdit: false, stockExport: false,
   history: false, historyEdit: false,
-  attendance: false 
+  attendance: false, attendanceEdit: false 
 };
 
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE'];
+const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
 // ==========================================
 // 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
@@ -269,16 +271,19 @@ export default function App() {
     const [activeTab, setLocalActiveTab] = useState('checkin'); 
     const videoRef = useRef(null);
 
+    // Filter states
+    const [historyViewMode, setHistoryViewMode] = useState('list'); // 'list' | 'table' | 'calendar'
     const [filterDate, setFilterDate] = useState(getLocalISODate());
+    const [filterFromDate, setFilterFromDate] = useState(getLocalISODate());
+    const [filterToDate, setFilterToDate] = useState(getLocalISODate());
+    const [calendarMonth, setCalendarMonth] = useState(getLocalISODate().substring(0, 7));
     const [viewAll, setViewAll] = useState(false);
+    const [filterEmployeeId, setFilterEmployeeId] = useState('all');
 
-    const filteredLogs = useMemo(() => {
-      let logs = attendanceLogs;
-      if (!viewAll || loggedInUser.role !== 'admin') {
-        logs = logs.filter(log => log.userId === loggedInUser.id);
-      }
-      return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
-    }, [attendanceLogs, filterDate, viewAll, loggedInUser]);
+    // Add/Edit Manual Modal States
+    const [showManualModal, setShowManualModal] = useState(false);
+    const [isEditingMode, setIsEditingMode] = useState(false);
+    const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
 
     const startCamera = useCallback(async () => {
       try {
@@ -353,14 +358,202 @@ export default function App() {
       }
     };
 
+    // ------------- Data Processing for Views -------------
+    const filteredLogsForList = useMemo(() => {
+      let logs = attendanceLogs;
+      if (!viewAll || loggedInUser.role !== 'admin') {
+        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+      } else if (filterEmployeeId !== 'all') {
+        logs = logs.filter(log => log.employeeId === filterEmployeeId);
+      }
+      return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
+    }, [attendanceLogs, filterDate, viewAll, loggedInUser, filterEmployeeId]);
+
+    const tableData = useMemo(() => {
+      let logs = attendanceLogs;
+      if (!viewAll || loggedInUser.role !== 'admin') {
+        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+      } else if (filterEmployeeId !== 'all') {
+        logs = logs.filter(log => log.employeeId === filterEmployeeId);
+      }
+      
+      const filtered = logs.filter(log => {
+        const d = getLocalISODate(log.timestamp);
+        return d >= filterFromDate && d <= filterToDate;
+      });
+
+      // Group by date
+      const grouped = {};
+      filtered.forEach(log => {
+        const d = getLocalISODate(log.timestamp);
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push(log);
+      });
+      
+      // Sort within groups
+      Object.keys(grouped).forEach(date => {
+        grouped[date].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+      });
+
+      // Sort dates descending
+      return Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a)).map(date => ({
+        date,
+        logs: grouped[date].slice(0, 8) // Max 8 per day
+      }));
+    }, [attendanceLogs, filterFromDate, filterToDate, viewAll, loggedInUser, filterEmployeeId]);
+
+    const calendarLogs = useMemo(() => {
+      let logs = attendanceLogs;
+      if (!viewAll || loggedInUser.role !== 'admin') {
+        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+      } else if (filterEmployeeId !== 'all') {
+        logs = logs.filter(log => log.employeeId === filterEmployeeId);
+      }
+      return logs.filter(log => getLocalISODate(log.timestamp).startsWith(calendarMonth));
+    }, [attendanceLogs, calendarMonth, viewAll, loggedInUser, filterEmployeeId]);
+
+    // ------------- Helpers -------------
     const getStatusBadge = (type) => {
-      if (type === 'checkin') return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100">เข้างาน</span>;
-      if (type === 'start_live') return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100">เริ่มไลฟ์สด</span>;
-      return <span className="inline-block px-3 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100">ออกงาน</span>;
+      if (type === 'checkin') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100 whitespace-nowrap"><CheckCircle2 size={12} className="mr-1"/>เข้างาน</span>;
+      if (type === 'start_live') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap"><Video size={12} className="mr-1"/>เริ่มไลฟ์สด</span>;
+      return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100 whitespace-nowrap"><LogOut size={12} className="mr-1"/>ออกงาน</span>;
+    };
+
+    const getTypeLabel = (type) => {
+      if (type === 'checkin') return 'เข้างาน';
+      if (type === 'start_live') return 'เริ่มไลฟ์สด';
+      return 'ออกงาน';
+    };
+
+    // ------------- Manual Add/Edit Handlers -------------
+    const openAddManualModal = () => {
+      const empId = loggedInUser.role === 'admin' ? employees[0]?.id : (loggedInUser.employeeData?.id || '');
+      const now = new Date();
+      setManualForm({ 
+        id: '', 
+        employeeId: empId, 
+        date: getLocalISODate(), 
+        time: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }), 
+        type: 'checkin' 
+      });
+      setIsEditingMode(false);
+      setShowManualModal(true);
+    };
+
+    const openEditManualModal = (log) => {
+      const d = new Date(log.timestamp);
+      setManualForm({
+        id: log.id,
+        employeeId: log.employeeId,
+        date: getLocalISODate(log.timestamp),
+        time: d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        type: log.type
+      });
+      setIsEditingMode(true);
+      setShowManualModal(true);
+    };
+
+    const handleSaveManual = async (e) => {
+      e.preventDefault();
+      try {
+        const emp = employees.find(e => e.id === manualForm.employeeId);
+        if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
+        
+        // Combine date and time
+        const timestamp = new Date(`${manualForm.date}T${manualForm.time}:00`).toISOString();
+
+        if (isEditingMode && manualForm.id) {
+          await updateDoc(doc(db, "attendance", manualForm.id), {
+            employeeId: emp.id,
+            employeeName: emp.fullName,
+            type: manualForm.type,
+            timestamp: timestamp
+          });
+          await addDoc(collection(db, "audit_logs"), { action: "EDIT_ATTENDANCE", user: loggedInUser.username, details: `แก้ไขเวลา ${emp.fullName} เป็น ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
+        } else {
+          await addDoc(collection(db, "attendance"), {
+            userId: emp.userId || '',
+            employeeId: emp.id,
+            employeeName: emp.fullName,
+            type: manualForm.type,
+            timestamp: timestamp
+          });
+          await addDoc(collection(db, "audit_logs"), { action: "ADD_ATTENDANCE", user: loggedInUser.username, details: `เพิ่มเวลา ${emp.fullName} ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
+        }
+        setShowManualModal(false);
+      } catch (err) {
+        alert("เกิดข้อผิดพลาด: " + err.message);
+      }
+    };
+
+    const handleDeleteManual = async (id) => {
+      if(!window.confirm("ยืนยันการลบประวัติเวลานี้?")) return;
+      try {
+        await deleteDoc(doc(db, "attendance", id));
+      } catch(e) { alert("Error: " + e.message); }
+    };
+
+    // ------------- Calendar Rendering -------------
+    const renderCalendar = () => {
+      const year = parseInt(calendarMonth.split('-')[0]);
+      const month = parseInt(calendarMonth.split('-')[1]) - 1;
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      const days = [];
+      for (let i = 0; i < firstDay; i++) days.push(null);
+      for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
+          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+            <button onClick={() => {
+              const d = new Date(year, month - 1, 1);
+              setCalendarMonth(d.toISOString().substring(0,7));
+            }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
+            <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month]} {year + 543}</h3>
+            <button onClick={() => {
+              const d = new Date(year, month + 1, 1);
+              setCalendarMonth(d.toISOString().substring(0,7));
+            }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
+          </div>
+          <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-blue-50">
+            {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
+              <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-blue-800'}`}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 auto-rows-fr">
+            {days.map((date, idx) => {
+              if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] p-2"></div>;
+              
+              const dateStr = getLocalISODate(date.toISOString());
+              const dayLogs = calendarLogs.filter(l => getLocalISODate(l.timestamp) === dateStr).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+              const isToday = dateStr === getLocalISODate();
+              const isSunday = date.getDay() === 0;
+
+              return (
+                <div key={idx} className={`border-b border-r border-slate-100 min-h-[120px] p-1.5 flex flex-col ${isToday ? 'bg-blue-50/30' : ''}`}>
+                  <div className={`text-right text-sm font-bold mb-1 ${isSunday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center ml-auto shadow-sm' : ''}`}>
+                    {date.getDate()}
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
+                    {dayLogs.map((log, lIdx) => (
+                      <div key={lIdx} onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`text-[9px] md:text-[10px] font-bold p-1 rounded-md flex justify-between items-center ${canEditTab('attendance') ? 'cursor-pointer hover:opacity-80' : ''} ${log.type === 'checkin' ? 'bg-emerald-100 text-emerald-800' : log.type === 'start_live' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
+                        <span>{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
+                        <span className="hidden lg:inline">{getTypeLabel(log.type)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
     };
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-4xl mx-auto">
+      <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
           <div className="flex items-center space-x-3">
             <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
@@ -405,7 +598,7 @@ export default function App() {
                   <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
                 </button>
                 <button onClick={() => handleVerifyAndRecord('start_live')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <Camera size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
+                  <Video size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
                 </button>
                 <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
                   <LogOut size={20} className="mr-1.5"/> <span className="text-sm">ออกงาน</span>
@@ -426,61 +619,194 @@ export default function App() {
 
         {activeTab === 'history' && (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50/50 gap-4">
-              <div className="flex items-center space-x-3">
-                <CalendarDays size={20} className="text-slate-400"/>
-                <h3 className="text-base font-bold text-slate-800">ประวัติการลงเวลา</h3>
+            <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-50/50 gap-4">
+              <div className="flex items-center space-x-3 w-full lg:w-auto">
+                <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-full sm:w-auto">
+                  <button onClick={() => setHistoryViewMode('list')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'list' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><List size={16} className="mr-1.5"/> รายวัน</button>
+                  <button onClick={() => setHistoryViewMode('table')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'table' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid size={16} className="mr-1.5"/> ตารางสรุป</button>
+                  <button onClick={() => setHistoryViewMode('calendar')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'calendar' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><CalendarIcon size={16} className="mr-1.5"/> ปฏิทิน</button>
+                </div>
               </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white" />
+
+              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                {/* ---------------- Filters ---------------- */}
+                {historyViewMode === 'list' && (
+                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
+                )}
+                {historyViewMode === 'table' && (
+                  <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-sm flex-1 sm:flex-none">
+                    <input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
+                    <span className="text-slate-400 font-bold text-xs">-</span>
+                    <input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
+                  </div>
+                )}
+                {historyViewMode === 'calendar' && (
+                  <input type="month" value={calendarMonth} onChange={(e) => setCalendarMonth(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
+                )}
+
                 {loggedInUser.role === 'admin' && (
-                  <label className="flex items-center space-x-2 text-sm font-bold text-slate-600 cursor-pointer bg-white px-3 py-2 border border-slate-200 rounded-xl">
-                    <input type="checkbox" checked={viewAll} onChange={(e) => setViewAll(e.target.checked)} className="rounded text-indigo-600 w-4 h-4" />
-                    <span>ดูของทุกคน</span>
-                  </label>
+                  <>
+                    <select value={filterEmployeeId} onChange={(e) => { setFilterEmployeeId(e.target.value); setViewAll(e.target.value === 'all'); }} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm">
+                      <option value="all">ทุกคน</option>
+                      {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                    </select>
+                  </>
+                )}
+
+                {canEditTab('attendance') && (
+                  <button onClick={openAddManualModal} className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-xl transition shadow-sm text-xs md:text-sm font-bold flex-1 sm:flex-none">
+                    <Plus size={16}/><span>เพิ่มเวลา (ลืมลง)</span>
+                  </button>
                 )}
               </div>
             </div>
-            
-            <div className="p-0 overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[500px]">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-[10px] md:text-xs uppercase border-b border-slate-200">
-                    <th className="p-4 font-bold text-center">เวลา</th>
-                    <th className="p-4 font-bold">พนักงาน</th>
-                    <th className="p-4 font-bold text-center">สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody className="text-xs md:text-sm">
-                  {filteredLogs.length === 0 ? (
-                    <tr><td colSpan="3" className="p-8 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในวันที่เลือก</td></tr>
-                  ) : (
-                    filteredLogs.map(log => {
-                      const logDate = new Date(log.timestamp);
-                      const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
-                      return (
-                        <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
-                          <td className="p-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
-                                {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
-                                  <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
-                                ) : <User size={16}/>}
-                              </div>
-                              <span className="font-bold text-slate-800">{log.employeeName}</span>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center">
-                            {getStatusBadge(log.type)}
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
+
+            {/* ------------- Content Areas ------------- */}
+            <div className="p-4 md:p-6 bg-slate-50/30">
+              
+              {/* --- 1. List View --- */}
+              {historyViewMode === 'list' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                  <table className="w-full text-left border-collapse min-w-[500px]">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-[10px] md:text-xs uppercase border-b border-slate-200">
+                        <th className="p-4 font-bold text-center">เวลา</th>
+                        <th className="p-4 font-bold">พนักงาน</th>
+                        <th className="p-4 font-bold text-center">สถานะ</th>
+                        {canEditTab('attendance') && <th className="p-4 font-bold text-right">จัดการ</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs md:text-sm">
+                      {filteredLogsForList.length === 0 ? (
+                        <tr><td colSpan={canEditTab('attendance') ? 4 : 3} className="p-10 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในวันที่เลือก</td></tr>
+                      ) : (
+                        filteredLogsForList.map(log => {
+                          const logDate = new Date(log.timestamp);
+                          const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
+                          return (
+                            <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                              <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
+                              <td className="p-4">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                                    {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
+                                      <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : <User size={16}/>}
+                                  </div>
+                                  <span className="font-bold text-slate-800">{log.employeeName}</span>
+                                </div>
+                              </td>
+                              <td className="p-4 text-center">
+                                {getStatusBadge(log.type)}
+                              </td>
+                              {canEditTab('attendance') && (
+                                <td className="p-4 text-right space-x-1.5">
+                                  <button onClick={() => openEditManualModal(log)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition"><Edit2 size={14}/></button>
+                                  <button onClick={() => handleDeleteManual(log.id)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition"><Trash2 size={14}/></button>
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* --- 2. Table Summary View --- */}
+              {historyViewMode === 'table' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                   <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse min-w-[800px]">
+                       <thead>
+                         <tr className="bg-gradient-to-b from-slate-50 to-white text-slate-600 text-[10px] md:text-xs border-b border-slate-200 shadow-sm">
+                           <th className="px-4 py-3 font-black text-center whitespace-nowrap bg-slate-100/50">วันที่</th>
+                           {Array.from({length: 8}).map((_, i) => (
+                             <th key={i} className="px-2 py-3 font-bold text-center whitespace-nowrap border-l border-slate-100">ครั้งที่ {i+1}</th>
+                           ))}
+                         </tr>
+                       </thead>
+                       <tbody className="text-xs md:text-sm">
+                         {tableData.length === 0 ? (
+                           <tr><td colSpan="9" className="p-10 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในช่างเวลาที่กำหนด</td></tr>
+                         ) : (
+                           tableData.map((row, idx) => {
+                             const thDate = new Date(row.date).toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                             return (
+                               <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                                 <td className="px-4 py-4 font-black text-slate-700 text-center bg-slate-50/30">{thDate}</td>
+                                 {Array.from({length: 8}).map((_, i) => {
+                                   const log = row.logs[i];
+                                   return (
+                                     <td key={i} className="px-2 py-3 text-center border-l border-slate-50 align-top">
+                                       {log ? (
+                                         <div onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`flex flex-col items-center justify-center p-2 rounded-xl shadow-sm border transition ${canEditTab('attendance') ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''} ${log.type === 'checkin' ? 'bg-emerald-50 border-emerald-100' : log.type === 'start_live' ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+                                            <span className="font-black text-slate-800 text-[11px] md:text-xs">{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
+                                            <span className={`text-[9px] md:text-[10px] font-bold mt-1 ${log.type === 'checkin' ? 'text-emerald-600' : log.type === 'start_live' ? 'text-blue-600' : 'text-red-600'}`}>{getTypeLabel(log.type)}</span>
+                                         </div>
+                                       ) : (
+                                         <div className="h-full flex items-center justify-center text-slate-300">-</div>
+                                       )}
+                                     </td>
+                                   )
+                                 })}
+                               </tr>
+                             )
+                           })
+                         )}
+                       </tbody>
+                     </table>
+                   </div>
+                </div>
+              )}
+
+              {/* --- 3. Calendar View --- */}
+              {historyViewMode === 'calendar' && renderCalendar()}
+
             </div>
+          </div>
+        )}
+
+        {/* --- Modal Manual Add/Edit --- */}
+        {showManualModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                  <h3 className="font-bold text-lg flex items-center"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
+                  <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50">
+                   <div>
+                     <label className="block text-xs font-bold text-slate-600 mb-1.5">พนักงาน</label>
+                     <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm" disabled={loggedInUser.role !== 'admin' && !isEditingMode}>
+                        {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                     </select>
+                   </div>
+                   <div className="grid grid-cols-2 gap-3">
+                     <div>
+                       <label className="block text-xs font-bold text-slate-600 mb-1.5">วันที่</label>
+                       <input type="date" required value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm"/>
+                     </div>
+                     <div>
+                       <label className="block text-xs font-bold text-slate-600 mb-1.5">เวลา</label>
+                       <input type="time" required value={manualForm.time} onChange={e => setManualForm({...manualForm, time: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm"/>
+                     </div>
+                   </div>
+                   <div>
+                     <label className="block text-xs font-bold text-slate-600 mb-1.5">ประเภทการลงเวลา</label>
+                     <div className="grid grid-cols-3 gap-2">
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkin'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'checkin' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เข้างาน</button>
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'start_live'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'start_live' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เริ่มไลฟ์สด</button>
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkout'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'checkout' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>ออกงาน</button>
+                     </div>
+                   </div>
+                   <div className="pt-4 flex gap-3 border-t border-slate-200 mt-2">
+                     <button type="button" onClick={() => setShowManualModal(false)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition shadow-sm">ยกเลิก</button>
+                     <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-500/30">บันทึกเวลา</button>
+                   </div>
+                </form>
+             </div>
           </div>
         )}
       </div>
@@ -1349,8 +1675,8 @@ export default function App() {
         const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
         
         const searchMatch = !searchTerm || 
-           (s.orderId && s.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-           (getProduct(s.productId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+            (s.orderId && s.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (getProduct(s.productId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         return isTimeMatch && isStoreMatch && isProductMatch && searchMatch;
       });
@@ -1899,6 +2225,7 @@ export default function App() {
         if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
         if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
         if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false;
+        if (perm === 'attendance' && !newPerms.attendance) newPerms.attendanceEdit = false;
         return { ...prev, permissions: newPerms };
       });
     };
@@ -1948,7 +2275,10 @@ export default function App() {
                       <div className="flex flex-col space-y-2">
                         <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
                         
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label></div>
+                        <div className="bg-white p-2 rounded border border-slate-200">
+                          <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
+                          <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
+                        </div>
 
                         <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
                         <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
@@ -1969,7 +2299,10 @@ export default function App() {
                     {isEditing === u.id ? (editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
                         <div className="flex flex-col space-y-2 mt-1">
                           <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label></div>
+                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm">
+                            <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
+                            <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
+                          </div>
                           <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
                           <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
                           <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
