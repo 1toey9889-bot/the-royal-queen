@@ -15,7 +15,7 @@ import {
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
   Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon, Menu,
   Clock, Briefcase, Fingerprint, UserPlus, Info, List, LayoutGrid, Calendar as CalendarIcon, 
-  ChevronLeft, ChevronRight, Video
+  ChevronLeft, ChevronRight, Video, FileQuestion
 } from 'lucide-react';
 
 // 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
@@ -277,13 +277,15 @@ export default function App() {
     const [filterFromDate, setFilterFromDate] = useState(getLocalISODate());
     const [filterToDate, setFilterToDate] = useState(getLocalISODate());
     const [calendarMonth, setCalendarMonth] = useState(getLocalISODate().substring(0, 7));
-    const [viewAll, setViewAll] = useState(false);
     const [filterEmployeeId, setFilterEmployeeId] = useState('all');
 
     // Add/Edit Manual Modal States
     const [showManualModal, setShowManualModal] = useState(false);
     const [isEditingMode, setIsEditingMode] = useState(false);
     const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
+
+    // ✨ คำนวณสิทธิ์ผู้ใช้: ดูและแก้ไขข้อมูลได้ทั้งหมดถ้าเป็น Admin หรือมีสิทธิ์ attendanceEdit
+    const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
 
     const startCamera = useCallback(async () => {
       try {
@@ -361,17 +363,17 @@ export default function App() {
     // ------------- Data Processing for Views -------------
     const filteredLogsForList = useMemo(() => {
       let logs = attendanceLogs;
-      if (!viewAll || loggedInUser.role !== 'admin') {
+      if (!canManageAllAttendance) {
         logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
       } else if (filterEmployeeId !== 'all') {
         logs = logs.filter(log => log.employeeId === filterEmployeeId);
       }
       return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
-    }, [attendanceLogs, filterDate, viewAll, loggedInUser, filterEmployeeId]);
+    }, [attendanceLogs, filterDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
 
     const tableData = useMemo(() => {
       let logs = attendanceLogs;
-      if (!viewAll || loggedInUser.role !== 'admin') {
+      if (!canManageAllAttendance) {
         logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
       } else if (filterEmployeeId !== 'all') {
         logs = logs.filter(log => log.employeeId === filterEmployeeId);
@@ -400,23 +402,23 @@ export default function App() {
         date,
         logs: grouped[date].slice(0, 8) // Max 8 per day
       }));
-    }, [attendanceLogs, filterFromDate, filterToDate, viewAll, loggedInUser, filterEmployeeId]);
+    }, [attendanceLogs, filterFromDate, filterToDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
 
     const calendarLogs = useMemo(() => {
       let logs = attendanceLogs;
-      if (!viewAll || loggedInUser.role !== 'admin') {
+      if (!canManageAllAttendance) {
         logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
       } else if (filterEmployeeId !== 'all') {
         logs = logs.filter(log => log.employeeId === filterEmployeeId);
       }
       return logs.filter(log => getLocalISODate(log.timestamp).startsWith(calendarMonth));
-    }, [attendanceLogs, calendarMonth, viewAll, loggedInUser, filterEmployeeId]);
+    }, [attendanceLogs, calendarMonth, canManageAllAttendance, loggedInUser, filterEmployeeId]);
 
     // ------------- Helpers -------------
     const getStatusBadge = (type) => {
-      if (type === 'checkin') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100 whitespace-nowrap"><CheckCircle2 size={12} className="mr-1"/>เข้างาน</span>;
-      if (type === 'start_live') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap"><Video size={12} className="mr-1"/>เริ่มไลฟ์สด</span>;
-      return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100 whitespace-nowrap"><LogOut size={12} className="mr-1"/>ออกงาน</span>;
+      if (type === 'checkin') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100 whitespace-nowrap shadow-sm"><CheckCircle2 size={14} className="mr-1"/>เข้างาน</span>;
+      if (type === 'start_live') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap shadow-sm"><Video size={14} className="mr-1"/>เริ่มไลฟ์สด</span>;
+      return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100 whitespace-nowrap shadow-sm"><LogOut size={14} className="mr-1"/>ออกงาน</span>;
     };
 
     const getTypeLabel = (type) => {
@@ -427,7 +429,9 @@ export default function App() {
 
     // ------------- Manual Add/Edit Handlers -------------
     const openAddManualModal = () => {
-      const empId = loggedInUser.role === 'admin' ? employees[0]?.id : (loggedInUser.employeeData?.id || '');
+      const empId = canManageAllAttendance 
+                    ? (filterEmployeeId !== 'all' ? filterEmployeeId : employees[0]?.id || '') 
+                    : (loggedInUser.employeeData?.id || '');
       const now = new Date();
       setManualForm({ 
         id: '', 
@@ -644,13 +648,12 @@ export default function App() {
                   <input type="month" value={calendarMonth} onChange={(e) => setCalendarMonth(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
                 )}
 
-                {loggedInUser.role === 'admin' && (
-                  <>
-                    <select value={filterEmployeeId} onChange={(e) => { setFilterEmployeeId(e.target.value); setViewAll(e.target.value === 'all'); }} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm">
-                      <option value="all">ทุกคน</option>
-                      {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
-                    </select>
-                  </>
+                {/* แสดง Dropdown ให้พนักงานที่มีสิทธิ์ attendanceEdit ดูได้ทุกคนเหมือน Admin */}
+                {canManageAllAttendance && (
+                  <select value={filterEmployeeId} onChange={(e) => setFilterEmployeeId(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm cursor-pointer">
+                    <option value="all">ทุกคน</option>
+                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                  </select>
                 )}
 
                 {canEditTab('attendance') && (
@@ -669,26 +672,33 @@ export default function App() {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                   <table className="w-full text-left border-collapse min-w-[500px]">
                     <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-[10px] md:text-xs uppercase border-b border-slate-200">
-                        <th className="p-4 font-bold text-center">เวลา</th>
-                        <th className="p-4 font-bold">พนักงาน</th>
-                        <th className="p-4 font-bold text-center">สถานะ</th>
-                        {canEditTab('attendance') && <th className="p-4 font-bold text-right">จัดการ</th>}
+                      <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-[10px] md:text-xs uppercase border-b border-slate-200">
+                        <th className="p-4 font-extrabold text-center w-24">เวลา</th>
+                        <th className="p-4 font-extrabold">พนักงาน</th>
+                        <th className="p-4 font-extrabold text-center w-32">สถานะ</th>
+                        {canEditTab('attendance') && <th className="p-4 font-extrabold text-right w-28">จัดการ</th>}
                       </tr>
                     </thead>
                     <tbody className="text-xs md:text-sm">
                       {filteredLogsForList.length === 0 ? (
-                        <tr><td colSpan={canEditTab('attendance') ? 4 : 3} className="p-10 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในวันที่เลือก</td></tr>
+                        <tr>
+                          <td colSpan={canEditTab('attendance') ? 4 : 3} className="p-12 text-center text-slate-500">
+                            <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
+                               <FileQuestion size={48} className="text-slate-300"/>
+                               <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในวันที่เลือก</span>
+                            </div>
+                          </td>
+                        </tr>
                       ) : (
                         filteredLogsForList.map(log => {
                           const logDate = new Date(log.timestamp);
                           const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
                           return (
-                            <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                            <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
                               <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
                               <td className="p-4">
                                 <div className="flex items-center space-x-3">
-                                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0 border-2 border-white shadow-sm group-hover:border-indigo-100 transition-colors">
                                     {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
                                       <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
                                     ) : <User size={16}/>}
@@ -701,8 +711,8 @@ export default function App() {
                               </td>
                               {canEditTab('attendance') && (
                                 <td className="p-4 text-right space-x-1.5">
-                                  <button onClick={() => openEditManualModal(log)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition"><Edit2 size={14}/></button>
-                                  <button onClick={() => handleDeleteManual(log.id)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition"><Trash2 size={14}/></button>
+                                  <button onClick={() => openEditManualModal(log)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition active:scale-95" title="แก้ไขเวลา"><Edit2 size={16}/></button>
+                                  <button onClick={() => handleDeleteManual(log.id)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition active:scale-95" title="ลบข้อมูล"><Trash2 size={16}/></button>
                                 </td>
                               )}
                             </tr>
@@ -729,7 +739,14 @@ export default function App() {
                        </thead>
                        <tbody className="text-xs md:text-sm">
                          {tableData.length === 0 ? (
-                           <tr><td colSpan="9" className="p-10 text-center text-slate-400 font-medium">ไม่พบประวัติการลงเวลาในช่างเวลาที่กำหนด</td></tr>
+                           <tr>
+                              <td colSpan="9" className="p-12 text-center text-slate-500">
+                                 <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
+                                    <FileQuestion size={48} className="text-slate-300"/>
+                                    <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในช่วงเวลาที่เลือก</span>
+                                 </div>
+                              </td>
+                           </tr>
                          ) : (
                            tableData.map((row, idx) => {
                              const thDate = new Date(row.date).toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -772,38 +789,46 @@ export default function App() {
         {showManualModal && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
-                  <h3 className="font-bold text-lg flex items-center"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
-                  <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition"><X size={20}/></button>
+                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shadow-md relative z-10">
+                  <h3 className="font-bold text-lg flex items-center tracking-wide"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
+                  <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                 </div>
-                <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50">
+                <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50/50">
                    <div>
                      <label className="block text-xs font-bold text-slate-600 mb-1.5">พนักงาน</label>
-                     <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm" disabled={loggedInUser.role !== 'admin' && !isEditingMode}>
+                     <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800" disabled={!canManageAllAttendance}>
                         {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
                      </select>
                    </div>
                    <div className="grid grid-cols-2 gap-3">
                      <div>
                        <label className="block text-xs font-bold text-slate-600 mb-1.5">วันที่</label>
-                       <input type="date" required value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm"/>
+                       <input type="date" required value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
                      </div>
                      <div>
                        <label className="block text-xs font-bold text-slate-600 mb-1.5">เวลา</label>
-                       <input type="time" required value={manualForm.time} onChange={e => setManualForm({...manualForm, time: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white shadow-sm"/>
+                       <input type="time" required value={manualForm.time} onChange={e => setManualForm({...manualForm, time: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
                      </div>
                    </div>
                    <div>
                      <label className="block text-xs font-bold text-slate-600 mb-1.5">ประเภทการลงเวลา</label>
                      <div className="grid grid-cols-3 gap-2">
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkin'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'checkin' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เข้างาน</button>
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'start_live'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'start_live' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เริ่มไลฟ์สด</button>
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkout'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all ${manualForm.type === 'checkout' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>ออกงาน</button>
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkin'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkin' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เข้างาน</button>
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'start_live'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'start_live' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เริ่มไลฟ์สด</button>
+                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkout'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkout' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>ออกงาน</button>
                      </div>
                    </div>
-                   <div className="pt-4 flex gap-3 border-t border-slate-200 mt-2">
-                     <button type="button" onClick={() => setShowManualModal(false)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition shadow-sm">ยกเลิก</button>
-                     <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-500/30">บันทึกเวลา</button>
+                   
+                   <div className="pt-5 flex flex-col sm:flex-row gap-3 border-t border-slate-200 mt-4">
+                     {isEditingMode && (
+                        <button type="button" onClick={() => handleDeleteManual(manualForm.id).then(() => setShowManualModal(false))} className="w-full sm:w-auto py-2.5 px-4 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition shadow-sm border border-red-100 flex items-center justify-center active:scale-95">
+                          <Trash2 size={16} className="mr-1.5"/> ลบข้อมูล
+                        </button>
+                     )}
+                     <div className="flex w-full gap-3">
+                       <button type="button" onClick={() => setShowManualModal(false)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition shadow-sm active:scale-95">ยกเลิก</button>
+                       <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-500/30 flex items-center justify-center active:scale-95"><Save size={16} className="mr-1.5"/> บันทึก</button>
+                     </div>
                    </div>
                 </form>
              </div>
