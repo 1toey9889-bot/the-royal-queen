@@ -83,7 +83,7 @@ export default function App() {
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
 
   const [loggedInUser, setLoggedInUser] = useState(null); 
-  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');    
+  const [activeTab, setActiveTab] = useState(isExecutiveView ? 'dashboard' : 'sales');  
   
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -1310,6 +1310,52 @@ export default function App() {
       }
     };
 
+    // --- ⭐ เพิ่มระบบตรวจสอบการลงเวลาทำงานก่อนเข้าใช้งาน POS ---
+    const todayStr = getLocalISODate();
+    const isAdmin = loggedInUser?.role === 'admin';
+    const todayLogs = attendanceLogs.filter(log =>
+      log.employeeId === loggedInUser?.employeeData?.id &&
+      getLocalISODate(log.timestamp) === todayStr
+    );
+
+    const hasCheckedIn = todayLogs.some(log => log.type === 'checkin');
+    const hasStartedLive = todayLogs.some(log => log.type === 'start_live');
+    
+    // สำหรับพนักงาน Staff บังคับต้องเข้างาน และ เริ่มไลฟ์สด ก่อน
+    const isAttendanceValid = isAdmin || (hasCheckedIn && hasStartedLive);
+
+    if (!isAttendanceValid) {
+        return (
+            <div className="flex flex-col items-center justify-center p-8 md:p-12 bg-white rounded-3xl shadow-sm border border-orange-200 text-center animate-in zoom-in duration-300 max-w-2xl mx-auto mt-4 md:mt-10 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
+                <AlertCircle size={64} className="text-orange-500 mb-4" />
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">แจ้งเตือน: จำเป็นต้องลงเวลาก่อนเริ่มขาย</h2>
+                <p className="text-sm md:text-base text-slate-600 mb-6 leading-relaxed">
+                    ระบบกำหนดให้พนักงานต้อง <b>ลงเวลาเข้างาน</b> และ <b>เริ่มไลฟ์สด</b> สำหรับวันนี้<br className="hidden md:block"/>ให้เรียบร้อยก่อน จึงจะสามารถเข้าใช้งานระบบบันทึกการขาย (POS) ได้
+                </p>
+
+                <div className="flex flex-wrap justify-center gap-3 mb-8">
+                    <div className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center border ${hasCheckedIn ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                        {hasCheckedIn ? <CheckCircle2 size={16} className="mr-1.5"/> : <X size={16} className="mr-1.5"/>}
+                        สถานะ: {hasCheckedIn ? 'เข้างานแล้ว' : 'ยังไม่ได้เข้างาน'}
+                    </div>
+                    <div className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center border ${hasStartedLive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                        {hasStartedLive ? <CheckCircle2 size={16} className="mr-1.5"/> : <X size={16} className="mr-1.5"/>}
+                        สถานะ: {hasStartedLive ? 'เริ่มไลฟ์สดแล้ว' : 'ยังไม่ได้เริ่มไลฟ์สด'}
+                    </div>
+                </div>
+
+                <button
+                    onClick={() => setActiveTab('attendance')}
+                    className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-8 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-indigo-500/30 flex items-center transform hover:-translate-y-1 active:translate-y-0"
+                >
+                    <Clock size={20} className="mr-2" /> ไปหน้าลงเวลาทำงาน
+                </button>
+            </div>
+        );
+    }
+    // --------------------------------------------------------
+
     return (
       <div className="relative space-y-4 max-w-5xl mx-auto animate-in fade-in duration-300 w-full z-10">
         <div className="flex items-center space-x-3 mb-2">
@@ -2464,3 +2510,4 @@ export default function App() {
     </div>
   );
 }
+
