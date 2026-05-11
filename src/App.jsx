@@ -318,6 +318,58 @@ export default function App() {
         setMessage({ text: 'ไม่พบข้อมูลโปรไฟล์พนักงาน กรุณาติดต่อ Admin', type: 'error' });
         return;
       }
+
+      // ==============================================================
+      // 🚀 เพิ่มการตรวจสอบลำดับการเข้างานและป้องกันการลงซ้ำในแต่ละวัน
+      // ==============================================================
+      const todayStr = getLocalISODate();
+      const myTodayLogs = attendanceLogs.filter(log =>
+          log.employeeId === loggedInUser.employeeData.id &&
+          getLocalISODate(log.timestamp) === todayStr
+      );
+      
+      const hasCheckedIn = myTodayLogs.some(l => l.type === 'checkin');
+      const hasStartedLive = myTodayLogs.some(l => l.type === 'start_live');
+      const hasCheckedOut = myTodayLogs.some(l => l.type === 'checkout');
+
+      if (type === 'checkin') {
+          if (hasCheckedIn) {
+              setMessage({ text: 'คุณได้ลงเวลาเข้างานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+              setTimeout(() => setMessage({text:'', type:''}), 5000);
+              return;
+          }
+      } 
+      else if (type === 'start_live') {
+          if (!hasCheckedIn) {
+               setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนเริ่มไลฟ์สด', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+          if (hasStartedLive) {
+               setMessage({ text: 'คุณได้เริ่มไลฟ์สดของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+      } 
+      else if (type === 'checkout') {
+          if (!hasCheckedIn) {
+               setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนออกงาน', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+          if (!hasStartedLive) {
+               setMessage({ text: '⚠️ กรุณาเริ่มไลฟ์สดก่อนออกงาน', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+          if (hasCheckedOut) {
+               setMessage({ text: 'คุณได้ลงเวลาออกงานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+      }
+      // ==============================================================
+
       if (!isFaceModelsLoaded) {
         setMessage({ text: 'AI Model ยังไม่พร้อมทำงาน กรุณารอสักครู่หรือรีเฟรชหน้าจอ', type: 'error' });
         return;
@@ -556,6 +608,16 @@ export default function App() {
       );
     };
 
+    // เช็คสถานะปัจจุบันเพื่อปรับเปลี่ยน UI ปุ่มสแกนหน้าให้ชัดเจน
+    const todayStrUI = getLocalISODate();
+    const uiLogs = attendanceLogs.filter(log => 
+      log.employeeId === loggedInUser?.employeeData?.id && 
+      getLocalISODate(log.timestamp) === todayStrUI
+    );
+    const isChkin = uiLogs.some(l => l.type === 'checkin');
+    const isStrt = uiLogs.some(l => l.type === 'start_live');
+    const isChkout = uiLogs.some(l => l.type === 'checkout');
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
@@ -598,14 +660,26 @@ export default function App() {
               )}
 
               <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
-                <button onClick={() => handleVerifyAndRecord('checkin')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">เข้างาน</span>
+                <button 
+                  onClick={() => handleVerifyAndRecord('checkin')} 
+                  disabled={isVerifying || !isFaceModelsLoaded} 
+                  className={`flex-1 ${isChkin ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+                >
+                  <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">{isChkin ? 'เข้างานแล้ว' : 'เข้างาน'}</span>
                 </button>
-                <button onClick={() => handleVerifyAndRecord('start_live')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <Video size={20} className="mr-1.5"/> <span className="text-sm">เริ่มไลฟ์สด</span>
+                <button 
+                  onClick={() => handleVerifyAndRecord('start_live')} 
+                  disabled={isVerifying || !isFaceModelsLoaded} 
+                  className={`flex-1 ${isStrt ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+                >
+                  <Video size={20} className="mr-1.5"/> <span className="text-sm">{isStrt ? 'เริ่มไลฟ์สดแล้ว' : 'เริ่มไลฟ์สด'}</span>
                 </button>
-                <button onClick={() => handleVerifyAndRecord('checkout')} disabled={isVerifying || !isFaceModelsLoaded} className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/25 transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 flex items-center justify-center">
-                  <LogOut size={20} className="mr-1.5"/> <span className="text-sm">ออกงาน</span>
+                <button 
+                  onClick={() => handleVerifyAndRecord('checkout')} 
+                  disabled={isVerifying || !isFaceModelsLoaded} 
+                  className={`flex-1 ${isChkout ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-red-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+                >
+                  <LogOut size={20} className="mr-1.5"/> <span className="text-sm">{isChkout ? 'ออกงานแล้ว' : 'ออกงาน'}</span>
                 </button>
               </div>
             </div>
@@ -1310,7 +1384,7 @@ export default function App() {
       }
     };
 
-    // --- ⭐ เพิ่มระบบตรวจสอบการลงเวลาทำงานก่อนเข้าใช้งาน POS ---
+    // --- ⭐ ระบบตรวจสอบการลงเวลาทำงานก่อนเข้าใช้งาน POS (บังคับลำดับ) ---
     const todayStr = getLocalISODate();
     const isAdmin = loggedInUser?.role === 'admin';
     const todayLogs = attendanceLogs.filter(log =>
@@ -1321,7 +1395,7 @@ export default function App() {
     const hasCheckedIn = todayLogs.some(log => log.type === 'checkin');
     const hasStartedLive = todayLogs.some(log => log.type === 'start_live');
     
-    // สำหรับพนักงาน Staff บังคับต้องเข้างาน และ เริ่มไลฟ์สด ก่อน
+    // สำหรับพนักงาน Staff บังคับต้องเข้างาน และ เริ่มไลฟ์สด ก่อน ถึงจะบันทึกการขายได้
     const isAttendanceValid = isAdmin || (hasCheckedIn && hasStartedLive);
 
     if (!isAttendanceValid) {
@@ -1331,7 +1405,7 @@ export default function App() {
                 <AlertCircle size={64} className="text-orange-500 mb-4" />
                 <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">แจ้งเตือน: จำเป็นต้องลงเวลาก่อนเริ่มขาย</h2>
                 <p className="text-sm md:text-base text-slate-600 mb-6 leading-relaxed">
-                    ระบบกำหนดให้พนักงานต้อง <b>ลงเวลาเข้างาน</b> และ <b>เริ่มไลฟ์สด</b> สำหรับวันนี้<br className="hidden md:block"/>ให้เรียบร้อยก่อน จึงจะสามารถเข้าใช้งานระบบบันทึกการขาย (POS) ได้
+                    ระบบกำหนดให้พนักงานต้อง <b>ลงเวลาเข้างาน</b> และ <b>เริ่มไลฟ์สด</b> สำหรับวันนี้<br className="hidden md:block"/>ให้เรียบร้อยตามลำดับก่อน จึงจะสามารถเข้าใช้งานระบบบันทึกการขาย (POS) ได้
                 </p>
 
                 <div className="flex flex-wrap justify-center gap-3 mb-8">
