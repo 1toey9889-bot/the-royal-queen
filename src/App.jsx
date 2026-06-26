@@ -1,5 +1,5 @@
 // ==========================================
-// 📦 1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
+//  1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
 // ==========================================
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
@@ -18,15 +18,15 @@ import {
   ChevronLeft, ChevronRight, Video, FileQuestion
 } from 'lucide-react';
 
-// 🚀 ไลบรารีสำหรับสแกน Barcode แบบสด
+//  ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
-// 🚀 ไลบรารี AI สำหรับอ่านตัวอักษรจากรูปภาพ (OCR)
+//  ไลบรารี AI สำหรับอ่านตัวอักษรจากรูปภาพ (OCR)
 import Tesseract from 'tesseract.js';
-// 🚀 ไลบรารี AI ตรวจจับใบหน้า
+//  ไลบรารี AI ตรวจจับใบหน้า
 import * as faceapi from 'face-api.js';
 
 // ==========================================
-// 🎨 โลโก้ The Resilient Clinic 
+//  โลโก้ The Resilient Clinic 
 // ==========================================
 const ResilientLogo = ({ className = "", collapsed = false }) => (
   <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 ${className}`}>
@@ -77,7 +77,7 @@ const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)
 const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
 // ==========================================
-// 🚀 3. คอมโพเนนต์หลักของระบบ (Main App Component)
+//  3. คอมโพเนนต์หลักของระบบ (Main App Component)
 // ==========================================
 export default function App() {
   const isExecutiveView = new URLSearchParams(window.location.search).get('view') === 'dashboard';
@@ -320,7 +320,7 @@ export default function App() {
       }
 
       // ==============================================================
-      // 🚀 เพิ่มการตรวจสอบลำดับการเข้างานและป้องกันการลงซ้ำในแต่ละวัน
+      //  เพิ่มการตรวจสอบลำดับการเข้างานและป้องกันการลงซ้ำในแต่ละวัน
       // ==============================================================
       const todayStr = getLocalISODate();
       const myTodayLogs = attendanceLogs.filter(log =>
