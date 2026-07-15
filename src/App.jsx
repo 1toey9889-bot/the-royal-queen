@@ -91,13 +91,11 @@ export default function App() {
   const [users, setUsers] = useState([]);
   
   const [employees, setEmployees] = useState([]);
-
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
   const [isUsersLoaded, setIsUsersLoaded] = useState(false);
-
   const [loadError, setLoadError] = useState('');
 
   const productMap = useMemo(() => {
@@ -175,10 +173,8 @@ export default function App() {
 
   const canAccess = (tabName) => {
     if (isExecutiveView) return tabName === 'dashboard' || tabName === 'stock';
-
     if (!loggedInUser) return false;
     if (loggedInUser.role === 'admin' || tabName === 'sales') return true;
-
     if (tabName === 'employees') return loggedInUser.role === 'admin';
     return !!loggedInUser.permissions?.[tabName]; 
   };
@@ -231,7 +227,6 @@ export default function App() {
       }
       grouped[key].items.push(sale);
       grouped[key].totalOrderValue += Number(sale.total) || 0;
-      
       grouped[key].totalItems += Number(sale.quantity) || 0;
     });
     return Object.values(grouped).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -259,7 +254,6 @@ export default function App() {
             <ResilientLogo className="mx-auto h-24 md:h-32 rounded-3xl shadow-xl w-full max-w-[320px]"/>
             <p className="text-sm md:text-base text-slate-500 font-semibold tracking-wide">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
           </div>
-       
           <form onSubmit={handleLogin} className="space-y-6">
             {error && <div className="bg-red-50/80 text-red-600 p-3.5 rounded-2xl text-sm text-center font-bold border border-red-100 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">{error}</div>}
             <div className="space-y-5">
@@ -483,7 +477,6 @@ export default function App() {
       const empId = canManageAllAttendance 
                     ? (filterEmployeeId !== 'all' ? filterEmployeeId : employees[0]?.id || '') 
                     : (loggedInUser.employeeData?.id || '');
-
       const now = new Date();
       setManualForm({ 
         id: '', 
@@ -516,7 +509,7 @@ export default function App() {
         if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
         
         const timestamp = new Date(`${manualForm.date}T${manualForm.time}:00`).toISOString();
-
+        
         if (isEditingMode && manualForm.id) {
           await updateDoc(doc(db, "attendance", manualForm.id), {
             employeeId: emp.id,
@@ -613,7 +606,6 @@ export default function App() {
       log.employeeId === loggedInUser?.employeeData?.id && 
       getLocalISODate(log.timestamp) === todayStrUI
     );
-
     const isChkin = uiLogs.some(l => l.type === 'checkin');
     const isStrt = uiLogs.some(l => l.type === 'start_live');
     const isChkout = uiLogs.some(l => l.type === 'checkout');
@@ -737,7 +729,6 @@ export default function App() {
             </div>
 
             <div className="p-4 md:p-6 bg-slate-50/30">
-              
               {historyViewMode === 'list' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                   <table className="w-full text-left border-collapse min-w-[500px]">
@@ -834,7 +825,7 @@ export default function App() {
                                        ) : (
                                          <div className="h-full flex items-center justify-center text-slate-300">-</div>
                                        )}
-                                      </td>
+                                       </td>
                                    )
                                  })}
                                </tr>
@@ -947,7 +938,7 @@ export default function App() {
           </div>
           {!isAdding && (
             <button onClick={() => setIsAdding(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center space-x-2 text-sm font-bold shadow-sm transition-colors w-full sm:w-auto justify-center">
-               <UserPlus size={16}/><span>เพิ่มพนักงานใหม่</span>
+                <UserPlus size={16}/><span>เพิ่มพนักงานใหม่</span>
             </button>
           )}
         </div>
@@ -985,7 +976,7 @@ export default function App() {
               <button onClick={() => setIsAdding(false)} disabled={isProcessing} className="px-5 py-2.5 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition text-sm">ยกเลิก</button>
               <button onClick={handleSave} disabled={isProcessing} className="px-5 py-2.5 text-white font-bold bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition text-sm flex items-center"><Save size={16} className="mr-1.5"/> บันทึก</button>
             </div>
-          </div>
+           </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
@@ -1006,7 +997,7 @@ export default function App() {
           })}
           {employees.length === 0 && !isAdding && (
              <div className="col-span-full py-12 bg-white rounded-3xl border border-slate-100 text-center text-slate-500 font-medium text-sm">ยังไม่มีข้อมูลพนักงานในระบบ</div>
-          )}
+           )}
         </div>
       </div>
     );
@@ -1054,7 +1045,7 @@ export default function App() {
         uniqueOrders.add(s.date); 
       });
 
-      const topList = Object.entries(salesCount)
+       const topList = Object.entries(salesCount)
         .map(([id, qty]) => ({ ...getProduct(id), qty }))
         .filter(p => p && p.name)
         .sort((a, b) => b.qty - a.qty);
@@ -1108,7 +1099,7 @@ export default function App() {
                <span className="text-xs text-slate-500 font-bold">สินค้า</span>
                <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none w-20 md:w-auto font-black text-blue-700"><option value="all">ดูทั้งหมด</option>{products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
             </div>
-            <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 shadow-inner">
+             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 shadow-inner">
                <span className="text-xs text-slate-500 font-bold">ดูแบบ</span>
                <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700"><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option><option value="yearly">รายปี</option><option value="all">ยอดรวมสะสม</option></select>
             </div>
@@ -1116,7 +1107,7 @@ export default function App() {
               <div className="flex items-center space-x-2 bg-blue-50/80 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-blue-100 shadow-inner">
                 {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
                 {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
-                {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
+               {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
               </div>
             )}
             {canExportTab('dashboard') && (<button onClick={exportDashboardToExcel} className="flex flex-1 lg:flex-none justify-center items-center space-x-1.5 md:space-x-2 bg-emerald-600 text-white px-4 py-2.5 md:px-5 md:py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 text-xs md:text-sm font-bold active:scale-95"><Download size={16} className="w-4 h-4"/><span>ส่งออก Excel</span></button>)}
@@ -1145,14 +1136,14 @@ export default function App() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center space-x-3 bg-slate-50/50">
+         <div className="px-5 py-4 border-b border-slate-100 flex items-center space-x-3 bg-slate-50/50">
             <CalendarDays size={20} className="text-slate-400"/>
             <h3 className="text-base font-black text-slate-800">สินค้าขายดี</h3>
           </div>
           <div className="p-5 md:p-6">
             <div className="space-y-4 md:space-y-5">
               {dashboardStats.topProducts.map((p, index) => (
-                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0 group">
+               <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0 group">
                   <div className="flex items-center space-x-3 md:space-x-4">
                     <span className="flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-full bg-slate-100 text-slate-500 font-black text-xs md:text-sm group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">{index + 1}</span>
                     <span className="font-bold text-slate-700 text-sm md:text-base group-hover:text-slate-900 transition-colors">{p.name}</span>
@@ -1166,7 +1157,7 @@ export default function App() {
                 </div>
               ))}
               {dashboardStats.topProducts.length === 0 && <p className="text-slate-500 text-sm text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 font-medium">ไม่มีข้อมูลการขายในเงื่อนไขที่คุณเลือก</p>}
-            </div>
+             </div>
           </div>
         </div>
       </div>
@@ -1315,7 +1306,6 @@ export default function App() {
       try {
         const checkoutTime = new Date().toISOString();
         const productDocs = {};
-
         for (const item of cart) {
           const productRef = doc(db, "products", item.productId);
           const pSnap = await getDoc(productRef);
@@ -1334,7 +1324,6 @@ export default function App() {
         let totalOrderRevenue = 0; let totalOrderProfit = 0;
         const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
         let remainingTotal = finalTotal;
-
         for (let i = 0; i < cart.length; i++) {
            const item = cart[i];
            const pData = productDocs[item.productId].data; const pRef = productDocs[item.productId].ref;
@@ -1342,7 +1331,6 @@ export default function App() {
            const isLastItem = i === cart.length - 1;
            const baseItemTotal = Number(item.price) * Number(item.quantity);
            let rowTotal = 0;
-
            if (isLastItem) { rowTotal = remainingTotal; } 
            else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
            
@@ -1350,20 +1338,16 @@ export default function App() {
            
            // ใช้ increment เพื่อตัดสต๊อกอย่างแม่นยำและไม่ติด Lock
            batch.update(pRef, { stock: increment(-Number(item.quantity)), updatedAt: checkoutTime });
-           
            const salesRef = doc(collection(db, "sales"));
            batch.set(salesRef, {
              orderId: orderId || '-', customerName: '-', store: selectedStore, productId: item.productId, quantity: Number(item.quantity), total: rowTotal, unitPrice: unitPrice, unitCost: itemCost, date: checkoutTime, soldBy: loggedInUser?.username || 'unknown'
            });
-           
            totalOrderRevenue += rowTotal; totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
         }
 
         batch.set(summaryRef, { totalRevenue: increment(totalOrderRevenue), totalProfit: increment(totalOrderProfit), totalOrders: increment(1), date: todayStr }, { merge: true });
-        
         const auditRef = doc(collection(db, "audit_logs"));
         batch.set(auditRef, { action: "CREATE_ORDER", user: loggedInUser?.username || 'unknown', details: `สร้างออเดอร์ ${orderId||'ไม่มี ID'} ยอด ${totalOrderRevenue} (รวม ${cart.length} รายการย่อย)`, timestamp: checkoutTime });
-        
         await batch.commit();
         
         setCart([]); setOrderId(''); setCustomGrandTotal(''); setShowConfirmModal(false);
@@ -1372,7 +1356,7 @@ export default function App() {
       } catch (err) { 
         console.error("Checkout Error:", err);
         setShowConfirmModal(false);
-        setMessage(err.message || 'เกิดข้อผิดพลาดขณะบันทึกข้อมูล กรุณาลองใหม่'); 
+        setMessage(err.message || 'เกิดข้อผิดพลาดขณะบันทึกข้อมูล กรุณาลองใหม่');
         setIsError(true); 
       } finally {
         setIsProcessing(false);
@@ -1386,7 +1370,6 @@ export default function App() {
       log.employeeId === loggedInUser?.employeeData?.id &&
       getLocalISODate(log.timestamp) === todayStr
     );
-
     const hasCheckedIn = todayLogs.some(log => log.type === 'checkin');
     const hasStartedLive = todayLogs.some(log => log.type === 'start_live');
     const isAttendanceValid = isAdmin || (hasCheckedIn && hasStartedLive);
@@ -1449,7 +1432,7 @@ export default function App() {
                   <div>
                     <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Package size={16} className="mr-1.5"/>รายการสินค้า ({cart.length})</h4>
                     <div className="space-y-2 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm p-1.5">
-                        {cart.map((item, idx) => (
+                         {cart.map((item, idx) => (
                           <div key={idx} className="flex flex-row justify-between items-center text-sm p-2 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
                              <div className="flex-1 pr-4">
                                 <span className="font-bold text-slate-800 break-words text-sm">{item.name}</span> 
@@ -1458,7 +1441,7 @@ export default function App() {
                              <div className="font-bold text-slate-800 shrink-0 text-sm bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">฿{formatMoney(item.price * item.quantity)}</div>
                           </div>
                        ))}
-                     </div>
+                      </div>
                   </div>
                   <div className="flex justify-between items-end pt-4 border-t border-slate-200 mt-2 px-2">
                      <span className="font-bold text-slate-500 mb-1 text-sm uppercase tracking-wider">ราคารวมสุทธิ</span>
@@ -1641,12 +1624,12 @@ export default function App() {
 
           {cart.length > 0 && (
              <div className="relative z-10 border border-blue-100 bg-blue-50/40 rounded-2xl overflow-hidden w-full shadow-sm mt-4">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2 border-b border-blue-100 font-bold text-blue-800 text-sm flex items-center">
+               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2 border-b border-blue-100 font-bold text-blue-800 text-sm flex items-center">
                   <ShoppingCart size={16} className="mr-1.5 text-blue-600"/> ตะกร้า ({cart.length})
                 </div>
                 <div className="p-3 w-full space-y-2">
                    {cart.map((item, index) => (
-                     <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-3 gap-2 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all">
+                      <div key={index} className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-3 gap-2 bg-white rounded-xl shadow-sm border border-slate-100 w-full transition-all">
                          <div className="flex-1 font-bold text-slate-800 break-words w-full lg:w-auto text-sm">{item.name}</div>
                          
                          <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end w-full lg:w-auto gap-3 shrink-0">
@@ -1674,7 +1657,7 @@ export default function App() {
 
           <div className="pt-2 w-full relative z-10">
             <div className="bg-gradient-to-br from-[#f0f4ff] to-[#e6edfc] p-4 md:p-5 rounded-2xl border border-blue-100 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm w-full">
-              <div className="text-center sm:text-left w-full sm:w-auto flex flex-col items-center sm:items-start">
+               <div className="text-center sm:text-left w-full sm:w-auto flex flex-col items-center sm:items-start">
                 <p className="text-xs font-bold text-blue-500 mb-1 uppercase">รวมสุทธิ</p>
                 <div className="flex items-center relative w-full sm:w-auto justify-center sm:justify-start">
                   <span className="text-xl font-black text-blue-700 absolute left-3 select-none opacity-80">฿</span>
@@ -1709,12 +1692,12 @@ export default function App() {
                 <tr className="text-slate-400 text-[10px] uppercase">
                   <th className="px-2 pb-1 font-bold whitespace-nowrap">เวลา</th>
                   <th className="px-2 pb-1 font-bold">ออเดอร์</th>
-                  <th className="px-2 pb-1 font-bold">ร้านค้า</th>
+                   <th className="px-2 pb-1 font-bold">ร้านค้า</th>
                   <th className="px-2 pb-1 font-bold">สินค้า</th>
                   <th className="px-2 pb-1 font-bold text-center">จน.</th>
                   <th className="px-2 pb-1 font-bold text-right">ยอดรวม</th>
                 </tr>
-              </thead>
+               </thead>
               {groupedRecentSales.length === 0 ? (
                 <tbody><tr><td colSpan="6" className="p-4 text-center text-slate-400 text-xs font-medium bg-white rounded-xl shadow-sm border border-slate-100">ยังไม่มีการคีย์ยอดขายในวันนี้</td></tr></tbody>
               ) : (
@@ -1728,7 +1711,7 @@ export default function App() {
                         const isFirstRow = itemIdx === 0;
                         return (
                           <tr key={sale.id} className="bg-white">
-                            <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                             <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
                                {isFirstRow ? (
                                   <div className="flex flex-col space-y-1">
                                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ {totalTodayOrders - groupIndex}</span>
@@ -1782,7 +1765,8 @@ export default function App() {
 
     const formatForInput = (isoString) => {
       try { const d = new Date(isoString);
-      if (isNaN(d.getTime())) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); } catch (e) { return ''; }
+        if (isNaN(d.getTime())) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); } catch (e) { return '';
+      }
     };
 
     const filteredSalesFlat = useMemo(() => {
@@ -1815,8 +1799,11 @@ export default function App() {
       setIsProcessing(true);
       try {
         const productRef = doc(db, "products", sale.productId);
+        const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
         const batch = writeBatch(db);
-        batch.update(productRef, { stock: increment(Number(sale.quantity)) });
+        if (productSnap.exists()) {
+            batch.update(productRef, { stock: increment(Number(sale.quantity)) });
+        }
         batch.delete(doc(db, "sales", sale.id));
         await batch.commit();
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
@@ -1832,7 +1819,11 @@ export default function App() {
         
         const batch = writeBatch(db);
         for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
-           batch.update(doc(db, "products", productId), { stock: increment(qtyToReturn) });
+           const productRef = doc(db, "products", productId);
+           const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
+           if (productSnap.exists()) {
+               batch.update(productRef, { stock: increment(qtyToReturn) });
+           }
         }
         for (const sale of group.items) { batch.delete(doc(db, "sales", sale.id)); }
         
@@ -1851,15 +1842,16 @@ export default function App() {
         if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
 
         const oldPRef = doc(db, "products", oldProductId);
+        const oldPSnap = await getDoc(oldPRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
         const newPRef = doc(db, "products", newProductId);
         const batch = writeBatch(db);
 
         if (oldProductId !== newProductId) {
-           batch.update(oldPRef, { stock: increment(oldQty) });
+           if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(oldQty) });
            batch.update(newPRef, { stock: increment(-newQty) });
         } else if (oldQty !== newQty) {
            const diff = newQty - oldQty;
-           batch.update(oldPRef, { stock: increment(-diff) });
+           if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(-diff) });
         }
 
         let newDateIso = sale.date;
@@ -1902,7 +1894,7 @@ export default function App() {
           <div className="flex items-center space-x-3 shrink-0">
             <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600"><History size={20}/></div>
             <div>
-              <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
+               <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
               <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">ค้นหา กรองข้อมูล หรือแก้ไขออเดอร์</p>
             </div>
           </div>
@@ -1957,12 +1949,12 @@ export default function App() {
             </div>
           ) : (
             groupedHistorySales.map((group, groupIndex) => {
-              let timeString = '-'; 
+               let timeString = '-'; 
               try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
               
               const mainStore = group.store || group.items[0]?.store || '-';
               let gradientHeaderClass = "from-slate-50 to-white border-slate-200";
-              let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
+               let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
               
               if (mainStore.includes('Shopee')) {
                 gradientHeaderClass = "from-[#FFF0ED] to-white border-[#FFE4DF]";
@@ -1996,13 +1988,13 @@ export default function App() {
 
                     {canEditTab('history') && (
                       <div className="flex items-center space-x-2 ml-auto w-full sm:w-auto justify-end">
-                        {isEditingGroup === group.id ? (
+                         {isEditingGroup === group.id ? (
                           <>
                             <button onClick={() => handleSaveGroupEdit(group)} disabled={isProcessing} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
-                               <Save size={14} className="mr-1"/> บันทึกราคา
+                                <Save size={14} className="mr-1"/> บันทึกราคา
                             </button>
                             <button onClick={() => setIsEditingGroup(null)} disabled={isProcessing} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
-                              <X size={14} className="mr-1"/> ยกเลิก
+                               <X size={14} className="mr-1"/> ยกเลิก
                             </button>
                           </>
                         ) : (
@@ -2013,13 +2005,13 @@ export default function App() {
                             <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-red-200 flex items-center">
                               <Trash2 size={12} className="mr-1"/> ลบออเดอร์
                             </button>
-                          </>
+                           </>
                         )}
                       </div>
                     )}
                   </div>
 
-                  <div className="p-0 overflow-x-auto">
+                   <div className="p-0 overflow-x-auto">
                     <table className="w-full text-left min-w-[600px]">
                       <thead>
                         <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
@@ -2030,7 +2022,7 @@ export default function App() {
                           <th className="px-4 py-2 font-bold text-right w-[120px]">ยอดรวมย่อย</th>
                           {canEditTab('history') && <th className="px-4 py-2 font-bold text-center w-[80px]">จัดการ</th>}
                         </tr>
-                      </thead>
+                       </thead>
                       <tbody className="text-[11px] md:text-xs text-slate-700">
                         {group.items.map((sale) => {
                           const isCurrentRowEditing = isEditing === sale.id;
@@ -2040,14 +2032,14 @@ export default function App() {
                                 {isCurrentRowEditing ? (
                                   <div className="flex flex-col space-y-1.5">
                                     <input type="text" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner" placeholder="รหัสออเดอร์" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/>
-                                    <input type="datetime-local" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner text-[10px] md:text-xs text-blue-700" title="แก้ไขวันเวลาออเดอร์" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/>
+                                     <input type="datetime-local" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner text-[10px] md:text-xs text-blue-700" title="แก้ไขวันเวลาออเดอร์" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/>
                                   </div>
                                 ) : (
                                   <div className="flex flex-col">
                                     <span>{sale.orderId || '-'}</span>
                                     {timeframe !== 'daily' && (
                                        <span className="text-[10px] text-slate-400 font-medium mt-0.5">{new Date(sale.date).toLocaleDateString('th-TH')}</span>
-                                    )}
+                                     )}
                                   </div>
                                 )}
                               </td>
@@ -2058,13 +2050,13 @@ export default function App() {
                                   </select>
                                 ) : (
                                   getProduct(sale.productId)?.name || 'ลบแล้ว'
-                                )}
+                                 )}
                               </td>
                               <td className="px-4 py-2 text-center">
                                 {isCurrentRowEditing ? (
                                   <input type="number" className="w-12 mx-auto p-1.5 border border-blue-300 rounded text-center focus:border-blue-600 outline-none shadow-inner" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} />
                                 ) : (
-                                   <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{sale.quantity}</span>
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{sale.quantity}</span>
                                 )}
                               </td>
                               <td className="px-4 py-2 text-right">
@@ -2078,25 +2070,25 @@ export default function App() {
                                 {isCurrentRowEditing ? (
                                   <span className="text-blue-600">฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
                                 ) : (
-                                  `฿${formatMoney(sale.total)}`
+                                   `฿${formatMoney(sale.total)}`
                                 )}
                               </td>
-                              {canEditTab('history') && (
+                               {canEditTab('history') && (
                                 <td className="px-4 py-2 text-center">
                                   {isCurrentRowEditing ? (
                                     <div className="flex justify-center space-x-1.5">
                                       <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-white bg-emerald-500 hover:bg-emerald-600 p-1.5 rounded-md shadow-sm transition"><Save size={14}/></button>
-                                      <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-600 bg-slate-200 hover:bg-slate-300 p-1.5 rounded-md shadow-sm transition"><X size={14}/></button>
+                                       <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-600 bg-slate-200 hover:bg-slate-300 p-1.5 rounded-md shadow-sm transition"><X size={14}/></button>
                                     </div>
                                   ) : (
-                                    <div className="flex justify-center space-x-1">
+                                     <div className="flex justify-center space-x-1">
                                       <button onClick={() => { setIsEditing(sale.id); setIsEditingGroup(null); setEditForm({productId: sale.productId, quantity: sale.quantity, date: formatForInput(sale.date), store: sale.store || STORE_OPTIONS[0], customPrice: sale.unitPrice || (sale.total/sale.quantity), orderId: sale.orderId || ''}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 rounded transition" title="แก้ไขรายการย่อย"><Edit2 size={14}/></button>
                                       <button onClick={() => handleDelete(sale)} className="text-red-500 hover:bg-red-100 p-1.5 rounded transition" title="ลบรายการย่อย"><Trash2 size={14}/></button>
                                     </div>
-                                  )}
+                                   )}
                                 </td>
                               )}
-                            </tr>
+                             </tr>
                           );
                         })}
                       </tbody>
@@ -2108,16 +2100,16 @@ export default function App() {
                       รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{group.totalItems} ชิ้น</span>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <span className="font-bold text-slate-500 uppercase text-[10px] md:text-xs">ยอดรวมสุทธิ</span>
+                       <span className="font-bold text-slate-500 uppercase text-[10px] md:text-xs">ยอดรวมสุทธิ</span>
                       {isEditingGroup === group.id ? (
                         <input type="number" className="w-28 p-2 border-2 border-blue-400 rounded-lg text-right font-black focus:border-blue-600 outline-none text-blue-800 bg-white shadow-inner" value={groupEditTotal} onChange={e => setGroupEditTotal(e.target.value)} />
                       ) : (
                         <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 drop-shadow-sm">
-                          ฿{formatMoney(group.totalOrderValue)}
+                           ฿{formatMoney(group.totalOrderValue)}
                         </span>
                       )}
                     </div>
-                  </div>
+                   </div>
                 </div>
               );
             })
@@ -2134,7 +2126,6 @@ export default function App() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
-
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
       if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -2148,7 +2139,6 @@ export default function App() {
       });
       return result;
     }, [products, searchTerm, sortBy]);
-
     const exportProductsReport = () => {
       if (products.length === 0) return;
       const csvRows = [];
@@ -2165,7 +2155,6 @@ export default function App() {
       csvRows.push([]); csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
       downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `สรุปข้อมูลสินค้าและมูลค่าสต๊อก_${getLocalISODate()}.csv`);
     };
-
     const handleSave = async (id) => {
       setIsProcessing(true);
       try {
@@ -2175,7 +2164,6 @@ export default function App() {
       } catch (error) { alert("Error: " + error.message); }
       setIsProcessing(false);
     };
-
     const handleAdd = async () => {
       if (!editForm.name) return;
       setIsProcessing(true);
@@ -2184,7 +2172,8 @@ export default function App() {
         await addDoc(collection(db, "audit_logs"), { action: "ADD_PRODUCT", user: loggedInUser?.username || 'unknown', details: `เพิ่มสินค้าใหม่ ${editForm.name}`, timestamp: new Date().toISOString() });
         setIsAdding(false);
         setEditForm({ name: '', cost: '', price: '' });
-      } catch (error) { alert("Error: " + error.message); }
+      } catch (error) { alert("Error: " + error.message);
+      }
       setIsProcessing(false);
     };
 
@@ -2194,7 +2183,7 @@ export default function App() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการสินค้า</h2>
             <div className="flex space-x-2 w-full sm:w-auto">
-              {canExportTab('products') && (<button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14}/><span>ส่งออก Excel</span></button>)}
+               {canExportTab('products') && (<button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14}/><span>ส่งออก Excel</span></button>)}
               {!isAdding && canEditTab('products') && (<button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition shadow-sm text-xs font-bold"><Plus size={14}/><span>เพิ่มสินค้าใหม่</span></button>)}
             </div>
           </div>
@@ -2205,7 +2194,7 @@ export default function App() {
         </div>
         
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
-           <table className="w-full text-left border-collapse min-w-[600px]">
+            <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm"><th className="p-3 md:p-4 font-bold text-center w-16">ลำดับ</th><th className="p-3 md:p-4 font-bold">ชื่อสินค้า</th><th className="p-3 md:p-4 font-bold">ราคาคลินิก</th><th className="p-3 md:p-4 font-bold">ราคาขาย</th>{canEditTab('products') && <th className="p-3 md:p-4 font-bold text-right">จัดการ</th>}</tr>
             </thead>
@@ -2227,7 +2216,9 @@ export default function App() {
                   <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">฿{formatMoney(product.price)}</span>}</td>
                   {canEditTab('products') && (
                     <td className="p-3 md:p-4 text-right space-x-1.5 whitespace-nowrap">
-                      {isEditing === product.id ? (<><button onClick={() => handleSave(product.id)} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded transition"><Save size={16}/></button><button onClick={() => setIsEditing(null)} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded transition"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-50 border border-transparent p-1.5 rounded transition"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) { await deleteDoc(doc(db, "products", product.id)); await addDoc(collection(db, "audit_logs"), { action: "DELETE_PRODUCT", user: loggedInUser?.username || 'unknown', details: `ลบสินค้า ${product.name}`, timestamp: new Date().toISOString() }); } }} className="text-red-500 hover:bg-red-50 border border-transparent p-1.5 rounded transition"><Trash2 size={16}/></button></>)}
+                      {isEditing === product.id ? (<><button onClick={() => handleSave(product.id)} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded transition"><Save size={16}/></button><button onClick={() => setIsEditing(null)} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded transition"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-50 border border-transparent p-1.5 rounded transition"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) { await deleteDoc(doc(db, "products", product.id));
+                      await addDoc(collection(db, "audit_logs"), { action: "DELETE_PRODUCT", user: loggedInUser?.username || 'unknown', details: `ลบสินค้า ${product.name}`, timestamp: new Date().toISOString() });
+                      } }} className="text-red-500 hover:bg-red-50 border border-transparent p-1.5 rounded transition"><Trash2 size={16}/></button></>)}
                     </td>
                   )}
                 </tr>
@@ -2244,13 +2235,13 @@ export default function App() {
     const [mode, setMode] = useState('view');
     const [selectedProduct, setSelectedProduct] = useState('');
     const [stockAmount, setStockAmount] = useState('');
+    const [originalStock, setOriginalStock] = useState(0); // เพิ่ม State สำหรับเก็บค่า stock เดิมก่อนแก้
     const [returnOrderId, setReturnOrderId] = useState('');
     const [returnItems, setReturnItems] = useState([]);
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
-
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
       if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -2262,24 +2253,25 @@ export default function App() {
       });
       return result;
     }, [products, searchTerm, sortBy]);
-
+    
     const handleUpdateStock = async (isAbsoluteOverride = false) => {
       if (!selectedProduct || !stockAmount || isNaN(stockAmount)) return;
       setIsProcessing(true);
       try {
         const productRef = doc(db, "products", selectedProduct);
         const amount = Number(stockAmount);
-        
         const batch = writeBatch(db);
         if (isAbsoluteOverride) {
-            batch.update(productRef, { stock: amount });
-            batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `เซ็ตค่าสต๊อกใหม่เป็น ${amount}`, timestamp: new Date().toISOString() });
+            // คำนวณส่วนต่างจากค่าเดิมที่ผู้ดูแลระบบเห็นตอนกดแก้ไข ป้องกัน Race Condition
+            const diff = amount - Number(originalStock);
+            batch.update(productRef, { stock: increment(diff) });
+            batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อกเป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
         } else {
             batch.update(productRef, { stock: increment(amount) });
             batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
         }
         await batch.commit();
-        setMode('view'); setStockAmount(''); setSelectedProduct('');
+        setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0);
       } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
       setIsProcessing(false);
     };
@@ -2300,7 +2292,12 @@ export default function App() {
                 const qtyToReturn = Number(item.returnQty);
                 if(qtyToReturn > item.quantity) throw new Error("คืนเกินจำนวนที่ซื้อ");
                 
-                batch.update(doc(db, "products", item.productId), { stock: increment(qtyToReturn) });
+                // ป้องกันกรณีสินค้าถูกลบไปแล้วด้วย getDoc ก่อน update
+                const productRef = doc(db, "products", item.productId);
+                const productSnap = await getDoc(productRef);
+                if (productSnap.exists()) {
+                    batch.update(productRef, { stock: increment(qtyToReturn) });
+                }
                 
                 const newQty = item.quantity - qtyToReturn;
                 if(newQty === 0) {
@@ -2336,14 +2333,14 @@ export default function App() {
             <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
             <div className="flex flex-wrap gap-2">
                 {canEditTab('stock') && !isExecutiveView && (
-                    <>
+                   <>
                         <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
                         <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
-                    </>
+                     </>
                 )}
                 {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
                 {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
-            </div>
+             </div>
         </div>
 
         {mode === 'add' && (
@@ -2354,14 +2351,14 @@ export default function App() {
                         <option value="">-- เลือกสินค้า --</option>
                         {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
                     </select>
-                    <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
+                     <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
                     <button onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
                 </div>
             </div>
         )}
 
         {mode === 'edit' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-200">
+           <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-200">
                 <h3 className="font-bold text-blue-800 mb-4">แก้ไขสต๊อก (แทนที่ค่าเดิมเพื่อแก้บัคข้อมูล)</h3>
                 <div className="flex flex-col sm:flex-row gap-4">
                     <input type="text" value={getProduct(selectedProduct)?.name || ''} disabled className="flex-1 p-3 bg-slate-100 border rounded-xl font-medium"/>
@@ -2369,7 +2366,7 @@ export default function App() {
                     <button onClick={() => handleUpdateStock(true)} disabled={isProcessing} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md">เซ็ตค่าใหม่</button>
                 </div>
             </div>
-        )}
+         )}
 
         {mode === 'return' && (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
@@ -2380,21 +2377,21 @@ export default function App() {
                 </div>
                 {returnItems.length > 0 && (
                     <div className="space-y-4">
-                        <table className="w-full text-left text-sm border-collapse">
+                         <table className="w-full text-left text-sm border-collapse">
                             <thead><tr className="bg-slate-50"><th className="p-3">สินค้า</th><th className="p-3">จำนวนที่ซื้อ</th><th className="p-3">จำนวนที่จะคืน</th></tr></thead>
                             <tbody>
-                                {returnItems.map((item, idx) => (
+                                 {returnItems.map((item, idx) => (
                                     <tr key={idx} className="border-b">
                                         <td className="p-3 font-medium">{getProduct(item.productId)?.name || 'Unknown'}</td>
                                         <td className="p-3 font-bold">{item.quantity}</td>
                                         <td className="p-3"><input type="number" max={item.quantity} min="0" value={item.returnQty} onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }} className="w-24 p-2 border rounded outline-none text-center focus:border-orange-500"/></td>
                                     </tr>
                                 ))}
-                            </tbody>
+                             </tbody>
                         </table>
                         <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
                     </div>
-                )}
+                 )}
             </div>
         )}
 
@@ -2406,27 +2403,32 @@ export default function App() {
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead><tr className="bg-slate-50/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
+                         <thead><tr className="bg-slate-50/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
                         <tbody className="text-sm">
                             {filteredAndSortedProducts.map((p, idx) => (
-                                <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
+                                 <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
                                     <td className="py-3 px-4 text-center font-bold text-slate-400">{idx+1}</td>
                                     <td className="py-3 px-4 font-medium text-slate-800">{p.name}</td>
                                     <td className="py-3 px-4 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(p.stock) <= 5 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>{p.stock}</span></td>
                                     {!isExecutiveView && canEditTab('stock') && (
                                         <td className="py-3 px-4 text-right">
-                                            <button onClick={() => {setSelectedProduct(p.id); setStockAmount(p.stock); setMode('edit');}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="แก้ไขแบบแทนที่ค่าเดิม"><Edit2 size={16}/></button>
+                                             <button onClick={() => {
+                                                 setSelectedProduct(p.id); 
+                                                 setStockAmount(p.stock); 
+                                                 setOriginalStock(p.stock); // เก็บค่าก่อนแก้ เพื่อคำนวณ diff
+                                                 setMode('edit');
+                                             }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="แก้ไขแบบแทนที่ค่าเดิม"><Edit2 size={16}/></button>
                                         </td>
-                                    )}
+                                     )}
                                 </tr>
                             ))}
-                            {filteredAndSortedProducts.length === 0 && (<tr><td colSpan="4" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูล</td></tr>)}
+                             {filteredAndSortedProducts.length === 0 && (<tr><td colSpan="4" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูล</td></tr>)}
                         </tbody>
                     </table>
                 </div>
             </div>
         )}
-      </div>
+       </div>
     );
   };
 
@@ -2456,7 +2458,6 @@ export default function App() {
       } catch (error) { alert("Error: " + error.message); }
       setIsProcessing(false);
     };
-
     const handleAdd = async () => {
       if (!editForm.username || !editForm.password) { alert('กรุณากรอกข้อมูลให้ครบ'); return; }
       if (users.find(u => u.username === editForm.username)) { alert('ชื่อนี้มีอยู่แล้ว'); return; }
@@ -2475,7 +2476,7 @@ export default function App() {
             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
             <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
           </div>
-          {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14}/><span>เพิ่มผู้ใช้</span></button>}
+           {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14}/><span>เพิ่มผู้ใช้</span></button>}
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[700px]">
@@ -2485,7 +2486,7 @@ export default function App() {
             <tbody className="text-xs md:text-sm">
               {isAdding && (
                 <tr className="bg-blue-50/60 align-top border-b border-blue-100">
-                  <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
+                   <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
                   <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} /></td>
                   <td className="p-3"><select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select></td>
                   <td className="p-3">
@@ -2527,22 +2528,22 @@ export default function App() {
                         </div>
                       )
                     ) : (u.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-50 border border-purple-100 px-2 py-1 rounded text-[9px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
+                      <div className="flex flex-wrap gap-1.5 mt-1">
                           <span className="bg-blue-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded">ขาย (POS)</span>
                           {u.permissions?.attendance && <span className="bg-indigo-50 text-indigo-600 border border-indigo-200 font-bold text-[9px] px-1.5 py-0.5 rounded">ลงเวลา</span>}
-                          {u.permissions?.dashboard && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">Dashboard</span>}
+                           {u.permissions?.dashboard && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">Dashboard</span>}
                           {u.permissions?.products && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">การจัดการสินค้า</span>}
                           {u.permissions?.stock && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">สต๊อกสินค้า</span>}
                           {u.permissions?.history && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">ประวัติการขาย</span>}
                         </div>
                       )
-                    )}
+                     )}
                   </td>
                   <td className="p-3 md:p-4 text-right space-x-1 whitespace-nowrap pt-4">
                     {isEditing === u.id ? (<><button onClick={() => handleSave(u.id)} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16}/></button><button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-500 hover:bg-slate-100 p-1.5 rounded"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role, permissions: u.permissions || defaultPermissions}); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบผู้ใช้นี้ออกจากระบบ?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-500 hover:bg-red-50 p-1.5 rounded ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={16}/></button></>)}
                   </td>
                 </tr>
-              ))}
+               ))}
             </tbody>
           </table>
         </div>
@@ -2569,7 +2570,7 @@ export default function App() {
         <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-[50] sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-2xl shadow-sm px-4 w-[200px] md:w-[250px]"/></div>
-            <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+             <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><LayoutDashboard size={18}/><span>Dashboard</span></button>
                <button onClick={() => setActiveTab('stock')} className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stock' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Boxes size={18}/><span>สต๊อกสินค้า</span></button>
             </div>
@@ -2621,7 +2622,7 @@ export default function App() {
         <header className="bg-white h-16 border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full">
           <div className="flex items-center space-x-3">
              <button 
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
                 className="p-2 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors hidden md:flex items-center justify-center border border-slate-200 active:scale-95"
                 title={isSidebarCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
              >
@@ -2630,12 +2631,12 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-3 ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center space-x-2 text-xs md:text-sm text-slate-700 py-1.5 px-3 rounded-full border border-slate-200 bg-slate-50">
-              <User size={14} className="text-blue-600"/>
+               <User size={14} className="text-blue-600"/>
               <span className="font-bold">{loggedInUser.username}</span>
               <span className="text-slate-400 font-medium text-[10px] md:text-xs uppercase ml-1 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-100">
                 ({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})
               </span>
-            </div>
+             </div>
             <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1.5 text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-lg transition-all text-xs font-bold" title="ออกจากระบบ"><LogOut size={16}/></button>
           </div>
         </header>
@@ -2644,7 +2645,7 @@ export default function App() {
           <div className="max-w-6xl mx-auto relative w-full">
             {activeTab === 'attendance' && canAccess('attendance') && <AttendanceView/>}
             {activeTab === 'employees' && canAccess('employees') && <EmployeeManagementView/>}
-            {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView/>}
+             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView/>}
             {activeTab === 'products' && canAccess('products') && <ProductsView/>}
             {activeTab === 'stock' && canAccess('stock') && <StockView/>}
             {activeTab === 'users' && canAccess('users') && <UsersManagementView/>}
