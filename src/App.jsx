@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, increment, setDoc, query, orderBy,
+  deleteDoc, doc, increment, setDoc, query, orderBy, limit,
   writeBatch, getDoc 
 } from "firebase/firestore";
 import { 
@@ -92,6 +92,7 @@ export default function App() {
   
   const [employees, setEmployees] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]); // ประวัติการทำรายการต่างๆ ในระบบ (ใช้แสดงในหน้าประวัติคลังสินค้า)
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -151,9 +152,13 @@ export default function App() {
       setAttendanceLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    const unsubscribeAuditLogs = onSnapshot(query(collection(db, "audit_logs"), orderBy("timestamp", "desc"), limit(500)), (snapshot) => {
+      setAuditLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Audit Logs Error:", error); });
+
     return () => { 
       clearTimeout(connectionTimeout); unsubscribeUsers(); unsubscribeProducts(); 
-      unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); 
+      unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs();
     };
   }, [isUsersLoaded, isLoading]);
 
@@ -2269,6 +2274,11 @@ export default function App() {
     const [selectedPanelProduct, setSelectedPanelProduct] = useState('');
     const [unboxQty, setUnboxQty] = useState(1);
     const [unboxRatio, setUnboxRatio] = useState('');
+
+    // สำหรับหน้าประวัติการทำรายการคลังสินค้า
+    const [historyActionFilter, setHistoryActionFilter] = useState('all');
+    const [historyFromDate, setHistoryFromDate] = useState('');
+    const [historyToDate, setHistoryToDate] = useState('');
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -2284,6 +2294,30 @@ export default function App() {
       });
       return result;
     }, [products, searchTerm, sortBy]);
+
+    const getStockActionMeta = (action) => {
+      switch (action) {
+        case 'ADD_STOCK': return { label: 'นำเข้าสินค้า', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        case 'OVERRIDE_STOCK': return { label: 'แก้ไขสต๊อก', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' };
+        case 'RETURN_STOCK': return { label: 'ลูกค้าคืนของ', badgeClass: 'bg-orange-50 text-orange-700 border-orange-200' };
+        case 'UNBOX_STOCK': return { label: 'แกะกล่อง', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' };
+        default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
+      }
+    };
+
+    const stockHistoryLogs = useMemo(() => {
+      const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK'];
+      return auditLogs
+        .filter(log => stockActions.includes(log.action))
+        .filter(log => historyActionFilter === 'all' || log.action === historyActionFilter)
+        .filter(log => {
+          if (!historyFromDate && !historyToDate) return true;
+          const d = getLocalISODate(log.timestamp);
+          if (historyFromDate && d < historyFromDate) return false;
+          if (historyToDate && d > historyToDate) return false;
+          return true;
+        });
+    }, [auditLogs, historyActionFilter, historyFromDate, historyToDate]);
     
     const handleUpdateStock = async (isAbsoluteOverride = false) => {
       if (!selectedProduct || !stockAmount || isNaN(stockAmount)) return;
@@ -2399,6 +2433,7 @@ export default function App() {
                         <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
                         <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
                         <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
+                        <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
                      </>
                 )}
                 {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
@@ -2502,6 +2537,57 @@ export default function App() {
                         <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
                     </div>
                  )}
+            </div>
+        )}
+
+        {mode === 'history' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-indigo-50/30">
+                    <h3 className="font-bold text-indigo-800 mb-4">ประวัติการทำรายการคลังสินค้า</h3>
+                    <div className="flex flex-wrap gap-3">
+                        <select value={historyActionFilter} onChange={e => setHistoryActionFilter(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white font-medium">
+                            <option value="all">ทุกประเภทรายการ</option>
+                            <option value="ADD_STOCK">นำเข้าสินค้า</option>
+                            <option value="OVERRIDE_STOCK">แก้ไขสต๊อก</option>
+                            <option value="RETURN_STOCK">ลูกค้าคืนของ</option>
+                            <option value="UNBOX_STOCK">แกะกล่อง</option>
+                        </select>
+                        <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1">
+                            <input type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
+                            <span className="text-slate-400 text-xs font-bold">-</span>
+                            <input type="date" value={historyToDate} onChange={e => setHistoryToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
+                        </div>
+                        {(historyActionFilter !== 'all' || historyFromDate || historyToDate) && (
+                            <button onClick={() => { setHistoryActionFilter('all'); setHistoryFromDate(''); setHistoryToDate(''); }} className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition">ล้างตัวกรอง</button>
+                        )}
+                    </div>
+                </div>
+                <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                    {stockHistoryLogs.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400">
+                            <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
+                            <p className="font-medium text-sm">ไม่พบประวัติการทำรายการตามเงื่อนไขที่เลือก</p>
+                        </div>
+                    ) : (
+                        stockHistoryLogs.map(log => {
+                            const meta = getStockActionMeta(log.action);
+                            let dateStr = '-';
+                            try { const d = new Date(log.timestamp); if (!isNaN(d.getTime())) dateStr = d.toLocaleString('th-TH'); } catch(e) {}
+                            return (
+                                <div key={log.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+                                    <span className={`shrink-0 w-fit text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg border ${meta.badgeClass}`}>{meta.label}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-slate-800 font-medium break-words">{log.details || '-'}</p>
+                                        <p className="text-[10px] md:text-xs text-slate-400 mt-1 flex items-center flex-wrap gap-x-3">
+                                            <span className="flex items-center"><Clock size={11} className="mr-1"/>{dateStr}</span>
+                                            <span className="flex items-center"><User size={11} className="mr-1"/>{log.user || '-'}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
         )}
 
