@@ -2442,6 +2442,8 @@ export default function App() {
           productId: p.id,
           productName: p.name,
           status: checkResults[p.id]?.status || 'match',
+          systemStock: Number(p.stock) || 0,
+          actualCount: (checkResults[p.id]?.status === 'mismatch' && checkResults[p.id]?.actualCount !== '' && checkResults[p.id]?.actualCount !== undefined) ? Number(checkResults[p.id].actualCount) : null,
           note: checkResults[p.id]?.note || ''
         }));
         const mismatchCount = items.filter(i => i.status === 'mismatch').length;
@@ -2777,7 +2779,10 @@ export default function App() {
                                             <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'mismatch'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'mismatch' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✕ ไม่ตรง</button>
                                         </div>
                                         {r?.status === 'mismatch' && (
-                                            <input type="text" placeholder="นับได้จริงเท่าไหร่ / หมายเหตุ..." value={r?.note || ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], note: e.target.value}}))} className="w-full sm:w-56 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500"/>
+                                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                                <input type="number" placeholder="นับได้จริง..." value={r?.actualCount ?? ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], actualCount: e.target.value}}))} className="w-full sm:w-28 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500 text-center font-bold"/>
+                                                <input type="text" placeholder="หมายเหตุ (ถ้ามี)..." value={r?.note || ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], note: e.target.value}}))} className="w-full sm:w-48 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500"/>
+                                            </div>
                                         )}
                                     </div>
                                 );
@@ -2831,10 +2836,18 @@ export default function App() {
                                                     <p className="p-3 text-xs text-slate-400 text-center">ไม่มีรายละเอียดรายการ</p>
                                                 ) : (
                                                     check.items.map((item, idx) => (
-                                                        <div key={idx} className="p-3 flex items-center justify-between gap-3">
-                                                            <span className="text-sm font-medium text-slate-700">{item.productName}</span>
-                                                            <div className="flex items-center gap-2">
-                                                                {item.note && <span className="text-xs text-slate-400 italic">{item.note}</span>}
+                                                        <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="text-sm font-medium text-slate-700">{item.productName}</span>
+                                                                {item.note && <p className="text-xs text-slate-400 italic mt-0.5">{item.note}</p>}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                {item.status === 'mismatch' && (item.systemStock !== undefined || (item.actualCount !== undefined && item.actualCount !== null)) && (
+                                                                    <span className="text-xs text-slate-500 whitespace-nowrap">
+                                                                        {item.systemStock !== undefined && <>ระบบ: <b className="text-slate-700">{item.systemStock}</b></>}
+                                                                        {item.actualCount !== undefined && item.actualCount !== null && <> · นับได้จริง: <b className="text-red-600">{item.actualCount}</b></>}
+                                                                    </span>
+                                                                )}
                                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border shrink-0 ${item.status === 'mismatch' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
                                                                     {item.status === 'mismatch' ? '✕ ไม่ตรง' : '✓ ตรง'}
                                                                 </span>
