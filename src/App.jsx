@@ -2266,6 +2266,13 @@ export default function App() {
     const [selectedProduct, setSelectedProduct] = useState('');
     const [stockAmount, setStockAmount] = useState('');
     const [originalStock, setOriginalStock] = useState(0); // เพิ่ม State สำหรับเก็บค่า stock เดิมก่อนแก้
+
+    // สำหรับค้นหาสินค้าแบบพิมพ์ค้นหา และ popup ยืนยันตอนนำเข้าสินค้า
+    const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
+    const [importProductSearchTerm, setImportProductSearchTerm] = useState('');
+    const importDropdownRef = useRef(null);
+    const [showImportConfirm, setShowImportConfirm] = useState(false);
+
     const [returnOrderId, setReturnOrderId] = useState('');
     const [returnItems, setReturnItems] = useState([]);
 
@@ -2283,6 +2290,18 @@ export default function App() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('name_asc');
+
+    useEffect(() => {
+      const handleClickOutside = (event) => { if (importDropdownRef.current && !importDropdownRef.current.contains(event.target)) setIsImportDropdownOpen(false); };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredImportProducts = useMemo(() => {
+      if (!importProductSearchTerm) return products;
+      return products.filter(p => String(p?.name || '').toLowerCase().includes(String(importProductSearchTerm || '').toLowerCase()));
+    }, [products, importProductSearchTerm]);
+
     const filteredAndSortedProducts = useMemo(() => {
       let result = [...products];
       if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -2336,8 +2355,8 @@ export default function App() {
             batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
         }
         await batch.commit();
-        setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0);
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+        setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0); setShowImportConfirm(false);
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); setShowImportConfirm(false); }
       setIsProcessing(false);
     };
 
@@ -2425,6 +2444,42 @@ export default function App() {
 
     return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
+        {showImportConfirm && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex justify-between items-center">
+                        <h3 className="font-bold text-lg flex items-center"><ArrowDownToLine size={18} className="mr-2"/> ยืนยันการนำเข้าสินค้า</h3>
+                        <button onClick={() => setShowImportConfirm(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                    </div>
+                    <div className="p-5 space-y-4 bg-slate-50/50">
+                        <div>
+                            <span className="text-xs font-bold text-slate-500 block mb-1 uppercase tracking-wide">สินค้า</span>
+                            <span className="font-black text-slate-800 text-base">{getProduct(selectedProduct)?.name || '-'}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 bg-white p-4 rounded-2xl border border-slate-200 items-center">
+                            <div className="text-center">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">คงเหลือเดิม</span>
+                                <span className="text-xl font-black text-slate-700">{Number(getProduct(selectedProduct)?.stock) || 0}</span>
+                            </div>
+                            <div className="text-center flex flex-col items-center justify-center text-emerald-600">
+                                <Plus size={18}/>
+                                <span className="text-lg font-black">{Number(stockAmount) || 0}</span>
+                            </div>
+                            <div className="text-center">
+                                <span className="text-[10px] font-bold text-emerald-600 uppercase block mb-1">คงเหลือใหม่</span>
+                                <span className="text-xl font-black text-emerald-700">{(Number(getProduct(selectedProduct)?.stock) || 0) + (Number(stockAmount) || 0)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 bg-white border-t border-slate-100 flex space-x-3">
+                        <button type="button" onClick={() => setShowImportConfirm(false)} disabled={isProcessing} className="flex-1 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition">ยกเลิก</button>
+                        <button type="button" onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center">
+                            {isProcessing ? 'กำลังบันทึก...' : <><CheckCircle2 size={16} className="mr-1.5"/> ยืนยันนำเข้า</>}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
             <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
             <div className="flex flex-wrap gap-2">
@@ -2445,12 +2500,45 @@ export default function App() {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-200">
                 <h3 className="font-bold text-emerald-800 mb-4">นำเข้าสินค้า (บวกเพิ่มจากสต๊อกเดิม)</h3>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <select value={selectedProduct} onChange={(e)=>setSelectedProduct(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-emerald-500 text-sm font-medium">
-                        <option value="">-- เลือกสินค้า --</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
-                    </select>
+                    <div className="relative flex-1" ref={importDropdownRef}>
+                        <div onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)} className="w-full p-3 border border-slate-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all bg-white hover:border-emerald-300">
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                               <Search size={16} className={`shrink-0 transition-colors ${isImportDropdownOpen ? 'text-emerald-500' : 'text-slate-400'}`}/>
+                               <span className={`truncate ${selectedProduct ? 'text-slate-800 font-medium' : 'text-slate-400 font-medium'}`}>
+                                  {selectedProduct ? `${getProduct(selectedProduct)?.name} (คงเหลือ: ${getProduct(selectedProduct)?.stock})` : '-- เลือกสินค้า / พิมพ์ค้นหา --'}
+                               </span>
+                            </div>
+                            <ChevronDown size={16} className={`shrink-0 transition-transform duration-300 ${isImportDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`}/>
+                        </div>
+                        {isImportDropdownOpen && (
+                            <div className="absolute w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-[280px] flex flex-col top-full left-0 z-[100] animate-in fade-in overflow-hidden">
+                                <div className="p-2 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                                        <input type="text" className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={importProductSearchTerm} onChange={(e) => setImportProductSearchTerm(e.target.value)} autoFocus />
+                                    </div>
+                                </div>
+                                <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white">
+                                    {filteredImportProducts.length === 0 ? (
+                                        <li className="px-3 py-4 text-center text-slate-400 text-sm">ไม่พบสินค้าที่ค้นหา</li>
+                                    ) : (
+                                        filteredImportProducts.map(p => (
+                                            <li key={p.id} onClick={() => { setSelectedProduct(p.id); setIsImportDropdownOpen(false); setImportProductSearchTerm(''); }} className="px-3 py-2 rounded-lg text-sm flex justify-between items-center cursor-pointer transition-all bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100">
+                                                <span className="font-bold text-sm text-slate-800">{p.name}</span>
+                                                <span className="text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border bg-emerald-50 text-emerald-700 border-emerald-200">คงเหลือ {p.stock}</span>
+                                            </li>
+                                        ))
+                                    )}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
                      <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
-                    <button onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
+                    <button onClick={() => {
+                        if (!selectedProduct) { alert('กรุณาเลือกสินค้าที่จะนำเข้า'); return; }
+                        if (!stockAmount || isNaN(stockAmount) || Number(stockAmount) <= 0) { alert('กรุณาระบุจำนวนที่นำเข้าให้ถูกต้อง'); return; }
+                        setShowImportConfirm(true);
+                    }} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
                 </div>
             </div>
         )}
