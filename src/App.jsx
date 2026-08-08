@@ -2842,9 +2842,9 @@ export default function App() {
                                                                 {item.note && <p className="text-xs text-slate-400 italic mt-0.5">{item.note}</p>}
                                                             </div>
                                                             <div className="flex items-center gap-2 shrink-0">
-                                                                {item.status === 'mismatch' && (item.systemStock !== undefined || (item.actualCount !== undefined && item.actualCount !== null)) && (
+                                                                {(item.systemStock !== undefined || (item.actualCount !== undefined && item.actualCount !== null)) && (
                                                                     <span className="text-xs text-slate-500 whitespace-nowrap">
-                                                                        {item.systemStock !== undefined && <>ระบบ: <b className="text-slate-700">{item.systemStock}</b></>}
+                                                                        {item.systemStock !== undefined && <>{item.status === 'mismatch' ? 'ระบบ' : 'คงเหลือ'}: <b className="text-slate-700">{item.systemStock}</b></>}
                                                                         {item.actualCount !== undefined && item.actualCount !== null && <> · นับได้จริง: <b className="text-red-600">{item.actualCount}</b></>}
                                                                     </span>
                                                                 )}
