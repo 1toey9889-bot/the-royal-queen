@@ -2263,6 +2263,12 @@ export default function App() {
     const [originalStock, setOriginalStock] = useState(0); // เพิ่ม State สำหรับเก็บค่า stock เดิมก่อนแก้
     const [returnOrderId, setReturnOrderId] = useState('');
     const [returnItems, setReturnItems] = useState([]);
+
+    // สำหรับฟีเจอร์แกะกล่อง (แปลงหน่วยจากกล่องใหญ่ -> แผงย่อย)
+    const [selectedBoxProduct, setSelectedBoxProduct] = useState('');
+    const [selectedPanelProduct, setSelectedPanelProduct] = useState('');
+    const [unboxQty, setUnboxQty] = useState(1);
+    const [unboxRatio, setUnboxRatio] = useState('');
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -2341,6 +2347,37 @@ export default function App() {
         setIsProcessing(false);
     };
 
+    const handleUnbox = async () => {
+        if (!selectedBoxProduct || !selectedPanelProduct) { alert('กรุณาเลือกสินค้าต้นทางและปลายทางให้ครบ'); return; }
+        if (selectedBoxProduct === selectedPanelProduct) { alert('สินค้าต้นทางและปลายทางต้องไม่ใช่รายการเดียวกัน'); return; }
+        const boxQty = Number(unboxQty);
+        const ratio = Number(unboxRatio);
+        if (!boxQty || boxQty < 1) { alert('กรุณาระบุจำนวนกล่องที่จะแกะให้ถูกต้อง'); return; }
+        if (!ratio || ratio < 1) { alert('กรุณาระบุจำนวนแผงต่อกล่องให้ถูกต้อง'); return; }
+
+        const boxProductData = getProduct(selectedBoxProduct);
+        const currentBoxStock = Number(boxProductData?.stock) || 0;
+        if (currentBoxStock < boxQty) { alert(`สต๊อกกล่องไม่พอ (คงเหลือ ${currentBoxStock} กล่อง)`); return; }
+
+        setIsProcessing(true);
+        try {
+            const panelQtyToAdd = boxQty * ratio;
+            const boxRef = doc(db, "products", selectedBoxProduct);
+            const panelRef = doc(db, "products", selectedPanelProduct);
+            const panelProductData = getProduct(selectedPanelProduct);
+
+            const batch = writeBatch(db);
+            batch.update(boxRef, { stock: increment(-boxQty) });
+            batch.update(panelRef, { stock: increment(panelQtyToAdd) });
+            batch.set(doc(collection(db, "audit_logs")), { action: "UNBOX_STOCK", user: loggedInUser?.username, details: `แกะกล่อง "${boxProductData?.name || ''}" จำนวน ${boxQty} กล่อง แปลงเป็น "${panelProductData?.name || ''}" จำนวน ${panelQtyToAdd} แผง (อัตรา ${ratio} แผง/กล่อง)`, timestamp: new Date().toISOString() });
+            await batch.commit();
+
+            alert('แกะกล่องสำเร็จ');
+            setMode('view'); setSelectedBoxProduct(''); setSelectedPanelProduct(''); setUnboxQty(1); setUnboxRatio('');
+        } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+        setIsProcessing(false);
+    };
+
     const exportStockReport = () => {
         if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
         const csvRows = [];
@@ -2360,6 +2397,7 @@ export default function App() {
                 {canEditTab('stock') && !isExecutiveView && (
                    <>
                         <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
+                        <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
                         <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
                      </>
                 )}
@@ -2379,6 +2417,53 @@ export default function App() {
                      <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
                     <button onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
                 </div>
+            </div>
+        )}
+
+        {mode === 'unbox' && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200">
+                <h3 className="font-bold text-purple-800 mb-4">แกะกล่อง (แปลงหน่วยจากกล่องใหญ่เป็นแผงย่อย)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าต้นทาง (หน่วยกล่อง)</label>
+                        <select value={selectedBoxProduct} onChange={(e) => {
+                            const boxId = e.target.value;
+                            setSelectedBoxProduct(boxId);
+                            const boxP = products.find(p => p.id === boxId);
+                            if (boxP && boxP.name && boxP.name.includes('ยกกล่อง')) {
+                                const guessName = boxP.name.replace('ยกกล่อง', 'แผง').trim();
+                                const guess = products.find(p => p.name && p.name.trim() === guessName);
+                                if (guess) setSelectedPanelProduct(guess.id);
+                            }
+                        }} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
+                            <option value="">-- เลือกสินค้า --</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าปลายทาง (หน่วยแผง)</label>
+                        <select value={selectedPanelProduct} onChange={(e) => setSelectedPanelProduct(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
+                            <option value="">-- เลือกสินค้า --</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนกล่องที่จะแกะ</label>
+                        <input type="number" min="1" value={unboxQty} onChange={(e) => setUnboxQty(Math.max(1, parseInt(e.target.value) || 1))} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนแผงต่อ 1 กล่อง</label>
+                        <input type="number" min="1" placeholder="เช่น 50" value={unboxRatio} onChange={(e) => setUnboxRatio(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
+                    </div>
+                </div>
+                {selectedBoxProduct && selectedPanelProduct && unboxRatio && (
+                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-4 text-sm text-purple-800 font-bold">
+                        จะตัดสต๊อก "{getProduct(selectedBoxProduct)?.name}" ออก {unboxQty} กล่อง และเพิ่มสต๊อก "{getProduct(selectedPanelProduct)?.name}" อีก {Number(unboxQty) * Number(unboxRatio)} แผง
+                    </div>
+                )}
+                <button onClick={handleUnbox} disabled={isProcessing} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl shadow-md hover:bg-purple-700 transition-colors">ยืนยันแกะกล่อง</button>
             </div>
         )}
 
