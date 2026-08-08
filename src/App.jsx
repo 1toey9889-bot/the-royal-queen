@@ -174,9 +174,8 @@ export default function App() {
         const employeeData = employees.find(e => e.userId === updatedUser.id);
         setLoggedInUser({ ...updatedUser, employeeData });
 
-        // ยกเว้นให้เข้าแท็บสต๊อกได้ ถ้าวันนี้ถูกมอบหมายให้เช็คสต๊อกและยังไม่เสร็จ (แม้ไม่มีสิทธิ์ stock ปกติ)
-        const todayCheckEntry = stockChecks.find(c => c.id === getLocalISODate());
-        const hasStockCheckBypass = activeTab === 'stock' && !!(todayCheckEntry && !todayCheckEntry.completed && todayCheckEntry.assignedEmployeeId === employeeData?.id);
+        // ยกเว้นให้เข้าแท็บสต๊อกได้ ถ้าวันนี้ถูก Admin มอบหมายให้เช็คสต๊อกและยังไม่เสร็จ (แม้ไม่มีสิทธิ์ stock ปกติ)
+        const hasStockCheckBypass = activeTab === 'stock' && isStockCheckPendingFor(employeeData?.id);
         
         if (activeTab !== 'sales' && activeTab !== 'attendance' && !hasStockCheckBypass && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
           setActiveTab('sales');
@@ -190,11 +189,8 @@ export default function App() {
     if (!loggedInUser) return false;
     if (loggedInUser.role === 'admin' || tabName === 'sales') return true;
     if (tabName === 'employees') return loggedInUser.role === 'admin';
-    if (tabName === 'stock') {
-      // ยกเว้นให้เข้าถึงได้ ถ้าวันนี้ถูกมอบหมายให้เช็คสต๊อกและยังไม่เสร็จ
-      const todayCheckEntry = stockChecks.find(c => c.id === getLocalISODate());
-      if (todayCheckEntry && !todayCheckEntry.completed && todayCheckEntry.assignedEmployeeId === loggedInUser.employeeData?.id) return true;
-    }
+    // ยกเว้นให้เข้าถึงสต๊อกได้ ถ้าวันนี้ถูก Admin มอบหมายให้เช็คสต๊อกและยังไม่เสร็จ
+    if (tabName === 'stock' && isStockCheckPendingFor(loggedInUser.employeeData?.id)) return true;
     return !!loggedInUser.permissions?.[tabName]; 
   };
 
@@ -224,6 +220,14 @@ export default function App() {
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
       return d.toISOString().split('T')[0];
     } catch (e) { return new Date().toISOString().split('T')[0]; }
+  };
+
+  // เช็คว่าพนักงานคนนี้ถูก Admin มอบหมายให้เช็คสต๊อกวันที่ระบุ (ค่าเริ่มต้น = วันนี้) และยังไม่เสร็จหรือไม่
+  const isStockCheckPendingFor = (employeeId, dateStr = getLocalISODate()) => {
+    if (!employeeId) return false;
+    const check = stockChecks.find(c => c.id === dateStr);
+    if (!check || check.assignedEmployeeId !== employeeId) return false;
+    return !check.completed;
   };
 
   const downloadMobileSafeCSV = (csvString, filename) => {
@@ -384,8 +388,7 @@ export default function App() {
                setTimeout(() => setMessage({text:'', type:''}), 5000);
                return;
           }
-          const todayCheck = stockChecks.find(c => c.id === todayStr);
-          if (todayCheck && !todayCheck.completed && todayCheck.assignedEmployeeId === loggedInUser.employeeData.id) {
+          if (isStockCheckPendingFor(loggedInUser.employeeData.id)) {
                setMessage({ text: '⚠️ วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก กรุณาไปที่เมนู "สต๊อกสินค้า" เพื่อเช็คให้เสร็จก่อนออกงาน', type: 'error' });
                setTimeout(() => setMessage({text:'', type:''}), 6000);
                return;
@@ -635,8 +638,7 @@ export default function App() {
     const isStrt = uiLogs.some(l => l.type === 'start_live');
     const isChkout = uiLogs.some(l => l.type === 'checkout');
 
-    const todayStockCheckUI = stockChecks.find(c => c.id === todayStrUI) || null;
-    const isMyStockCheckPending = !!(todayStockCheckUI && !todayStockCheckUI.completed && todayStockCheckUI.assignedEmployeeId === loggedInUser?.employeeData?.id);
+    const isMyStockCheckPending = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
@@ -2317,8 +2319,12 @@ export default function App() {
     const [historyFromDate, setHistoryFromDate] = useState('');
     const [historyToDate, setHistoryToDate] = useState('');
 
-    // สำหรับระบบเช็คสต๊อกประจำวัน (Admin มอบหมาย + พนักงานติ๊กเช็ค)
+    // สำหรับระบบมอบหมายเช็คสต๊อก (Admin เลือกวันที่ + พนักงาน มอบหมายล่วงหน้าได้)
+    const [assignDate, setAssignDate] = useState(getLocalISODate());
     const [assignEmployeeId, setAssignEmployeeId] = useState('');
+    const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
+
+    // สำหรับระบบเช็คสต๊อกประจำวัน (พนักงานที่ Admin มอบหมายเป็นผู้เช็ค)
     const [checkResults, setCheckResults] = useState({}); // { [productId]: { status: 'match'|'mismatch', note } }
     
     const [isProcessing, setIsProcessing] = useState(false);
@@ -2377,25 +2383,47 @@ export default function App() {
     // สถานะเช็คสต๊อกของวันนี้ (ใครถูกมอบหมาย / เช็คเสร็จหรือยัง)
     const todayStrForCheck = getLocalISODate();
     const todayStockCheck = stockChecks.find(c => c.id === todayStrForCheck) || null;
-    const isMyAssignedCheckToday = !!(todayStockCheck && !todayStockCheck.completed && todayStockCheck.assignedEmployeeId === loggedInUser?.employeeData?.id);
+    const isMyAssignedCheckToday = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
+    const isTodayCheckCurrentlyValid = !!todayStockCheck?.completed;
+
+    // เลื่อนวันที่ไปข้างหน้า N วัน (คำนวณจากตัวเลข ปี/เดือน/วัน ตรงๆ กันปัญหา timezone)
+    const addDaysToDateStr = (dateStr, days) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + days);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    };
+
+    // ตารางมอบหมายเช็คสต๊อก 14 วันข้างหน้า (สำหรับให้ Admin ดูภาพรวมและมอบหมายล่วงหน้า)
+    const upcomingScheduleDays = useMemo(() => {
+      const days = [];
+      for (let i = 0; i < 14; i++) {
+        const d = addDaysToDateStr(todayStrForCheck, i);
+        const check = stockChecks.find(c => c.id === d);
+        days.push({ date: d, assignedEmployeeName: check?.assignedEmployeeName || null, completed: !!check?.completed });
+      }
+      return days;
+    }, [stockChecks, todayStrForCheck]);
 
     const handleAssignStockCheck = async () => {
-      if (!assignEmployeeId) return;
+      if (!assignEmployeeId || !assignDate) return;
       setIsProcessing(true);
       try {
         const emp = employees.find(e => e.id === assignEmployeeId);
         if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
-        await setDoc(doc(db, "stock_checks", todayStrForCheck), {
-          date: todayStrForCheck,
+        await setDoc(doc(db, "stock_checks", assignDate), {
+          date: assignDate,
           assignedEmployeeId: emp.id,
           assignedEmployeeName: emp.fullName,
           assignedByUsername: loggedInUser?.username || 'unknown',
           assignedAt: new Date().toISOString(),
           completed: false
         }, { merge: true });
-        await addDoc(collection(db, "audit_logs"), { action: "ASSIGN_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `มอบหมายให้ ${emp.fullName} เช็คสต๊อกวันที่ ${todayStrForCheck}`, timestamp: new Date().toISOString() });
-        alert('บันทึกมอบหมายเรียบร้อย');
-        setMode('view'); setAssignEmployeeId('');
+        await addDoc(collection(db, "audit_logs"), { action: "ASSIGN_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `มอบหมายให้ ${emp.fullName} เช็คสต๊อกวันที่ ${assignDate}`, timestamp: new Date().toISOString() });
+        setAssignSuccessMsg(`มอบหมาย ${emp.fullName} วันที่ ${assignDate} เรียบร้อย`);
+        setTimeout(() => setAssignSuccessMsg(''), 3000);
+        setAssignEmployeeId('');
+        setAssignDate(prev => addDaysToDateStr(prev, 1));
       } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
       setIsProcessing(false);
     };
@@ -2415,6 +2443,7 @@ export default function App() {
           completed: true,
           completedAt: new Date().toISOString(),
           completedByUsername: loggedInUser?.username || 'unknown',
+          checkerEmployeeName: todayStockCheck?.assignedEmployeeName || loggedInUser?.employeeData?.fullName || '',
           items, mismatchCount
         }, { merge: true });
         await addDoc(collection(db, "audit_logs"), { action: "COMPLETE_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `เช็คสต๊อกประจำวัน ${todayStrForCheck} เสร็จสิ้น (ไม่ตรง ${mismatchCount} รายการ)`, timestamp: new Date().toISOString() });
@@ -2581,7 +2610,7 @@ export default function App() {
                     <button onClick={() => { setCheckResults({}); setMode('check'); }} className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-lg shadow flex items-center ${isMyAssignedCheckToday ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}><CheckCircle2 size={16} className="mr-1"/> เช็คสต๊อกวันนี้{isMyAssignedCheckToday ? ' ⚠️' : ''}</button>
                 )}
                 {!isExecutiveView && loggedInUser?.role === 'admin' && (
-                    <button onClick={() => setMode('assign_check')} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
+                    <button onClick={() => { setAssignDate(getLocalISODate()); setAssignEmployeeId(''); setMode('assign_check'); }} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
                 )}
                 {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
                 {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
@@ -2637,27 +2666,62 @@ export default function App() {
 
         {mode === 'assign_check' && (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
-                <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อกประจำวันนี้</h3>
-                <p className="text-xs text-slate-500 mb-4">วันที่ {new Date().toLocaleDateString('th-TH')} — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้</p>
-                {todayStockCheck?.assignedEmployeeId && (
-                    <div className={`mb-4 p-3 rounded-xl border text-sm font-bold flex items-center ${todayStockCheck.completed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                        {todayStockCheck.completed ? <CheckCircle2 size={16} className="mr-2 shrink-0"/> : <AlertCircle size={16} className="mr-2 shrink-0"/>}
-                        วันนี้มอบหมายให้ {todayStockCheck.assignedEmployeeName} — {todayStockCheck.completed ? 'เช็คสต๊อกเสร็จแล้ว' : 'ยังไม่ได้เช็คสต๊อก'}
+                <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อก</h3>
+                <p className="text-xs text-slate-500 mb-4">เลือกวันที่และพนักงาน มอบหมายล่วงหน้าได้หลายวัน — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้ในวันนั้น</p>
+
+                {assignSuccessMsg && (
+                    <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-700 flex items-center">
+                        <CheckCircle2 size={16} className="mr-2 shrink-0"/> {assignSuccessMsg}
                     </div>
                 )}
+
+                {(() => {
+                    const existingCheck = stockChecks.find(c => c.id === assignDate);
+                    return existingCheck?.assignedEmployeeId ? (
+                        <div className={`mb-4 p-3 rounded-xl border text-sm font-bold flex items-center ${existingCheck.completed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                            {existingCheck.completed ? <CheckCircle2 size={16} className="mr-2 shrink-0"/> : <AlertCircle size={16} className="mr-2 shrink-0"/>}
+                            วันที่ {assignDate} มอบหมายให้ {existingCheck.assignedEmployeeName} — {existingCheck.completed ? 'เช็คสต๊อกเสร็จแล้ว' : 'ยังไม่ได้เช็คสต๊อก'}
+                        </div>
+                    ) : null;
+                })()}
+
                 <div className="flex flex-col sm:flex-row gap-4">
+                    <input type="date" value={assignDate} min={getLocalISODate()} onChange={e => setAssignDate(e.target.value)} className="p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white"/>
                     <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white">
                         <option value="">-- เลือกพนักงาน --</option>
                         {employees.filter(emp => users.some(u => u.id === emp.userId)).map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
                     </select>
                     <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
                 </div>
+
+                <div className="mt-6 pt-5 border-t border-slate-100">
+                    <h4 className="text-sm font-bold text-slate-700 mb-3">ตารางเช็คสต๊อก 14 วันข้างหน้า (คลิกวันที่เพื่อแก้ไข)</h4>
+                    <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
+                        {upcomingScheduleDays.map(day => {
+                            const dObj = new Date(day.date + 'T12:00:00');
+                            const label = dObj.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+                            const isToday = day.date === todayStrForCheck;
+                            return (
+                                <div key={day.date} onClick={() => { setAssignSuccessMsg(''); setAssignDate(day.date); }} className={`flex items-center justify-between px-4 py-2.5 rounded-xl border cursor-pointer transition ${assignDate === day.date ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                                    <span className={`text-sm font-bold ${isToday ? 'text-amber-700' : 'text-slate-600'}`}>{label}{isToday ? ' (วันนี้)' : ''}</span>
+                                    {day.assignedEmployeeName ? (
+                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${day.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                            {day.assignedEmployeeName}{day.completed ? ' ✓' : ''}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-400 font-medium">ยังไม่มอบหมาย</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         )}
 
         {mode === 'check' && (
             <div className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
-                {todayStockCheck?.completed ? (
+                {isTodayCheckCurrentlyValid ? (
                     <div className="p-8 text-center">
                         <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3"/>
                         <h3 className="font-bold text-slate-800 text-lg mb-1">เช็คสต๊อกวันนี้เสร็จแล้ว</h3>
@@ -2671,8 +2735,10 @@ export default function App() {
                     <>
                         <div className="p-5 border-b border-slate-100 bg-teal-50/30">
                             <h3 className="font-bold text-teal-800 mb-1">เช็คสต๊อกประจำวันที่ {new Date().toLocaleDateString('th-TH')}</h3>
-                            {todayStockCheck?.assignedEmployeeName && (
+                            {todayStockCheck?.assignedEmployeeName ? (
                                 <p className="text-xs text-slate-500 font-medium">ผู้รับผิดชอบวันนี้: {todayStockCheck.assignedEmployeeName}</p>
+                            ) : (
+                                <p className="text-xs text-slate-400 font-medium">วันนี้ยังไม่มีการมอบหมายผู้เช็ค — เช็คล่วงหน้าได้ตามปกติ</p>
                             )}
                             <div className="mt-3 flex items-center gap-3">
                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
