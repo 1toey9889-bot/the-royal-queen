@@ -1760,6 +1760,7 @@ export default function App() {
     const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
     const [isEditingGroup, setIsEditingGroup] = useState(null);
     const [groupEditTotal, setGroupEditTotal] = useState('');
+    const [groupEditStore, setGroupEditStore] = useState(''); // เก็บค่าร้านค้าที่แก้ไข กรณีพนักงานลงร้านผิด
     
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -1869,19 +1870,37 @@ export default function App() {
     const handleSaveGroupEdit = async (group) => {
       setIsProcessing(true);
       try {
+        // ตรวจสอบว่ามีการแก้ไขร้านค้าหรือไม่ (กรณีพนักงานลงร้านผิด)
+        const oldStore = group.store || group.items[0]?.store || '';
+        const newStore = groupEditStore || oldStore;
+        const storeChanged = newStore !== oldStore;
+
         const newFinalTotal = Number(groupEditTotal); const oldTotal = group.totalOrderValue;
-        if (newFinalTotal === oldTotal) { setIsEditingGroup(null); setIsProcessing(false); return; }
+        const totalChanged = newFinalTotal !== oldTotal;
+
+        if (!storeChanged && !totalChanged) { setIsEditingGroup(null); setIsProcessing(false); return; }
+
         const ratio = oldTotal > 0 ? (newFinalTotal / oldTotal) : 1; let remainingTotal = newFinalTotal;
 
         const batch = writeBatch(db);
         for (let i = 0; i < group.items.length; i++) {
           const sale = group.items[i];
           const isLastItem = i === group.items.length - 1; const baseItemTotal = Number(sale.total);
-          let rowTotal = 0;
-          if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
-          const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
-          batch.update(doc(db, "sales", sale.id), { total: rowTotal, unitPrice: unitPrice });
+          const updateData = {};
+          if (totalChanged) {
+            let rowTotal = 0;
+            if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
+            const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
+            updateData.total = rowTotal; updateData.unitPrice = unitPrice;
+          }
+          if (storeChanged) { updateData.store = newStore; }
+          batch.update(doc(db, "sales", sale.id), updateData);
         }
+
+        if (storeChanged) {
+          batch.set(doc(collection(db, "audit_logs")), { action: "EDIT_ORDER_STORE", user: loggedInUser?.username || 'unknown', details: `แก้ไขร้านค้าออเดอร์ ${group.orderId || group.items[0]?.orderId || '-'} จาก ${oldStore || '-'} เป็น ${newStore}`, timestamp: new Date().toISOString() });
+        }
+
         await batch.commit();
         setIsEditingGroup(null);
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
@@ -1978,9 +1997,15 @@ export default function App() {
                       <span className="text-slate-600 text-xs md:text-sm font-bold flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 shadow-sm">
                         <Clock size={14} className="mr-1.5 text-slate-400"/> {timeString} น.
                       </span>
-                      <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
-                        <Store size={12} className="inline mr-1"/> {mainStore}
-                      </span>
+                      {isEditingGroup === group.id ? (
+                        <select value={groupEditStore} onChange={e => setGroupEditStore(e.target.value)} className="text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border-2 border-blue-400 bg-white text-blue-700 outline-none focus:border-blue-600 cursor-pointer">
+                          {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
+                          <Store size={12} className="inline mr-1"/> {mainStore}
+                        </span>
+                      )}
                       <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
                         <User size={12} className="mr-1"/> {group.soldBy || group.items[0]?.soldBy || '-'}
                       </span>
@@ -1991,7 +2016,7 @@ export default function App() {
                          {isEditingGroup === group.id ? (
                           <>
                             <button onClick={() => handleSaveGroupEdit(group)} disabled={isProcessing} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
-                                <Save size={14} className="mr-1"/> บันทึกราคา
+                                <Save size={14} className="mr-1"/> บันทึกการแก้ไข
                             </button>
                             <button onClick={() => setIsEditingGroup(null)} disabled={isProcessing} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
                                <X size={14} className="mr-1"/> ยกเลิก
@@ -1999,8 +2024,8 @@ export default function App() {
                           </>
                         ) : (
                           <>
-                            <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
-                              <Edit2 size={12} className="mr-1"/> แก้ราคารวม
+                            <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setGroupEditStore(mainStore); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
+                              <Edit2 size={12} className="mr-1"/> แก้ไขออเดอร์
                             </button>
                             <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-red-200 flex items-center">
                               <Trash2 size={12} className="mr-1"/> ลบออเดอร์
