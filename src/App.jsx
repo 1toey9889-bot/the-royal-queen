@@ -174,23 +174,19 @@ export default function App() {
         const employeeData = employees.find(e => e.userId === updatedUser.id);
         setLoggedInUser({ ...updatedUser, employeeData });
 
-        // ยกเว้นให้เข้าแท็บสต๊อกได้ ถ้าวันนี้ถูก Admin มอบหมายให้เช็คสต๊อกและยังไม่เสร็จ (แม้ไม่มีสิทธิ์ stock ปกติ)
-        const hasStockCheckBypass = activeTab === 'stock' && isStockCheckPendingFor(employeeData?.id);
-        
-        if (activeTab !== 'sales' && activeTab !== 'attendance' && !hasStockCheckBypass && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
+        if (activeTab !== 'sales' && activeTab !== 'attendance' && activeTab !== 'stock' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
           setActiveTab('sales');
         }
       } else { setLoggedInUser(null); }
     }
-  }, [users, employees, activeTab, loggedInUser?.id, stockChecks]);
+  }, [users, employees, activeTab, loggedInUser?.id]);
 
   const canAccess = (tabName) => {
     if (isExecutiveView) return tabName === 'dashboard' || tabName === 'stock';
     if (!loggedInUser) return false;
-    if (loggedInUser.role === 'admin' || tabName === 'sales') return true;
+    // พนักงานทุกคนดูแท็บสต๊อกได้ (ดูสต๊อก/ประวัติการเช็คสต๊อกได้ทุกคน) ส่วนการแก้ไข/นำเข้า/แกะกล่อง ฯลฯ ยังคงต้องมีสิทธิ์ stockEdit เหมือนเดิม
+    if (loggedInUser.role === 'admin' || tabName === 'sales' || tabName === 'stock') return true;
     if (tabName === 'employees') return loggedInUser.role === 'admin';
-    // ยกเว้นให้เข้าถึงสต๊อกได้ ถ้าวันนี้ถูก Admin มอบหมายให้เช็คสต๊อกและยังไม่เสร็จ
-    if (tabName === 'stock' && isStockCheckPendingFor(loggedInUser.employeeData?.id)) return true;
     return !!loggedInUser.permissions?.[tabName]; 
   };
 
@@ -2061,7 +2057,7 @@ export default function App() {
                           </>
                         ) : (
                           <>
-                            <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setGroupEditStore(mainStore); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
+                            <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setGroupEditStore(STORE_OPTIONS.includes(mainStore) ? mainStore : STORE_OPTIONS[0]); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
                               <Edit2 size={12} className="mr-1"/> แก้ไขออเดอร์
                             </button>
                             <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-red-200 flex items-center">
@@ -2326,6 +2322,9 @@ export default function App() {
 
     // สำหรับระบบเช็คสต๊อกประจำวัน (พนักงานที่ Admin มอบหมายเป็นผู้เช็ค)
     const [checkResults, setCheckResults] = useState({}); // { [productId]: { status: 'match'|'mismatch', note } }
+
+    // สำหรับหน้าประวัติการเช็คสต๊อกย้อนหลัง (ดูได้ทุกคน)
+    const [expandedCheckDate, setExpandedCheckDate] = useState(null);
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -2385,6 +2384,13 @@ export default function App() {
     const todayStockCheck = stockChecks.find(c => c.id === todayStrForCheck) || null;
     const isMyAssignedCheckToday = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
     const isTodayCheckCurrentlyValid = !!todayStockCheck?.completed;
+    // นับเฉพาะสินค้าที่ "ยังมีอยู่จริงตอนนี้" และถูกติ๊กแล้ว กันกรณีสินค้าถูกลบ/เพิ่มระหว่างเช็คแล้วนับจำนวนคลาดเคลื่อน
+    const checkedProductCount = products.filter(p => checkResults[p.id]).length;
+
+    // ประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์แล้ว เรียงวันล่าสุดก่อน (สำหรับหน้าประวัติที่พนักงานทุกคนดูได้)
+    const completedStockCheckHistory = useMemo(() => {
+      return stockChecks.filter(c => c.completed).sort((a, b) => b.id.localeCompare(a.id));
+    }, [stockChecks]);
 
     // เลื่อนวันที่ไปข้างหน้า N วัน (คำนวณจากตัวเลข ปี/เดือน/วัน ตรงๆ กันปัญหา timezone)
     const addDaysToDateStr = (dateStr, days) => {
@@ -2429,7 +2435,7 @@ export default function App() {
     };
 
     const handleSubmitStockCheck = async () => {
-      if (Object.keys(checkResults).length < products.length) { alert('กรุณาเช็คสต๊อกให้ครบทุกรายการก่อนยืนยัน'); return; }
+      if (checkedProductCount < products.length) { alert('กรุณาเช็คสต๊อกให้ครบทุกรายการก่อนยืนยัน'); return; }
       setIsProcessing(true);
       try {
         const items = products.map(p => ({
@@ -2523,16 +2529,23 @@ export default function App() {
         if (!boxQty || boxQty < 1) { alert('กรุณาระบุจำนวนกล่องที่จะแกะให้ถูกต้อง'); return; }
         if (!ratio || ratio < 1) { alert('กรุณาระบุจำนวนแผงต่อกล่องให้ถูกต้อง'); return; }
 
-        const boxProductData = getProduct(selectedBoxProduct);
-        const currentBoxStock = Number(boxProductData?.stock) || 0;
-        if (currentBoxStock < boxQty) { alert(`สต๊อกกล่องไม่พอ (คงเหลือ ${currentBoxStock} กล่อง)`); return; }
-
         setIsProcessing(true);
         try {
-            const panelQtyToAdd = boxQty * ratio;
             const boxRef = doc(db, "products", selectedBoxProduct);
             const panelRef = doc(db, "products", selectedPanelProduct);
-            const panelProductData = getProduct(selectedPanelProduct);
+
+            // อ่านค่าล่าสุดจากฐานข้อมูลก่อนตัดสต๊อกจริง ป้องกันกรณีมีคนอื่นแก้สต๊อกพร้อมกัน (ไม่ใช้ค่า cache ฝั่ง client)
+            const boxSnap = await getDoc(boxRef);
+            if (!boxSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าต้นทาง (อาจถูกลบไปแล้ว)");
+            const panelSnap = await getDoc(panelRef);
+            if (!panelSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าปลายทาง (อาจถูกลบไปแล้ว)");
+
+            const boxProductData = boxSnap.data();
+            const panelProductData = panelSnap.data();
+            const currentBoxStock = Number(boxProductData?.stock) || 0;
+            if (currentBoxStock < boxQty) throw new Error(`สต๊อกกล่องไม่พอ (คงเหลือ ${currentBoxStock} กล่อง)`);
+
+            const panelQtyToAdd = boxQty * ratio;
 
             const batch = writeBatch(db);
             batch.update(boxRef, { stock: increment(-boxQty) });
@@ -2611,6 +2624,9 @@ export default function App() {
                 )}
                 {!isExecutiveView && loggedInUser?.role === 'admin' && (
                     <button onClick={() => { setAssignDate(getLocalISODate()); setAssignEmployeeId(''); setMode('assign_check'); }} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
+                )}
+                {!isExecutiveView && (
+                    <button onClick={() => { setExpandedCheckDate(null); setMode('check_history'); }} className="px-4 py-2 bg-cyan-600 text-white text-sm font-bold rounded-lg shadow hover:bg-cyan-700 flex items-center"><CalendarDays size={16} className="mr-1"/> ประวัติการเช็คสต๊อก</button>
                 )}
                 {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
                 {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
@@ -2691,7 +2707,7 @@ export default function App() {
                         <option value="">-- เลือกพนักงาน --</option>
                         {employees.filter(emp => users.some(u => u.id === emp.userId)).map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
                     </select>
-                    <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
+                    <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId || !assignDate} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
                 </div>
 
                 <div className="mt-6 pt-5 border-t border-slate-100">
@@ -2742,9 +2758,9 @@ export default function App() {
                             )}
                             <div className="mt-3 flex items-center gap-3">
                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-teal-500 transition-all" style={{ width: `${(Object.keys(checkResults).length / (products.length || 1)) * 100}%` }}></div>
+                                    <div className="h-full bg-teal-500 transition-all" style={{ width: `${(checkedProductCount / (products.length || 1)) * 100}%` }}></div>
                                 </div>
-                                <span className="text-xs font-bold text-teal-700 shrink-0">{Object.keys(checkResults).length}/{products.length} รายการ</span>
+                                <span className="text-xs font-bold text-teal-700 shrink-0">{checkedProductCount}/{products.length} รายการ</span>
                             </div>
                         </div>
                         <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
@@ -2768,12 +2784,72 @@ export default function App() {
                             })}
                         </div>
                         <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-                            <button onClick={handleSubmitStockCheck} disabled={isProcessing || Object.keys(checkResults).length < products.length} className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-700 transition">
-                                ยืนยันเช็คสต๊อก ({Object.keys(checkResults).length}/{products.length})
+                            <button onClick={handleSubmitStockCheck} disabled={isProcessing || checkedProductCount < products.length} className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-700 transition">
+                                ยืนยันเช็คสต๊อก ({checkedProductCount}/{products.length})
                             </button>
                         </div>
                     </>
                 )}
+            </div>
+        )}
+
+        {mode === 'check_history' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-cyan-200 overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-cyan-50/30">
+                    <h3 className="font-bold text-cyan-800 mb-1">ประวัติการเช็คสต๊อกย้อนหลัง</h3>
+                    <p className="text-xs text-slate-500">ดูได้ว่าแต่ละวันใครเป็นคนเช็ค และผลเป็นอย่างไร (ทุกคนดูได้)</p>
+                </div>
+                <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                    {completedStockCheckHistory.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400">
+                            <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
+                            <p className="font-medium text-sm">ยังไม่มีประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์</p>
+                        </div>
+                    ) : (
+                        completedStockCheckHistory.map(check => {
+                            const isExpanded = expandedCheckDate === check.id;
+                            let dateLabel = check.id;
+                            try { dateLabel = new Date(check.id + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
+                            return (
+                                <div key={check.id}>
+                                    <div onClick={() => setExpandedCheckDate(isExpanded ? null : check.id)} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/60 transition-colors">
+                                        <div>
+                                            <p className="font-bold text-slate-800 text-sm">{dateLabel}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center"><User size={11} className="mr-1"/> ผู้เช็ค: {check.checkerEmployeeName || check.completedByUsername || '-'}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${check.mismatchCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                                {check.mismatchCount > 0 ? `ไม่ตรง ${check.mismatchCount} รายการ` : 'ตรงทั้งหมด'}
+                                            </span>
+                                            <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}/>
+                                        </div>
+                                    </div>
+                                    {isExpanded && (
+                                        <div className="px-4 pb-4 bg-slate-50/50 animate-in fade-in duration-200">
+                                            <div className="bg-white rounded-xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                                                {(check.items || []).length === 0 ? (
+                                                    <p className="p-3 text-xs text-slate-400 text-center">ไม่มีรายละเอียดรายการ</p>
+                                                ) : (
+                                                    check.items.map((item, idx) => (
+                                                        <div key={idx} className="p-3 flex items-center justify-between gap-3">
+                                                            <span className="text-sm font-medium text-slate-700">{item.productName}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                {item.note && <span className="text-xs text-slate-400 italic">{item.note}</span>}
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border shrink-0 ${item.status === 'mismatch' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                                                    {item.status === 'mismatch' ? '✕ ไม่ตรง' : '✓ ตรง'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
         )}
 
