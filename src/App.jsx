@@ -93,6 +93,7 @@ export default function App() {
   const [employees, setEmployees] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]); // ประวัติการทำรายการต่างๆ ในระบบ (ใช้แสดงในหน้าประวัติคลังสินค้า)
+  const [stockChecks, setStockChecks] = useState([]); // การมอบหมาย/ผลเช็คสต๊อกประจำวัน (1 เอกสารต่อวัน, id = วันที่)
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -156,9 +157,13 @@ export default function App() {
       setAuditLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => { console.error("Audit Logs Error:", error); });
 
+    const unsubscribeStockChecks = onSnapshot(collection(db, "stock_checks"), (snapshot) => {
+      setStockChecks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Stock Checks Error:", error); });
+
     return () => { 
       clearTimeout(connectionTimeout); unsubscribeUsers(); unsubscribeProducts(); 
-      unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs();
+      unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs(); unsubscribeStockChecks();
     };
   }, [isUsersLoaded, isLoading]);
 
@@ -168,19 +173,28 @@ export default function App() {
       if (updatedUser) {
         const employeeData = employees.find(e => e.userId === updatedUser.id);
         setLoggedInUser({ ...updatedUser, employeeData });
+
+        // ยกเว้นให้เข้าแท็บสต๊อกได้ ถ้าวันนี้ถูกมอบหมายให้เช็คสต๊อกและยังไม่เสร็จ (แม้ไม่มีสิทธิ์ stock ปกติ)
+        const todayCheckEntry = stockChecks.find(c => c.id === getLocalISODate());
+        const hasStockCheckBypass = activeTab === 'stock' && !!(todayCheckEntry && !todayCheckEntry.completed && todayCheckEntry.assignedEmployeeId === employeeData?.id);
         
-        if (activeTab !== 'sales' && activeTab !== 'attendance' && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
+        if (activeTab !== 'sales' && activeTab !== 'attendance' && !hasStockCheckBypass && updatedUser.role !== 'admin' && !updatedUser.permissions?.[activeTab]) {
           setActiveTab('sales');
         }
       } else { setLoggedInUser(null); }
     }
-  }, [users, employees, activeTab, loggedInUser?.id]);
+  }, [users, employees, activeTab, loggedInUser?.id, stockChecks]);
 
   const canAccess = (tabName) => {
     if (isExecutiveView) return tabName === 'dashboard' || tabName === 'stock';
     if (!loggedInUser) return false;
     if (loggedInUser.role === 'admin' || tabName === 'sales') return true;
     if (tabName === 'employees') return loggedInUser.role === 'admin';
+    if (tabName === 'stock') {
+      // ยกเว้นให้เข้าถึงได้ ถ้าวันนี้ถูกมอบหมายให้เช็คสต๊อกและยังไม่เสร็จ
+      const todayCheckEntry = stockChecks.find(c => c.id === getLocalISODate());
+      if (todayCheckEntry && !todayCheckEntry.completed && todayCheckEntry.assignedEmployeeId === loggedInUser.employeeData?.id) return true;
+    }
     return !!loggedInUser.permissions?.[tabName]; 
   };
 
@@ -368,6 +382,12 @@ export default function App() {
           if (hasCheckedOut) {
                setMessage({ text: 'คุณได้ลงเวลาออกงานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
                setTimeout(() => setMessage({text:'', type:''}), 5000);
+               return;
+          }
+          const todayCheck = stockChecks.find(c => c.id === todayStr);
+          if (todayCheck && !todayCheck.completed && todayCheck.assignedEmployeeId === loggedInUser.employeeData.id) {
+               setMessage({ text: '⚠️ วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก กรุณาไปที่เมนู "สต๊อกสินค้า" เพื่อเช็คให้เสร็จก่อนออกงาน', type: 'error' });
+               setTimeout(() => setMessage({text:'', type:''}), 6000);
                return;
           }
       }
@@ -615,6 +635,9 @@ export default function App() {
     const isStrt = uiLogs.some(l => l.type === 'start_live');
     const isChkout = uiLogs.some(l => l.type === 'checkout');
 
+    const todayStockCheckUI = stockChecks.find(c => c.id === todayStrUI) || null;
+    const isMyStockCheckPending = !!(todayStockCheckUI && !todayStockCheckUI.completed && todayStockCheckUI.assignedEmployeeId === loggedInUser?.employeeData?.id);
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
@@ -634,6 +657,13 @@ export default function App() {
         {activeTab === 'checkin' && (
           loggedInUser?.employeeData ? (
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+              {isMyStockCheckPending && (
+                <div className="w-full max-w-lg mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+                  <AlertCircle size={24} className="text-amber-500 shrink-0"/>
+                  <p className="text-sm text-amber-800 font-bold flex-1">วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก ต้องเช็คให้เสร็จก่อนจึงจะออกงานได้</p>
+                  <button onClick={() => setActiveTab('stock')} className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition">ไปเช็คสต๊อก</button>
+                </div>
+              )}
               <div className="text-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
                 <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
@@ -2286,6 +2316,10 @@ export default function App() {
     const [historyActionFilter, setHistoryActionFilter] = useState('all');
     const [historyFromDate, setHistoryFromDate] = useState('');
     const [historyToDate, setHistoryToDate] = useState('');
+
+    // สำหรับระบบเช็คสต๊อกประจำวัน (Admin มอบหมาย + พนักงานติ๊กเช็ค)
+    const [assignEmployeeId, setAssignEmployeeId] = useState('');
+    const [checkResults, setCheckResults] = useState({}); // { [productId]: { status: 'match'|'mismatch', note } }
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -2320,12 +2354,14 @@ export default function App() {
         case 'OVERRIDE_STOCK': return { label: 'แก้ไขสต๊อก', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' };
         case 'RETURN_STOCK': return { label: 'ลูกค้าคืนของ', badgeClass: 'bg-orange-50 text-orange-700 border-orange-200' };
         case 'UNBOX_STOCK': return { label: 'แกะกล่อง', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' };
+        case 'ASSIGN_STOCK_CHECK': return { label: 'มอบหมายเช็คสต๊อก', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' };
+        case 'COMPLETE_STOCK_CHECK': return { label: 'เช็คสต๊อกประจำวัน', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' };
         default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
       }
     };
 
     const stockHistoryLogs = useMemo(() => {
-      const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK'];
+      const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK', 'ASSIGN_STOCK_CHECK', 'COMPLETE_STOCK_CHECK'];
       return auditLogs
         .filter(log => stockActions.includes(log.action))
         .filter(log => historyActionFilter === 'all' || log.action === historyActionFilter)
@@ -2337,6 +2373,56 @@ export default function App() {
           return true;
         });
     }, [auditLogs, historyActionFilter, historyFromDate, historyToDate]);
+
+    // สถานะเช็คสต๊อกของวันนี้ (ใครถูกมอบหมาย / เช็คเสร็จหรือยัง)
+    const todayStrForCheck = getLocalISODate();
+    const todayStockCheck = stockChecks.find(c => c.id === todayStrForCheck) || null;
+    const isMyAssignedCheckToday = !!(todayStockCheck && !todayStockCheck.completed && todayStockCheck.assignedEmployeeId === loggedInUser?.employeeData?.id);
+
+    const handleAssignStockCheck = async () => {
+      if (!assignEmployeeId) return;
+      setIsProcessing(true);
+      try {
+        const emp = employees.find(e => e.id === assignEmployeeId);
+        if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
+        await setDoc(doc(db, "stock_checks", todayStrForCheck), {
+          date: todayStrForCheck,
+          assignedEmployeeId: emp.id,
+          assignedEmployeeName: emp.fullName,
+          assignedByUsername: loggedInUser?.username || 'unknown',
+          assignedAt: new Date().toISOString(),
+          completed: false
+        }, { merge: true });
+        await addDoc(collection(db, "audit_logs"), { action: "ASSIGN_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `มอบหมายให้ ${emp.fullName} เช็คสต๊อกวันที่ ${todayStrForCheck}`, timestamp: new Date().toISOString() });
+        alert('บันทึกมอบหมายเรียบร้อย');
+        setMode('view'); setAssignEmployeeId('');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsProcessing(false);
+    };
+
+    const handleSubmitStockCheck = async () => {
+      if (Object.keys(checkResults).length < products.length) { alert('กรุณาเช็คสต๊อกให้ครบทุกรายการก่อนยืนยัน'); return; }
+      setIsProcessing(true);
+      try {
+        const items = products.map(p => ({
+          productId: p.id,
+          productName: p.name,
+          status: checkResults[p.id]?.status || 'match',
+          note: checkResults[p.id]?.note || ''
+        }));
+        const mismatchCount = items.filter(i => i.status === 'mismatch').length;
+        await setDoc(doc(db, "stock_checks", todayStrForCheck), {
+          completed: true,
+          completedAt: new Date().toISOString(),
+          completedByUsername: loggedInUser?.username || 'unknown',
+          items, mismatchCount
+        }, { merge: true });
+        await addDoc(collection(db, "audit_logs"), { action: "COMPLETE_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `เช็คสต๊อกประจำวัน ${todayStrForCheck} เสร็จสิ้น (ไม่ตรง ${mismatchCount} รายการ)`, timestamp: new Date().toISOString() });
+        alert(mismatchCount > 0 ? `บันทึกผลการเช็คสต๊อกสำเร็จ พบรายการไม่ตรง ${mismatchCount} รายการ` : 'บันทึกผลการเช็คสต๊อกสำเร็จ สต๊อกตรงทั้งหมด');
+        setMode('view'); setCheckResults({});
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsProcessing(false);
+    };
     
     const handleUpdateStock = async (isAbsoluteOverride = false) => {
       if (!selectedProduct || !stockAmount || isNaN(stockAmount)) return;
@@ -2491,6 +2577,12 @@ export default function App() {
                         <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
                      </>
                 )}
+                {!isExecutiveView && (canEditTab('stock') || isMyAssignedCheckToday) && (
+                    <button onClick={() => { setCheckResults({}); setMode('check'); }} className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-lg shadow flex items-center ${isMyAssignedCheckToday ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}><CheckCircle2 size={16} className="mr-1"/> เช็คสต๊อกวันนี้{isMyAssignedCheckToday ? ' ⚠️' : ''}</button>
+                )}
+                {!isExecutiveView && loggedInUser?.role === 'admin' && (
+                    <button onClick={() => setMode('assign_check')} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
+                )}
                 {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
                 {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
              </div>
@@ -2540,6 +2632,82 @@ export default function App() {
                         setShowImportConfirm(true);
                     }} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
                 </div>
+            </div>
+        )}
+
+        {mode === 'assign_check' && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+                <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อกประจำวันนี้</h3>
+                <p className="text-xs text-slate-500 mb-4">วันที่ {new Date().toLocaleDateString('th-TH')} — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้</p>
+                {todayStockCheck?.assignedEmployeeId && (
+                    <div className={`mb-4 p-3 rounded-xl border text-sm font-bold flex items-center ${todayStockCheck.completed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                        {todayStockCheck.completed ? <CheckCircle2 size={16} className="mr-2 shrink-0"/> : <AlertCircle size={16} className="mr-2 shrink-0"/>}
+                        วันนี้มอบหมายให้ {todayStockCheck.assignedEmployeeName} — {todayStockCheck.completed ? 'เช็คสต๊อกเสร็จแล้ว' : 'ยังไม่ได้เช็คสต๊อก'}
+                    </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white">
+                        <option value="">-- เลือกพนักงาน --</option>
+                        {employees.filter(emp => users.some(u => u.id === emp.userId)).map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                    </select>
+                    <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
+                </div>
+            </div>
+        )}
+
+        {mode === 'check' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
+                {todayStockCheck?.completed ? (
+                    <div className="p-8 text-center">
+                        <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3"/>
+                        <h3 className="font-bold text-slate-800 text-lg mb-1">เช็คสต๊อกวันนี้เสร็จแล้ว</h3>
+                        <p className="text-sm text-slate-500 mb-1">โดย {todayStockCheck.completedByUsername} เมื่อ {new Date(todayStockCheck.completedAt).toLocaleString('th-TH')}</p>
+                        <p className="text-sm font-bold">
+                            {todayStockCheck.mismatchCount > 0 ? <span className="text-red-600">พบรายการไม่ตรง {todayStockCheck.mismatchCount} รายการ</span> : <span className="text-emerald-600">สต๊อกตรงทั้งหมด</span>}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-4">หากต้องการเช็คใหม่ ให้ Admin มอบหมายซ้ำอีกครั้งที่เมนู "มอบหมายเช็คสต๊อก"</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="p-5 border-b border-slate-100 bg-teal-50/30">
+                            <h3 className="font-bold text-teal-800 mb-1">เช็คสต๊อกประจำวันที่ {new Date().toLocaleDateString('th-TH')}</h3>
+                            {todayStockCheck?.assignedEmployeeName && (
+                                <p className="text-xs text-slate-500 font-medium">ผู้รับผิดชอบวันนี้: {todayStockCheck.assignedEmployeeName}</p>
+                            )}
+                            <div className="mt-3 flex items-center gap-3">
+                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-teal-500 transition-all" style={{ width: `${(Object.keys(checkResults).length / (products.length || 1)) * 100}%` }}></div>
+                                </div>
+                                <span className="text-xs font-bold text-teal-700 shrink-0">{Object.keys(checkResults).length}/{products.length} รายการ</span>
+                            </div>
+                        </div>
+                        <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
+                            {products.map(p => {
+                                const r = checkResults[p.id];
+                                return (
+                                    <div key={p.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-slate-800 text-sm">{p.name}</p>
+                                            <p className="text-xs text-slate-400">ในระบบ: {p.stock} ชิ้น</p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'match'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'match' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✓ ตรง</button>
+                                            <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'mismatch'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'mismatch' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✕ ไม่ตรง</button>
+                                        </div>
+                                        {r?.status === 'mismatch' && (
+                                            <input type="text" placeholder="นับได้จริงเท่าไหร่ / หมายเหตุ..." value={r?.note || ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], note: e.target.value}}))} className="w-full sm:w-56 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500"/>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                            <button onClick={handleSubmitStockCheck} disabled={isProcessing || Object.keys(checkResults).length < products.length} className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-700 transition">
+                                ยืนยันเช็คสต๊อก ({Object.keys(checkResults).length}/{products.length})
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         )}
 
@@ -2639,6 +2807,8 @@ export default function App() {
                             <option value="OVERRIDE_STOCK">แก้ไขสต๊อก</option>
                             <option value="RETURN_STOCK">ลูกค้าคืนของ</option>
                             <option value="UNBOX_STOCK">แกะกล่อง</option>
+                            <option value="ASSIGN_STOCK_CHECK">มอบหมายเช็คสต๊อก</option>
+                            <option value="COMPLETE_STOCK_CHECK">เช็คสต๊อกประจำวัน</option>
                         </select>
                         <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1">
                             <input type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
