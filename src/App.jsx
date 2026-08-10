@@ -125,6 +125,28 @@ export default function App() {
   const [stockChecks, setStockChecks] = useState([]); // การมอบหมาย/ผลเช็คสต๊อกประจำวัน (1 เอกสารต่อวัน, id = วันที่)
   const [shiftSchedule, setShiftSchedule] = useState([]); // ตารางกะที่จองไว้ (1 เอกสารต่อพนักงานต่อวัน)
   const [dayTypes, setDayTypes] = useState([]); // รูปแบบวันทำงานที่เลือกไว้ต่อวัน (1 เอกสารต่อวัน: โปรโมชั่น/2คน/3คน)
+  const [companyHolidays, setCompanyHolidays] = useState([]); // วันหยุดประจำปีของบริษัท (1 เอกสารต่อวัน)
+
+  // สถานะ UI ของหน้าลงเวลาทำงาน/ตารางกะ ยกขึ้นมาไว้ระดับ App() (ไม่ใช่ local ใน AttendanceView)
+  // เพื่อป้องกันบัค: ทุกครั้งที่ Firestore listener อัปเดตข้อมูล (เช่น จองกะสำเร็จ) App() จะ re-render
+  // และคอมโพเนนต์ลูกที่ประกาศไว้ข้างในถูกสร้างใหม่ ทำให้ React unmount/remount แล้ว state ภายในรีเซ็ต
+  // (เด้งกลับไปแท็บ "ลงเวลา", ปิด modal ที่เปิดค้างไว้ ฯลฯ) การยก state เหล่านี้ขึ้นมาไว้ที่นี่ทำให้ค่าคงอยู่ข้าม remount
+  const [attendanceLocalTab, setAttendanceLocalTab] = useState('checkin');
+  const [scheduleMonth, setScheduleMonth] = useState(getLocalISODate().substring(0, 7));
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState(null);
+  const [scheduleShiftPick, setScheduleShiftPick] = useState('');
+  const [isRequestingChange, setIsRequestingChange] = useState(false);
+  const [changeRequestShiftType, setChangeRequestShiftType] = useState('');
+  const [changeRequestReason, setChangeRequestReason] = useState('');
+  const [showApprovalPanel, setShowApprovalPanel] = useState(false);
+  const [isEditingDayType, setIsEditingDayType] = useState(false);
+  const [adminSelectedEmployeeId, setAdminSelectedEmployeeId] = useState('');
+  const [showHolidayPanel, setShowHolidayPanel] = useState(false);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [editingHolidayId, setEditingHolidayId] = useState(null);
+  const [editingHolidayName, setEditingHolidayName] = useState('');
+  const [holidayYearFilter, setHolidayYearFilter] = useState(new Date().getFullYear().toString());
   const [shiftSwapRequests, setShiftSwapRequests] = useState([]); // คำขอเปลี่ยน/สลับกะ รออนุมัติจาก Admin
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
   
@@ -205,10 +227,14 @@ export default function App() {
       setDayTypes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => { console.error("Day Types Error:", error); });
 
+    const unsubscribeCompanyHolidays = onSnapshot(collection(db, "company_holidays"), (snapshot) => {
+      setCompanyHolidays(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Company Holidays Error:", error); });
+
     return () => { 
       clearTimeout(connectionTimeout); unsubscribeUsers(); unsubscribeProducts(); 
       unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs(); unsubscribeStockChecks();
-      unsubscribeShiftSchedule(); unsubscribeShiftSwapRequests(); unsubscribeDayTypes();
+      unsubscribeShiftSchedule(); unsubscribeShiftSwapRequests(); unsubscribeDayTypes(); unsubscribeCompanyHolidays();
     };
   }, [isUsersLoaded, isLoading]);
 
@@ -334,7 +360,9 @@ export default function App() {
   const AttendanceView = () => {
     const [isVerifying, setIsVerifying] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
-    const [activeTab, setLocalActiveTab] = useState('checkin'); 
+    // ใช้ state จากระดับ App() แทน useState local เพื่อไม่ให้ค่ารีเซ็ตเวลา component นี้ถูก remount (ดูคอมเมนต์ที่ประกาศ attendanceLocalTab ด้านบน)
+    const activeTab = attendanceLocalTab;
+    const setLocalActiveTab = setAttendanceLocalTab;
     const videoRef = useRef(null);
 
     // Filter states
@@ -350,16 +378,7 @@ export default function App() {
     const [isEditingMode, setIsEditingMode] = useState(false);
     const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
 
-    // ตารางกะการทำงาน (Shift Scheduling) states
-    const [scheduleMonth, setScheduleMonth] = useState(getLocalISODate().substring(0, 7));
-    const [selectedScheduleDate, setSelectedScheduleDate] = useState(null);
-    const [scheduleShiftPick, setScheduleShiftPick] = useState('');
-    const [isRequestingChange, setIsRequestingChange] = useState(false);
-    const [changeRequestShiftType, setChangeRequestShiftType] = useState('');
-    const [changeRequestReason, setChangeRequestReason] = useState('');
-    const [showApprovalPanel, setShowApprovalPanel] = useState(false);
-    const [isEditingDayType, setIsEditingDayType] = useState(false);
-    const [adminSelectedEmployeeId, setAdminSelectedEmployeeId] = useState('');
+    // ตารางกะการทำงาน (Shift Scheduling) + วันหยุดประจำปี: state ทั้งหมดยกไปไว้ระดับ App() แล้ว (ดูด้านบน) ที่เหลือคือ state ที่ไม่จำเป็นต้องรอด remount
     const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
 
     const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
@@ -754,6 +773,54 @@ export default function App() {
       return shiftSwapRequests.filter(r => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
     }, [shiftSwapRequests]);
 
+    // ==========================================
+    // วันหยุดประจำปี (Company Holidays)
+    // ==========================================
+    const getHolidayForDate = (dateStr) => companyHolidays.find(h => h.id === dateStr) || null;
+
+    const holidaysForYearFilter = useMemo(() => {
+      return companyHolidays.filter(h => h.date.startsWith(holidayYearFilter)).sort((a, b) => a.date.localeCompare(b.date));
+    }, [companyHolidays, holidayYearFilter]);
+
+    const handleAddHoliday = async () => {
+      if (!newHolidayDate) { alert('กรุณาเลือกวันที่'); return; }
+      if (!newHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
+      setIsScheduleProcessing(true);
+      try {
+        const existing = getHolidayForDate(newHolidayDate);
+        await setDoc(doc(db, "company_holidays", newHolidayDate), {
+          date: newHolidayDate,
+          name: newHolidayName.trim(),
+          setByUsername: loggedInUser?.username || 'unknown',
+          setAt: new Date().toISOString()
+        });
+        await addDoc(collection(db, "audit_logs"), { action: existing ? "EDIT_HOLIDAY" : "ADD_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'เพิ่ม'}วันหยุดประจำปี ${newHolidayDate}: ${newHolidayName.trim()}`, timestamp: new Date().toISOString() });
+        setNewHolidayDate(''); setNewHolidayName('');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const handleSaveHolidayName = async (holiday) => {
+      if (!editingHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
+      setIsScheduleProcessing(true);
+      try {
+        await updateDoc(doc(db, "company_holidays", holiday.id), { name: editingHolidayName.trim() });
+        await addDoc(collection(db, "audit_logs"), { action: "EDIT_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `แก้ไขวันหยุดประจำปี ${holiday.date} จาก "${holiday.name}" เป็น "${editingHolidayName.trim()}"`, timestamp: new Date().toISOString() });
+        setEditingHolidayId(null); setEditingHolidayName('');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const handleDeleteHoliday = async (holiday) => {
+      if (!window.confirm(`ยืนยันลบวันหยุด "${holiday.name}" (${holiday.date}) หรือไม่?`)) return;
+      setIsScheduleProcessing(true);
+      try {
+        await deleteDoc(doc(db, "company_holidays", holiday.id));
+        await addDoc(collection(db, "audit_logs"), { action: "DELETE_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `ลบวันหยุดประจำปี ${holiday.date}: ${holiday.name}`, timestamp: new Date().toISOString() });
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
     const renderCalendar = () => {
       const year = parseInt(calendarMonth.split('-')[0]);
       const month = parseInt(calendarMonth.split('-')[1]) - 1;
@@ -789,14 +856,16 @@ export default function App() {
               
               const dateStr = getLocalISODate(date.toISOString());
               const dayLogs = calendarLogs.filter(l => getLocalISODate(l.timestamp) === dateStr).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+              const holiday = getHolidayForDate(dateStr);
               const isToday = dateStr === getLocalISODate();
               const isSunday = date.getDay() === 0;
 
               return (
-                <div key={idx} className={`border-b border-r border-slate-100 min-h-[120px] p-1.5 flex flex-col ${isToday ? 'bg-blue-50/30' : ''}`}>
-                  <div className={`text-right text-sm font-bold mb-1 ${isSunday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center ml-auto shadow-sm' : ''}`}>
+                <div key={idx} className={`border-b border-r border-slate-100 min-h-[120px] p-1.5 flex flex-col ${isToday ? 'bg-blue-50/30' : holiday ? 'bg-rose-50/40' : ''}`}>
+                  <div className={`text-right text-sm font-bold mb-1 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center ml-auto shadow-sm' : ''}`}>
                     {date.getDate()}
                   </div>
+                  {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
      
                   <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
                     {dayLogs.map((log, lIdx) => (
@@ -841,21 +910,23 @@ export default function App() {
               const dateStr = getLocalISODate(date.toISOString());
               const dayShifts = shiftSchedule.filter(s => s.date === dateStr);
               const dayType = dayTypes.find(d => d.id === dateStr);
+              const holiday = getHolidayForDate(dateStr);
               const myShift = dayShifts.find(s => s.employeeId === loggedInUser?.employeeData?.id);
               const myPendingRequest = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === dateStr && r.status === 'pending');
               const isToday = dateStr === todayStrForSchedule;
               const isSunday = date.getDay() === 0;
 
               return (
-                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); setAdminSelectedEmployeeId(loggedInUser?.employeeData?.id || ''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
+                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); setAdminSelectedEmployeeId(loggedInUser?.employeeData?.id || ''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : holiday ? 'bg-rose-50/40' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
                   <div className="flex items-center justify-between mb-1">
                     {dayType ? (
                       <span className="text-[8px] font-bold text-slate-400 truncate pr-1" title={getDayTypeMeta(dayType.dayTypeId)?.label}>{getDayTypeMeta(dayType.dayTypeId)?.label}</span>
                     ) : <span></span>}
-                    <div className={`text-right text-sm font-bold shrink-0 ${isSunday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm' : ''}`}>
+                    <div className={`text-right text-sm font-bold shrink-0 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm' : ''}`}>
                       {date.getDate()}
                     </div>
                   </div>
+                  {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
                   <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
                     {dayShifts.slice(0, 3).map((s, i) => (
                       <div key={i} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
@@ -914,6 +985,12 @@ export default function App() {
                   <AlertCircle size={24} className="text-amber-500 shrink-0"/>
                   <p className="text-sm text-amber-800 font-bold flex-1">วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก ต้องเช็คให้เสร็จก่อนจึงจะออกงานได้</p>
                   <button onClick={() => setActiveTab('stock')} className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition">ไปเช็คสต๊อก</button>
+                </div>
+              )}
+              {getHolidayForDate(getLocalISODate()) && (
+                <div className="w-full max-w-lg mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-center sm:text-left justify-center sm:justify-start">
+                  <span className="text-2xl shrink-0">🎌</span>
+                  <p className="text-sm text-rose-700 font-bold">วันนี้เป็นวันหยุดประจำปี: {getHolidayForDate(getLocalISODate()).name}</p>
                 </div>
               )}
               <div className="text-center mb-6">
@@ -1212,16 +1289,90 @@ export default function App() {
               </div>
             )}
 
+            {showHolidayPanel && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }}>
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="bg-gradient-to-r from-rose-500 to-red-500 p-4 text-white flex justify-between items-center shrink-0">
+                    <h3 className="font-bold text-lg flex items-center"><CalendarDays size={18} className="mr-2"/> วันหยุดประจำปี</h3>
+                    <button onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                  </div>
+                  <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+                    {canManageAllAttendance && (
+                      <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-2">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">เพิ่มวันหยุดใหม่</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
+                          <input type="text" placeholder="ชื่อวันหยุด เช่น วันขึ้นปีใหม่..." value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
+                          <button onClick={handleAddHoliday} disabled={isScheduleProcessing || !newHolidayDate || !newHolidayName.trim()} className="px-4 py-2.5 bg-rose-500 text-white text-sm font-bold rounded-xl hover:bg-rose-600 transition disabled:opacity-40 shrink-0">บันทึก</button>
+                        </div>
+                        {getHolidayForDate(newHolidayDate) && <p className="text-[11px] text-amber-600 font-bold">* วันที่นี้มีวันหยุดอยู่แล้ว ("{getHolidayForDate(newHolidayDate).name}") บันทึกซ้ำจะเป็นการแก้ไขชื่อแทน</p>}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">ตารางวันหยุดประจำปี</p>
+                      <select value={holidayYearFilter} onChange={e => setHolidayYearFilter(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-rose-500 bg-white">
+                        {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={String(y)}>{y + 543}</option>)}
+                      </select>
+                    </div>
+
+                    {holidaysForYearFilter.length === 0 ? (
+                      <p className="text-sm text-slate-400 bg-white p-4 rounded-xl border border-slate-100 text-center">ยังไม่มีวันหยุดในปีนี้</p>
+                    ) : (
+                      <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                        {holidaysForYearFilter.map(h => {
+                          let hDateLabel = h.date;
+                          try { hDateLabel = new Date(h.date + 'T12:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) {}
+                          return (
+                            <div key={h.id} className="p-3 flex items-center justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-bold text-rose-500">{hDateLabel}</p>
+                                {editingHolidayId === h.id ? (
+                                  <input type="text" value={editingHolidayName} onChange={e => setEditingHolidayName(e.target.value)} className="w-full mt-1 p-1.5 border border-rose-300 rounded-lg text-sm outline-none focus:border-rose-500" autoFocus/>
+                                ) : (
+                                  <p className="text-sm font-bold text-slate-700 truncate">{h.name}</p>
+                                )}
+                              </div>
+                              {canManageAllAttendance && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {editingHolidayId === h.id ? (
+                                    <>
+                                      <button onClick={() => handleSaveHolidayName(h)} disabled={isScheduleProcessing} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded-lg transition"><Save size={14}/></button>
+                                      <button onClick={() => { setEditingHolidayId(null); setEditingHolidayName(''); }} disabled={isScheduleProcessing} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition"><X size={14}/></button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => { setEditingHolidayId(h.id); setEditingHolidayName(h.name); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition"><Edit2 size={14}/></button>
+                                      <button onClick={() => handleDeleteHoliday(h)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition"><Trash2 size={14}/></button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
                 <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
               </div>
               {canManageAllAttendance && (
-                <button onClick={() => setShowApprovalPanel(true)} className="relative shrink-0 px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
-                  <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
-                  {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
-                </button>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <button onClick={() => setShowApprovalPanel(true)} className="relative px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
+                    <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
+                    {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
+                  </button>
+                  <button onClick={() => { setShowHolidayPanel(true); setNewHolidayDate(''); setNewHolidayName(''); setEditingHolidayId(null); }} className="px-4 py-2.5 bg-white border border-rose-200 text-rose-700 text-sm font-bold rounded-xl hover:bg-rose-50 transition flex items-center shadow-sm">
+                    <CalendarDays size={16} className="mr-1.5"/> วันหยุดประจำปี
+                  </button>
+                </div>
               )}
             </div>
 
