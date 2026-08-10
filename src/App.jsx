@@ -871,7 +871,7 @@ export default function App() {
             <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
             <button onClick={() => setLocalActiveTab('schedule')} className={`relative flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               ตารางกะ
-              {loggedInUser?.role === 'admin' && pendingSwapRequests.length > 0 && (
+              {canManageAllAttendance && pendingSwapRequests.length > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{pendingSwapRequests.length}</span>
               )}
             </button>
@@ -1012,8 +1012,8 @@ export default function App() {
                                   <p className="text-[10px] font-bold text-slate-400 uppercase">รูปแบบวันนี้</p>
                                   <p className="text-sm font-bold text-slate-700">{getDayTypeMeta(dayTypeForModal.dayTypeId)?.label}</p>
                                 </div>
-                                {loggedInUser?.role === 'admin' && (
-                                  <button onClick={() => setIsEditingDayType(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0">แก้ไข (Admin)</button>
+                                {canManageAllAttendance && (
+                                  <button onClick={() => setIsEditingDayType(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0">แก้ไขรูปแบบวัน</button>
                                 )}
                               </div>
 
@@ -1127,7 +1127,7 @@ export default function App() {
                 <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
                 <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
               </div>
-              {loggedInUser?.role === 'admin' && (
+              {canManageAllAttendance && (
                 <button onClick={() => setShowApprovalPanel(true)} className="relative shrink-0 px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
                   <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
                   {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
