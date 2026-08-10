@@ -132,7 +132,7 @@ export default function App() {
   // และคอมโพเนนต์ลูกที่ประกาศไว้ข้างในถูกสร้างใหม่ ทำให้ React unmount/remount แล้ว state ภายในรีเซ็ต
   // (เด้งกลับไปแท็บ "ลงเวลา", ปิด modal ที่เปิดค้างไว้ ฯลฯ) การยก state เหล่านี้ขึ้นมาไว้ที่นี่ทำให้ค่าคงอยู่ข้าม remount
   const [attendanceLocalTab, setAttendanceLocalTab] = useState('checkin');
-  const [scheduleMonth, setScheduleMonth] = useState(getLocalISODate().substring(0, 7));
+  const [scheduleMonth, setScheduleMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(null);
   const [scheduleShiftPick, setScheduleShiftPick] = useState('');
   const [isRequestingChange, setIsRequestingChange] = useState(false);
