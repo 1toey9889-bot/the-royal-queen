@@ -15,7 +15,7 @@ import {
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
   Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon, Menu,
   Clock, Briefcase, Fingerprint, UserPlus, Info, List, LayoutGrid, Calendar as CalendarIcon, 
-  ChevronLeft, ChevronRight, Video, FileQuestion, ArrowDownToLine, RefreshCcw
+  ChevronLeft, ChevronRight, Video, FileQuestion, ArrowDownToLine, RefreshCcw, Bell
 } from 'lucide-react';
 //  ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
@@ -76,6 +76,35 @@ const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)
 const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
 // ==========================================
+//  ระบบลงกะการทำงาน (Shift Scheduling)
+//  แต่ละวันต้องเลือก "รูปแบบวัน" ก่อน (1 ใน 3 แบบ) แล้วช่วงเวลากะของวันนั้นจะขึ้นกับรูปแบบที่เลือก
+// ==========================================
+const DAY_TYPES = [
+  { id: 'promotion', label: 'ช่วงโปรโมชั่น', description: '3 กะ • 10:00-15:00 / 15:00-20:00 / 21:00-02:00' },
+  { id: 'two_person', label: 'ทำงาน 2 คน', description: '2 กะ • 10:00-16:00 / 17:00-23:00' },
+  { id: 'three_person', label: 'ทำงาน 3 คน', description: '3 กะ • 10:00-14:00 / 15:00-19:00 / 19:00-23:00' },
+];
+const SHIFT_SLOTS_BY_DAY_TYPE = {
+  promotion: [
+    { id: 'slot1', label: 'กะที่ 1', time: '10:00 - 15:00', badgeClass: 'bg-amber-100 text-amber-700 border-amber-200', dotClass: 'bg-amber-400' },
+    { id: 'slot2', label: 'กะที่ 2', time: '15:00 - 20:00', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-400' },
+    { id: 'slot3', label: 'กะที่ 3', time: '21:00 - 02:00', badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200', dotClass: 'bg-indigo-400' },
+  ],
+  two_person: [
+    { id: 'slot1', label: 'กะที่ 1', time: '10:00 - 16:00', badgeClass: 'bg-amber-100 text-amber-700 border-amber-200', dotClass: 'bg-amber-400' },
+    { id: 'slot2', label: 'กะที่ 2', time: '17:00 - 23:00', badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200', dotClass: 'bg-indigo-400' },
+  ],
+  three_person: [
+    { id: 'slot1', label: 'กะที่ 1', time: '10:00 - 14:00', badgeClass: 'bg-amber-100 text-amber-700 border-amber-200', dotClass: 'bg-amber-400' },
+    { id: 'slot2', label: 'กะที่ 2', time: '15:00 - 19:00', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-400' },
+    { id: 'slot3', label: 'กะที่ 3', time: '19:00 - 23:00', badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200', dotClass: 'bg-indigo-400' },
+  ],
+};
+const OFF_SHIFT_SLOT = { id: 'off', label: 'วันหยุด', time: '-', badgeClass: 'bg-slate-100 text-slate-600 border-slate-200', dotClass: 'bg-slate-400' };
+const getDayTypeMeta = (dayTypeId) => DAY_TYPES.find(d => d.id === dayTypeId) || null;
+const getShiftSlotsForDayType = (dayTypeId) => [...(SHIFT_SLOTS_BY_DAY_TYPE[dayTypeId] || []), OFF_SHIFT_SLOT];
+
+// ==========================================
 //  3. คอมโพเนนต์หลักของระบบ (Main App Component)
 // ==========================================
 export default function App() {
@@ -94,6 +123,9 @@ export default function App() {
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]); // ประวัติการทำรายการต่างๆ ในระบบ (ใช้แสดงในหน้าประวัติคลังสินค้า)
   const [stockChecks, setStockChecks] = useState([]); // การมอบหมาย/ผลเช็คสต๊อกประจำวัน (1 เอกสารต่อวัน, id = วันที่)
+  const [shiftSchedule, setShiftSchedule] = useState([]); // ตารางกะที่จองไว้ (1 เอกสารต่อพนักงานต่อวัน)
+  const [dayTypes, setDayTypes] = useState([]); // รูปแบบวันทำงานที่เลือกไว้ต่อวัน (1 เอกสารต่อวัน: โปรโมชั่น/2คน/3คน)
+  const [shiftSwapRequests, setShiftSwapRequests] = useState([]); // คำขอเปลี่ยน/สลับกะ รออนุมัติจาก Admin
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -161,9 +193,22 @@ export default function App() {
       setStockChecks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => { console.error("Stock Checks Error:", error); });
 
+    const unsubscribeShiftSchedule = onSnapshot(collection(db, "shift_schedule"), (snapshot) => {
+      setShiftSchedule(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Shift Schedule Error:", error); });
+
+    const unsubscribeShiftSwapRequests = onSnapshot(collection(db, "shift_swap_requests"), (snapshot) => {
+      setShiftSwapRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Shift Swap Requests Error:", error); });
+
+    const unsubscribeDayTypes = onSnapshot(collection(db, "day_types"), (snapshot) => {
+      setDayTypes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => { console.error("Day Types Error:", error); });
+
     return () => { 
       clearTimeout(connectionTimeout); unsubscribeUsers(); unsubscribeProducts(); 
       unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs(); unsubscribeStockChecks();
+      unsubscribeShiftSchedule(); unsubscribeShiftSwapRequests(); unsubscribeDayTypes();
     };
   }, [isUsersLoaded, isLoading]);
 
@@ -304,6 +349,17 @@ export default function App() {
     const [showManualModal, setShowManualModal] = useState(false);
     const [isEditingMode, setIsEditingMode] = useState(false);
     const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
+
+    // ตารางกะการทำงาน (Shift Scheduling) states
+    const [scheduleMonth, setScheduleMonth] = useState(getLocalISODate().substring(0, 7));
+    const [selectedScheduleDate, setSelectedScheduleDate] = useState(null);
+    const [scheduleShiftPick, setScheduleShiftPick] = useState('');
+    const [isRequestingChange, setIsRequestingChange] = useState(false);
+    const [changeRequestShiftType, setChangeRequestShiftType] = useState('');
+    const [changeRequestReason, setChangeRequestReason] = useState('');
+    const [showApprovalPanel, setShowApprovalPanel] = useState(false);
+    const [isEditingDayType, setIsEditingDayType] = useState(false);
+    const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
 
     const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
 
@@ -565,6 +621,112 @@ export default function App() {
       } catch(e) { alert("Error: " + e.message); }
     };
 
+    // ==========================================
+    // ระบบลงกะการทำงาน (Shift Scheduling)
+    // ==========================================
+    const handleSetDayType = async (dateStr, dayTypeId) => {
+      const existing = dayTypes.find(d => d.id === dateStr);
+      if (existing && existing.dayTypeId !== dayTypeId) {
+        if (!window.confirm('วันนี้เคยตั้งรูปแบบวันไว้แล้ว การเปลี่ยนรูปแบบจะไม่ไปแก้ไขกะที่คนอื่นจองไว้แล้ว (กะเดิมจะยังคงเวลาเดิมไว้ตามที่จองไว้) ยืนยันเปลี่ยนรูปแบบวันหรือไม่?')) return;
+      }
+      setIsScheduleProcessing(true);
+      try {
+        await setDoc(doc(db, "day_types", dateStr), {
+          date: dateStr,
+          dayTypeId,
+          setByUsername: loggedInUser?.username || 'unknown',
+          setAt: new Date().toISOString()
+        });
+        if (existing && existing.dayTypeId !== dayTypeId) {
+          await addDoc(collection(db, "audit_logs"), { action: "EDIT_DAY_TYPE", user: loggedInUser?.username || 'unknown', details: `แก้ไขรูปแบบวันที่ ${dateStr} จาก "${getDayTypeMeta(existing.dayTypeId)?.label || existing.dayTypeId}" เป็น "${getDayTypeMeta(dayTypeId)?.label}"`, timestamp: new Date().toISOString() });
+        }
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const handleBookShift = async (dateStr, dayTypeId, slot) => {
+      if (!loggedInUser?.employeeData) return;
+      if (!slot) { alert('กรุณาเลือกกะที่ต้องการจอง'); return; }
+      const docId = `${loggedInUser.employeeData.id}_${dateStr}`;
+      if (shiftSchedule.some(s => s.id === docId)) { alert('คุณมีกะที่จองไว้ในวันนี้แล้ว กรุณาใช้ปุ่ม "ขอเปลี่ยนกะ" แทน'); return; }
+      setIsScheduleProcessing(true);
+      try {
+        await setDoc(doc(db, "shift_schedule", docId), {
+          employeeId: loggedInUser.employeeData.id,
+          employeeName: loggedInUser.employeeData.fullName,
+          date: dateStr,
+          dayTypeId,
+          shiftSlotId: slot.id, shiftLabel: slot.label, shiftTime: slot.time, badgeClass: slot.badgeClass, dotClass: slot.dotClass,
+          bookedByUsername: loggedInUser.username,
+          bookedAt: new Date().toISOString()
+        });
+        setScheduleShiftPick('');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const handleRequestShiftChange = async (dateStr, dayTypeId, currentBooking, requestedSlot, reason) => {
+      if (!loggedInUser?.employeeData) return;
+      if (!requestedSlot) { alert('กรุณาเลือกกะที่ต้องการเปลี่ยนไป'); return; }
+      if (requestedSlot.id === currentBooking.shiftSlotId) { alert('กะที่เลือกเหมือนกับกะปัจจุบัน กรุณาเลือกกะอื่น'); return; }
+      setIsScheduleProcessing(true);
+      try {
+        await addDoc(collection(db, "shift_swap_requests"), {
+          employeeId: loggedInUser.employeeData.id,
+          employeeName: loggedInUser.employeeData.fullName,
+          date: dateStr,
+          dayTypeId,
+          currentShiftSlotId: currentBooking.shiftSlotId, currentShiftLabel: currentBooking.shiftLabel, currentShiftTime: currentBooking.shiftTime,
+          requestedShiftSlotId: requestedSlot.id, requestedShiftLabel: requestedSlot.label, requestedShiftTime: requestedSlot.time, requestedBadgeClass: requestedSlot.badgeClass, requestedDotClass: requestedSlot.dotClass,
+          reason: reason || '',
+          status: 'pending',
+          requestedAt: new Date().toISOString(),
+          requestedByUsername: loggedInUser.username
+        });
+        setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); setSelectedScheduleDate(null);
+        alert('ส่งคำขอเปลี่ยนกะเรียบร้อย รอ Admin อนุมัติ');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const handleReviewSwapRequest = async (request, approve) => {
+      setIsScheduleProcessing(true);
+      try {
+        const batch = writeBatch(db);
+        const reqRef = doc(db, "shift_swap_requests", request.id);
+        batch.update(reqRef, {
+          status: approve ? 'approved' : 'rejected',
+          reviewedByUsername: loggedInUser?.username || 'unknown',
+          reviewedAt: new Date().toISOString()
+        });
+        if (approve) {
+          const scheduleDocId = `${request.employeeId}_${request.date}`;
+          batch.set(doc(db, "shift_schedule", scheduleDocId), {
+            employeeId: request.employeeId,
+            employeeName: request.employeeName,
+            date: request.date,
+            dayTypeId: request.dayTypeId,
+            shiftSlotId: request.requestedShiftSlotId, shiftLabel: request.requestedShiftLabel, shiftTime: request.requestedShiftTime,
+            badgeClass: request.requestedBadgeClass, dotClass: request.requestedDotClass,
+            bookedByUsername: loggedInUser?.username || 'unknown',
+            bookedAt: new Date().toISOString()
+          });
+        }
+        batch.set(doc(collection(db, "audit_logs")), {
+          action: approve ? "APPROVE_SHIFT_CHANGE" : "REJECT_SHIFT_CHANGE",
+          user: loggedInUser?.username || 'unknown',
+          details: `${approve ? 'อนุมัติ' : 'ปฏิเสธ'}คำขอเปลี่ยนกะของ ${request.employeeName} วันที่ ${request.date} (${request.currentShiftLabel || '-'} → ${request.requestedShiftLabel || '-'})`,
+          timestamp: new Date().toISOString()
+        });
+        await batch.commit();
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
+    const pendingSwapRequests = useMemo(() => {
+      return shiftSwapRequests.filter(r => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
+    }, [shiftSwapRequests]);
+
     const renderCalendar = () => {
       const year = parseInt(calendarMonth.split('-')[0]);
       const month = parseInt(calendarMonth.split('-')[1]) - 1;
@@ -625,6 +787,65 @@ export default function App() {
       );
     };
 
+    const renderScheduleCalendar = () => {
+      const [year, month] = scheduleMonth.split('-').map(Number);
+      const firstDay = new Date(year, month - 1, 1).getDay();
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const days = [];
+      for (let i = 0; i < firstDay; i++) days.push(null);
+      for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month - 1, i));
+      const todayStrForSchedule = getLocalISODate();
+
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+            <button onClick={() => { const d = new Date(year, month - 2, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
+            <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month-1]} {year + 543}</h3>
+            <button onClick={() => { const d = new Date(year, month, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
+          </div>
+          <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-indigo-50">
+            {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
+              <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-indigo-800'}`}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 auto-rows-fr">
+            {days.map((date, idx) => {
+              if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] md:min-h-[110px] p-1.5"></div>;
+              const dateStr = getLocalISODate(date.toISOString());
+              const dayShifts = shiftSchedule.filter(s => s.date === dateStr);
+              const dayType = dayTypes.find(d => d.id === dateStr);
+              const myShift = dayShifts.find(s => s.employeeId === loggedInUser?.employeeData?.id);
+              const myPendingRequest = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === dateStr && r.status === 'pending');
+              const isToday = dateStr === todayStrForSchedule;
+              const isSunday = date.getDay() === 0;
+
+              return (
+                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    {dayType ? (
+                      <span className="text-[8px] font-bold text-slate-400 truncate pr-1" title={getDayTypeMeta(dayType.dayTypeId)?.label}>{getDayTypeMeta(dayType.dayTypeId)?.label}</span>
+                    ) : <span></span>}
+                    <div className={`text-right text-sm font-bold shrink-0 ${isSunday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm' : ''}`}>
+                      {date.getDate()}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
+                    {dayShifts.slice(0, 3).map((s, i) => (
+                      <div key={i} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
+                        {(s.employeeName || '-').split(' ')[0]} {s.shiftLabel || '-'}
+                      </div>
+                    ))}
+                    {dayShifts.length > 3 && <div className="text-[9px] text-slate-400 font-bold px-1">+{dayShifts.length - 3} เพิ่มเติม</div>}
+                    {myPendingRequest && <div className="text-[9px] font-bold px-1 py-0.5 rounded truncate bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center"><Bell size={8} className="mr-0.5 shrink-0"/>รออนุมัติ</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
     const todayStrUI = getLocalISODate();
     const uiLogs = attendanceLogs.filter(log => 
       log.employeeId === loggedInUser?.employeeData?.id && 
@@ -648,6 +869,12 @@ export default function App() {
           </div>
           <div className="flex bg-slate-100 p-1.5 rounded-xl w-full md:w-auto">
             <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
+            <button onClick={() => setLocalActiveTab('schedule')} className={`relative flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              ตารางกะ
+              {loggedInUser?.role === 'admin' && pendingSwapRequests.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{pendingSwapRequests.length}</span>
+              )}
+            </button>
             <button onClick={() => setLocalActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ประวัติ</button>
           </div>
         </div>
@@ -718,6 +945,216 @@ export default function App() {
               </p>
             </div>
           )
+        )}
+
+        {activeTab === 'schedule' && (
+          <div className="space-y-4">
+            {selectedScheduleDate && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); }}>
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  {(() => {
+                    const dayShiftsForModal = shiftSchedule.filter(s => s.date === selectedScheduleDate);
+                    const myShiftForModal = dayShiftsForModal.find(s => s.employeeId === loggedInUser?.employeeData?.id);
+                    const myPendingRequestForModal = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === selectedScheduleDate && r.status === 'pending');
+                    const isPastSelected = selectedScheduleDate < getLocalISODate();
+                    const dayTypeForModal = dayTypes.find(d => d.id === selectedScheduleDate);
+                    const availableSlots = dayTypeForModal ? getShiftSlotsForDayType(dayTypeForModal.dayTypeId) : [];
+                    const showDayTypePicker = !isPastSelected && (!dayTypeForModal || isEditingDayType);
+                    let dateLabel = selectedScheduleDate;
+                    try { dateLabel = new Date(selectedScheduleDate + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
+                    return (
+                      <>
+                        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
+                          <h3 className="font-bold text-base">{dateLabel}</h3>
+                          <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                        </div>
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+
+                          {isPastSelected ? (
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
+                              {dayTypeForModal && <p className="text-xs text-slate-400 mb-2">รูปแบบวัน: {getDayTypeMeta(dayTypeForModal.dayTypeId)?.label || dayTypeForModal.dayTypeId}</p>}
+                              {dayShiftsForModal.length === 0 ? (
+                                <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ไม่มีข้อมูลกะวันนี้</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {dayShiftsForModal.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+                                      <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
+                                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <p className="text-xs text-slate-400 text-center pt-3">วันที่ผ่านมาแล้ว ไม่สามารถจอง/ขอเปลี่ยนกะได้</p>
+                            </div>
+                          ) : showDayTypePicker ? (
+                            <div className="bg-white p-4 rounded-2xl border border-indigo-100">
+                              <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 tracking-wide">
+                                {dayTypeForModal ? 'เลือกรูปแบบวันใหม่ (Admin แก้ไข)' : 'วันนี้ทำงานแบบไหน? เลือกก่อนเริ่มลงกะ'}
+                              </h4>
+                              <div className="space-y-2">
+                                {DAY_TYPES.map(dt => (
+                                  <button key={dt.id} onClick={() => { handleSetDayType(selectedScheduleDate, dt.id); setIsEditingDayType(false); }} disabled={isScheduleProcessing} className="w-full text-left p-3 rounded-xl border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition">
+                                    <p className="text-sm font-bold text-slate-800">{dt.label}</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">{dt.description}</p>
+                                  </button>
+                                ))}
+                              </div>
+                              {dayTypeForModal && (
+                                <button onClick={() => setIsEditingDayType(false)} className="w-full mt-2 py-2 text-xs font-bold text-slate-500 hover:text-slate-700">ยกเลิก</button>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200">
+                                <div>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">รูปแบบวันนี้</p>
+                                  <p className="text-sm font-bold text-slate-700">{getDayTypeMeta(dayTypeForModal.dayTypeId)?.label}</p>
+                                </div>
+                                {loggedInUser?.role === 'admin' && (
+                                  <button onClick={() => setIsEditingDayType(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0">แก้ไข (Admin)</button>
+                                )}
+                              </div>
+
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
+                                {dayShiftsForModal.length === 0 ? (
+                                  <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ยังไม่มีใครจองกะวันนี้</p>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    {dayShiftsForModal.map(s => (
+                                      <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+                                        <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
+                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {loggedInUser?.employeeData && (
+                                <div className="pt-4 border-t border-slate-200">
+                                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะของฉัน</h4>
+                                  {myPendingRequestForModal ? (
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 flex items-center">
+                                      <Bell size={15} className="mr-2 shrink-0"/> รอ Admin อนุมัติ: {myPendingRequestForModal.currentShiftLabel || '-'} → {myPendingRequestForModal.requestedShiftLabel || '-'}
+                                    </div>
+                                  ) : myShiftForModal ? (
+                                    isRequestingChange ? (
+                                      <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                        <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b></p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                          {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
+                                            <button key={s.id} onClick={() => setChangeRequestShiftType(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${changeRequestShiftType === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
+                                          ))}
+                                        </div>
+                                        <input type="text" placeholder="เหตุผล (ถ้ามี)..." value={changeRequestReason} onChange={e => setChangeRequestReason(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
+                                        <div className="flex gap-2">
+                                          <button onClick={() => { setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); }} disabled={isScheduleProcessing} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">ยกเลิก</button>
+                                          <button onClick={() => handleRequestShiftChange(selectedScheduleDate, dayTypeForModal.dayTypeId, myShiftForModal, availableSlots.find(s => s.id === changeRequestShiftType), changeRequestReason)} disabled={isScheduleProcessing || !changeRequestShiftType} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">ส่งคำขอ</button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+                                        <span className="text-sm font-bold text-indigo-700">{myShiftForModal.shiftLabel} <span className="font-normal text-indigo-400">({myShiftForModal.shiftTime})</span></span>
+                                        <button onClick={() => { setIsRequestingChange(true); setChangeRequestShiftType(''); setChangeRequestReason(''); }} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0 ml-2">ขอเปลี่ยนกะ</button>
+                                      </div>
+                                    )
+                                  ) : (
+                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {availableSlots.map(s => (
+                                          <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                            {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick))} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">จองกะนี้</button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {showApprovalPanel && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setShowApprovalPanel(false)}>
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
+                    <h3 className="font-bold text-lg flex items-center"><Bell size={18} className="mr-2"/> คำขอเปลี่ยนกะที่รออนุมัติ</h3>
+                    <button onClick={() => setShowApprovalPanel(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                  </div>
+                  <div className="p-5 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
+                    {pendingSwapRequests.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-8">ไม่มีคำขอที่รออนุมัติ</p>
+                    ) : (
+                      pendingSwapRequests.map(req => {
+                        let reqDateLabel = req.date;
+                        try { reqDateLabel = new Date(req.date + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }); } catch(e) {}
+                        return (
+                          <div key={req.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                            <div className="flex justify-between items-start mb-2 gap-2">
+                              <div>
+                                <p className="font-bold text-slate-800 text-sm">{req.employeeName}</p>
+                                <p className="text-xs text-slate-500">{reqDateLabel}</p>
+                              </div>
+                              <span className="text-xs font-bold text-slate-600 text-right shrink-0">{req.currentShiftLabel || '-'} → {req.requestedShiftLabel || '-'}</span>
+                            </div>
+                            {req.reason && <p className="text-xs text-slate-500 italic mb-3 bg-slate-50 p-2 rounded-lg">"{req.reason}"</p>}
+                            <div className="flex gap-2">
+                              <button onClick={() => handleReviewSwapRequest(req, false)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition">ปฏิเสธ</button>
+                              <button onClick={() => handleReviewSwapRequest(req, true)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition">อนุมัติ</button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
+                <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
+              </div>
+              {loggedInUser?.role === 'admin' && (
+                <button onClick={() => setShowApprovalPanel(true)} className="relative shrink-0 px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
+                  <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
+                  {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
+                </button>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+              <p className="text-[11px] font-bold text-slate-400 uppercase mb-2 tracking-wide">รูปแบบวันทำงาน 3 แบบ</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                {DAY_TYPES.map(dt => (
+                  <div key={dt.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <p className="text-xs font-bold text-slate-700">{dt.label}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{dt.description}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-amber-100 text-amber-700 border-amber-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-amber-400"></span>กะที่ 1</span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-orange-100 text-orange-700 border-orange-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-orange-400"></span>กะที่ 2</span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100 text-indigo-700 border-indigo-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-indigo-400"></span>กะที่ 3 / กะสุดท้าย</span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-600 border-slate-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400"></span>วันหยุด</span>
+              </div>
+            </div>
+
+            {renderScheduleCalendar()}
+          </div>
         )}
 
         {activeTab === 'history' && (
