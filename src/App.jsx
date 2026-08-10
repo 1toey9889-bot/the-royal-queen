@@ -6,7 +6,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
   deleteDoc, doc, increment, setDoc, query, orderBy, limit,
-  writeBatch, getDoc 
+  writeBatch, getDoc, runTransaction 
 } from "firebase/firestore";
 import { 
   LayoutDashboard, Package, ShoppingCart, Plus, Edit2, Trash2, 
@@ -303,10 +303,14 @@ export default function App() {
     document.body.appendChild(link); link.click(); setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 1000);
   };
 
+  // จัดกลุ่มรายการขายเป็น "ออเดอร์" โดยใช้ transactionId เป็นหลัก
+  // (ข้อมูลเก่าที่บันทึกก่อนมี transactionId จะ fallback ไปใช้ date เหมือนเดิม เพื่อให้ประวัติเดิมยังจัดกลุ่มถูก)
+  const getTransactionKey = (sale) => sale.transactionId || sale.date;
+
   const groupSalesByTransaction = (salesArray) => {
     const grouped = {};
     salesArray.forEach(sale => {
-      const key = sale.date; 
+      const key = getTransactionKey(sale);
       if (!grouped[key]) {
         grouped[key] = {
           id: key, date: sale.date, orderId: sale.orderId, store: sale.store, soldBy: sale.soldBy,
@@ -318,6 +322,28 @@ export default function App() {
       grouped[key].totalItems += Number(sale.quantity) || 0;
     });
     return Object.values(grouped).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // ปรับยอดสรุปรายวัน (daily_summary) ให้สอดคล้องเสมอเมื่อมีการลบ/แก้ไข/รับคืนสินค้า
+  // ไม่เช่นนั้นยอดใน collection นี้จะบวกเพิ่มอย่างเดียวตอนขาย แต่ไม่เคยหักกลับ ทำให้ข้อมูลคลาดเคลื่อนสะสม
+  const applySummaryDelta = (batch, dateStr, revenueDelta, profitDelta, ordersDelta) => {
+    if (!dateStr) return;
+    if (!revenueDelta && !profitDelta && !ordersDelta) return;
+    const ref = doc(db, "daily_summary", dateStr);
+    batch.set(ref, {
+      date: dateStr,
+      totalRevenue: increment(revenueDelta || 0),
+      totalProfit: increment(profitDelta || 0),
+      totalOrders: increment(ordersDelta || 0)
+    }, { merge: true });
+  };
+
+  // คำนวณกำไรของรายการขาย 1 บรรทัด (ใช้ unitCost ที่บันทึกไว้ตอนขายเป็นหลัก)
+  const getSaleProfit = (sale) => {
+    const total = Number(sale.total) || 0;
+    const qty = Number(sale.quantity) || 0;
+    const unitCost = sale.unitCost !== undefined ? Number(sale.unitCost) : Number(getProduct(sale.productId)?.cost || 0);
+    return total - (unitCost * qty);
   };
 
   const LoginView = () => {
@@ -1756,7 +1782,7 @@ export default function App() {
         tProfit += ((Number(s.total) || 0) - cost);
 
         salesCount[s.productId] = (salesCount[s.productId] || 0) + qty;
-        uniqueOrders.add(s.date); 
+        uniqueOrders.add(getTransactionKey(s)); 
       });
 
        const topList = Object.entries(salesCount)
@@ -2019,51 +2045,71 @@ export default function App() {
       setIsProcessing(true);
       try {
         const checkoutTime = new Date().toISOString();
-        const productDocs = {};
-        for (const item of cart) {
-          const productRef = doc(db, "products", item.productId);
-          const pSnap = await getDoc(productRef);
-          if (!pSnap.exists()) throw new Error(`ไม่พบข้อมูลสินค้า: ${item.name}`);
-          productDocs[item.productId] = { ref: productRef, data: pSnap.data() };
-        }
-
-        for (const item of cart) {
-          const currentStock = Number(productDocs[item.productId].data.stock) || 0;
-          if (currentStock < item.quantity) throw new Error(`สต๊อกสินค้า "${item.name}" ไม่เพียงพอ (เหลือ ${currentStock})`);
-        }
-
-        const batch = writeBatch(db);
         const todayStr = getLocalISODate();
-        const summaryRef = doc(db, "daily_summary", todayStr);
-        let totalOrderRevenue = 0; let totalOrderProfit = 0;
-        const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
-        let remainingTotal = finalTotal;
-        for (let i = 0; i < cart.length; i++) {
-           const item = cart[i];
-           const pData = productDocs[item.productId].data; const pRef = productDocs[item.productId].ref;
-           const itemCost = Number(pData.cost) || 0;
-           const isLastItem = i === cart.length - 1;
-           const baseItemTotal = Number(item.price) * Number(item.quantity);
-           let rowTotal = 0;
-           if (isLastItem) { rowTotal = remainingTotal; } 
-           else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
-           
-           const unitPrice = Number(item.quantity) > 0 ? (rowTotal / Number(item.quantity)) : 0;
-           
-           // ใช้ increment เพื่อตัดสต๊อกอย่างแม่นยำและไม่ติด Lock
-           batch.update(pRef, { stock: increment(-Number(item.quantity)), updatedAt: checkoutTime });
-           const salesRef = doc(collection(db, "sales"));
-           batch.set(salesRef, {
-             orderId: orderId || '-', customerName: '-', store: selectedStore, productId: item.productId, quantity: Number(item.quantity), total: rowTotal, unitPrice: unitPrice, unitCost: itemCost, date: checkoutTime, soldBy: loggedInUser?.username || 'unknown'
-           });
-           totalOrderRevenue += rowTotal; totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
-        }
+        // transactionId ที่คงที่ต่อ 1 ออเดอร์ ใช้จัดกลุ่มแทนการอิงเวลา (แก้วันเวลารายการย่อยแล้วออเดอร์ไม่แตก)
+        const transactionId = `${checkoutTime}_${Math.random().toString(36).slice(2, 10)}`;
+        const cartSnapshot = [...cart];
+        const uniqueProductIds = [...new Set(cartSnapshot.map(i => i.productId))];
 
-        batch.set(summaryRef, { totalRevenue: increment(totalOrderRevenue), totalProfit: increment(totalOrderProfit), totalOrders: increment(1), date: todayStr }, { merge: true });
-        const auditRef = doc(collection(db, "audit_logs"));
-        batch.set(auditRef, { action: "CREATE_ORDER", user: loggedInUser?.username || 'unknown', details: `สร้างออเดอร์ ${orderId||'ไม่มี ID'} ยอด ${totalOrderRevenue} (รวม ${cart.length} รายการย่อย)`, timestamp: checkoutTime });
-        await batch.commit();
-        
+        // ใช้ runTransaction: อ่านสต๊อกและเขียนตัดสต๊อกอยู่ใน transaction เดียวกัน
+        // ถ้ามีเครื่องอื่นแก้สต๊อกสินค้าตัวเดียวกันระหว่างนั้น Firestore จะรันใหม่ทั้งชุดให้อัตโนมัติ
+        // จึงไม่มีทางขายเกินสต๊อก (ต่างจาก getDoc แล้วค่อย commit ที่มีช่องว่างให้แทรกได้)
+        const totals = await runTransaction(db, async (tx) => {
+          const productData = {};
+          for (const pid of uniqueProductIds) {
+            const snap = await tx.get(doc(db, "products", pid));
+            if (!snap.exists()) {
+              const nameForMsg = cartSnapshot.find(i => i.productId === pid)?.name || pid;
+              throw new Error(`ไม่พบข้อมูลสินค้า: ${nameForMsg}`);
+            }
+            productData[pid] = snap.data();
+          }
+
+          // รวมจำนวนที่ต้องตัดต่อสินค้า (กันกรณีสินค้าเดียวกันถูกเพิ่มหลายบรรทัด)
+          const qtyByProduct = {};
+          for (const item of cartSnapshot) {
+            qtyByProduct[item.productId] = (qtyByProduct[item.productId] || 0) + Number(item.quantity);
+          }
+          for (const pid of uniqueProductIds) {
+            const currentStock = Number(productData[pid].stock) || 0;
+            if (currentStock < qtyByProduct[pid]) {
+              throw new Error(`สต๊อกสินค้า "${productData[pid].name || ''}" ไม่เพียงพอ (เหลือ ${currentStock})`);
+            }
+          }
+
+          let totalOrderRevenue = 0; let totalOrderProfit = 0;
+          const ratio = posTotal > 0 ? (finalTotal / posTotal) : 1;
+          let remainingTotal = finalTotal;
+
+          for (let i = 0; i < cartSnapshot.length; i++) {
+            const item = cartSnapshot[i];
+            const itemCost = Number(productData[item.productId].cost) || 0;
+            const isLastItem = i === cartSnapshot.length - 1;
+            const baseItemTotal = Number(item.price) * Number(item.quantity);
+            let rowTotal = 0;
+            if (isLastItem) { rowTotal = remainingTotal; }
+            else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
+
+            const unitPrice = Number(item.quantity) > 0 ? (rowTotal / Number(item.quantity)) : 0;
+
+            tx.set(doc(collection(db, "sales")), {
+              orderId: orderId || '-', customerName: '-', store: selectedStore, productId: item.productId,
+              quantity: Number(item.quantity), total: rowTotal, unitPrice: unitPrice, unitCost: itemCost,
+              date: checkoutTime, transactionId: transactionId, soldBy: loggedInUser?.username || 'unknown'
+            });
+            totalOrderRevenue += rowTotal; totalOrderProfit += (rowTotal - (itemCost * Number(item.quantity)));
+          }
+
+          for (const pid of uniqueProductIds) {
+            tx.update(doc(db, "products", pid), { stock: increment(-qtyByProduct[pid]), updatedAt: checkoutTime });
+          }
+
+          tx.set(doc(db, "daily_summary", todayStr), { totalRevenue: increment(totalOrderRevenue), totalProfit: increment(totalOrderProfit), totalOrders: increment(1), date: todayStr }, { merge: true });
+          tx.set(doc(collection(db, "audit_logs")), { action: "CREATE_ORDER", user: loggedInUser?.username || 'unknown', details: `สร้างออเดอร์ ${orderId||'ไม่มี ID'} ยอด ${totalOrderRevenue} (รวม ${cartSnapshot.length} รายการย่อย)`, timestamp: checkoutTime });
+
+          return { totalOrderRevenue };
+        });
+
         setCart([]); setOrderId(''); setCustomGrandTotal(''); setShowConfirmModal(false);
         setIsError(false); setMessage('บันทึกออเดอร์สำเร็จ!');
         setTimeout(() => setMessage(''), 3000);
@@ -2520,6 +2566,8 @@ export default function App() {
             batch.update(productRef, { stock: increment(Number(sale.quantity)) });
         }
         batch.delete(doc(db, "sales", sale.id));
+        // หักยอดสรุปรายวันกลับ (ลบเฉพาะรายการย่อย ไม่ลดจำนวนออเดอร์ เพราะออเดอร์ยังอยู่)
+        applySummaryDelta(batch, getLocalISODate(sale.date), -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
         await batch.commit();
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
       setIsProcessing(false);
@@ -2541,6 +2589,19 @@ export default function App() {
            }
         }
         for (const sale of group.items) { batch.delete(doc(db, "sales", sale.id)); }
+
+        // หักยอดสรุปรายวันกลับทั้งออเดอร์ พร้อมลดจำนวนออเดอร์ลง 1
+        // (แยกตามวันของแต่ละรายการ เผื่อกรณีรายการในออเดอร์ถูกแก้วันที่ไว้ต่างกัน)
+        const revenueByDate = {}; const profitByDate = {};
+        group.items.forEach(sale => {
+          const d = getLocalISODate(sale.date);
+          revenueByDate[d] = (revenueByDate[d] || 0) + (Number(sale.total) || 0);
+          profitByDate[d] = (profitByDate[d] || 0) + getSaleProfit(sale);
+        });
+        const orderDateForCount = getLocalISODate(group.date);
+        Object.keys(revenueByDate).forEach(d => {
+          applySummaryDelta(batch, d, -revenueByDate[d], -profitByDate[d], d === orderDateForCount ? -1 : 0);
+        });
         
         await batch.commit();
       } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
@@ -2571,9 +2632,22 @@ export default function App() {
 
         let newDateIso = sale.date;
         try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
-        
+
+        const newTotal = Number(editForm.customPrice) * newQty;
+        const newUnitCost = Number(newPData.cost) || 0;
+        const newProfit = newTotal - (newUnitCost * newQty);
+        const oldDateStr = getLocalISODate(sale.date);
+        const newDateStr = getLocalISODate(newDateIso);
+        // ปรับยอดสรุปรายวันตามส่วนต่าง ถ้าย้ายวันด้วยให้ถอนยอดออกจากวันเดิมแล้วไปบวกที่วันใหม่
+        if (oldDateStr === newDateStr) {
+          applySummaryDelta(batch, newDateStr, newTotal - (Number(sale.total) || 0), newProfit - getSaleProfit(sale), 0);
+        } else {
+          applySummaryDelta(batch, oldDateStr, -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
+          applySummaryDelta(batch, newDateStr, newTotal, newProfit, 0);
+        }
+
         batch.update(doc(db, "sales", sale.id), {
-          productId: newProductId, quantity: newQty, total: Number(editForm.customPrice) * newQty, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
+          productId: newProductId, quantity: newQty, total: newTotal, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
         });
         await batch.commit();
         setIsEditing(null);
@@ -2606,6 +2680,9 @@ export default function App() {
             if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
             const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
             updateData.total = rowTotal; updateData.unitPrice = unitPrice;
+            // ปรับยอดสรุปรายวันตามส่วนต่างของแต่ละรายการ (กำไรขยับตามยอดขายที่เปลี่ยน ต้นทุนเท่าเดิม)
+            const revenueDelta = rowTotal - baseItemTotal;
+            applySummaryDelta(batch, getLocalISODate(sale.date), revenueDelta, revenueDelta, 0);
           }
           if (storeChanged) { updateData.store = newStore; }
           batch.update(doc(db, "sales", sale.id), updateData);
@@ -3188,12 +3265,17 @@ export default function App() {
                 }
                 
                 const newQty = item.quantity - qtyToReturn;
+                const unitCostForReturn = item.unitCost !== undefined ? Number(item.unitCost) : Number(getProduct(item.productId)?.cost || 0);
+                const refundedRevenue = (Number(item.total) / Number(item.quantity)) * qtyToReturn;
+                const refundedProfit = refundedRevenue - (unitCostForReturn * qtyToReturn);
                 if(newQty === 0) {
                     batch.delete(doc(db, "sales", item.id));
                 } else {
                     const newTotal = (item.total / item.quantity) * newQty;
                     batch.update(doc(db, "sales", item.id), { quantity: newQty, total: newTotal });
                 }
+                // หักยอดขาย/กำไรส่วนที่ลูกค้าคืนออกจากยอดสรุปรายวันของวันที่ขาย
+                applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
                 
                 batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน ${qtyToReturn} ชิ้น ออเดอร์ ${item.orderId}`, timestamp: new Date().toISOString() });
             }
