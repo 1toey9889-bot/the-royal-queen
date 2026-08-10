@@ -1073,7 +1073,17 @@ export default function App() {
                               {loggedInUser?.employeeData && (
                                 <div className="pt-4 border-t border-slate-200">
                                   <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะของฉัน</h4>
-                                  {myPendingRequestForModal ? (
+                                  {myShiftForModal && canManageAllAttendance ? (
+                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b> <span className="text-indigo-500 font-medium">(Admin/ผู้มีสิทธิ์ แก้ได้ทันที ไม่ต้องขออนุมัติ)</span></p>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
+                                          <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
+                                        ))}
+                                      </div>
+                                      <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: loggedInUser.employeeData.id, employeeName: loggedInUser.employeeData.fullName, allowOverwrite: true })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">เปลี่ยนกะของฉัน</button>
+                                    </div>
+                                  ) : myPendingRequestForModal ? (
                                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 flex items-center">
                                       <Bell size={15} className="mr-2 shrink-0"/> รอ Admin อนุมัติ: {myPendingRequestForModal.currentShiftLabel || '-'} → {myPendingRequestForModal.requestedShiftLabel || '-'}
                                     </div>
@@ -1165,6 +1175,7 @@ export default function App() {
                       pendingSwapRequests.map(req => {
                         let reqDateLabel = req.date;
                         try { reqDateLabel = new Date(req.date + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }); } catch(e) {}
+                        const othersThatDay = shiftSchedule.filter(s => s.date === req.date && s.employeeId !== req.employeeId);
                         return (
                           <div key={req.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                             <div className="flex justify-between items-start mb-2 gap-2">
@@ -1175,6 +1186,19 @@ export default function App() {
                               <span className="text-xs font-bold text-slate-600 text-right shrink-0">{req.currentShiftLabel || '-'} → {req.requestedShiftLabel || '-'}</span>
                             </div>
                             {req.reason && <p className="text-xs text-slate-500 italic mb-3 bg-slate-50 p-2 rounded-lg">"{req.reason}"</p>}
+                            {othersThatDay.length > 0 && (
+                              <div className="mb-3 bg-slate-50 rounded-xl p-2.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wide">พนักงานคนอื่นที่ทำงานวันนี้</p>
+                                <div className="space-y-1">
+                                  {othersThatDay.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between text-xs">
+                                      <span className="text-slate-600 font-medium">{s.employeeName}</span>
+                                      <span className={`font-bold px-1.5 py-0.5 rounded border text-[10px] shrink-0 ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <div className="flex gap-2">
                               <button onClick={() => handleReviewSwapRequest(req, false)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition">ปฏิเสธ</button>
                               <button onClick={() => handleReviewSwapRequest(req, true)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition">อนุมัติ</button>
