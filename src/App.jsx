@@ -2623,6 +2623,9 @@ export default function App() {
         const batch = writeBatch(db);
 
         if (oldProductId !== newProductId) {
+           // ตรวจว่าสินค้าปลายทางยังอยู่จริงก่อนตัดสต๊อก (กันกรณีถูกลบไปแล้ว แล้วทำให้ batch ทั้งชุดล้มเหลว)
+           const newPSnap = await getDoc(newPRef);
+           if (!newPSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าที่เลือก (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
            if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(oldQty) });
            batch.update(newPRef, { stock: increment(-newQty) });
         } else if (oldQty !== newQty) {
@@ -3225,6 +3228,9 @@ export default function App() {
       try {
         const productRef = doc(db, "products", selectedProduct);
         const amount = Number(stockAmount);
+        // ตรวจว่าสินค้ายังอยู่จริงก่อนอัปเดต (กันกรณีถูกลบไปแล้ว แล้ว batch ล้มเหลวโดยไม่รู้สาเหตุ)
+        const productSnap = await getDoc(productRef);
+        if (!productSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้านี้ (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
         const batch = writeBatch(db);
         if (isAbsoluteOverride) {
             // คำนวณส่วนต่างจากค่าเดิมที่ผู้ดูแลระบบเห็นตอนกดแก้ไข ป้องกัน Race Condition
