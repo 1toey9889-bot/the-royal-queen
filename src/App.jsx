@@ -131,21 +131,19 @@ export default function App() {
   // เพื่อป้องกันบัค: ทุกครั้งที่ Firestore listener อัปเดตข้อมูล (เช่น จองกะสำเร็จ) App() จะ re-render
   // และคอมโพเนนต์ลูกที่ประกาศไว้ข้างในถูกสร้างใหม่ ทำให้ React unmount/remount แล้ว state ภายในรีเซ็ต
   // (เด้งกลับไปแท็บ "ลงเวลา", ปิด modal ที่เปิดค้างไว้ ฯลฯ) การยก state เหล่านี้ขึ้นมาไว้ที่นี่ทำให้ค่าคงอยู่ข้าม remount
+  // หมายเหตุ: ช่องพิมพ์ข้อความ (reason/ชื่อวันหยุด) ไม่ยกมาไว้ตรงนี้ เพราะการพิมพ์ทุกตัวอักษรจะสั่ง re-render ทั้งแอปทันที
+  // ทำให้ input ถูกสร้างใหม่และเสีย focus ทุกตัวอักษร (ต้องคลิกเข้าไปใหม่ตลอด) จึงเก็บช่องพิมพ์ไว้เป็น local state แทน
   const [attendanceLocalTab, setAttendanceLocalTab] = useState('checkin');
   const [scheduleMonth, setScheduleMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(null);
   const [scheduleShiftPick, setScheduleShiftPick] = useState('');
   const [isRequestingChange, setIsRequestingChange] = useState(false);
   const [changeRequestShiftType, setChangeRequestShiftType] = useState('');
-  const [changeRequestReason, setChangeRequestReason] = useState('');
   const [showApprovalPanel, setShowApprovalPanel] = useState(false);
   const [isEditingDayType, setIsEditingDayType] = useState(false);
   const [adminSelectedEmployeeId, setAdminSelectedEmployeeId] = useState('');
   const [showHolidayPanel, setShowHolidayPanel] = useState(false);
-  const [newHolidayDate, setNewHolidayDate] = useState('');
-  const [newHolidayName, setNewHolidayName] = useState('');
   const [editingHolidayId, setEditingHolidayId] = useState(null);
-  const [editingHolidayName, setEditingHolidayName] = useState('');
   const [holidayYearFilter, setHolidayYearFilter] = useState(new Date().getFullYear().toString());
   const [shiftSwapRequests, setShiftSwapRequests] = useState([]); // คำขอเปลี่ยน/สลับกะ รออนุมัติจาก Admin
   const [isFaceModelsLoaded, setIsFaceModelsLoaded] = useState(false);
@@ -378,7 +376,12 @@ export default function App() {
     const [isEditingMode, setIsEditingMode] = useState(false);
     const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
 
-    // ตารางกะการทำงาน (Shift Scheduling) + วันหยุดประจำปี: state ทั้งหมดยกไปไว้ระดับ App() แล้ว (ดูด้านบน) ที่เหลือคือ state ที่ไม่จำเป็นต้องรอด remount
+    // ตารางกะการทำงาน (Shift Scheduling) + วันหยุดประจำปี: state ที่เป็นการเลือก/คลิกยกไปไว้ระดับ App() แล้ว (ดูด้านบน)
+    // ส่วนช่องพิมพ์ข้อความเก็บไว้ local ที่นี่ เพื่อไม่ให้เสีย focus ทุกตัวอักษรที่พิมพ์ (ดูคอมเมนต์อธิบายที่ระดับ App())
+    const [changeRequestReason, setChangeRequestReason] = useState('');
+    const [newHolidayDate, setNewHolidayDate] = useState('');
+    const [newHolidayName, setNewHolidayName] = useState('');
+    const [editingHolidayName, setEditingHolidayName] = useState('');
     const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
 
     const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
@@ -1363,17 +1366,17 @@ export default function App() {
                 <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
                 <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
               </div>
-              {canManageAllAttendance && (
-                <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="flex flex-wrap gap-2 shrink-0">
+                {canManageAllAttendance && (
                   <button onClick={() => setShowApprovalPanel(true)} className="relative px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
                     <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
                     {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
                   </button>
-                  <button onClick={() => { setShowHolidayPanel(true); setNewHolidayDate(''); setNewHolidayName(''); setEditingHolidayId(null); }} className="px-4 py-2.5 bg-white border border-rose-200 text-rose-700 text-sm font-bold rounded-xl hover:bg-rose-50 transition flex items-center shadow-sm">
-                    <CalendarDays size={16} className="mr-1.5"/> วันหยุดประจำปี
-                  </button>
-                </div>
-              )}
+                )}
+                <button onClick={() => { setShowHolidayPanel(true); setNewHolidayDate(''); setNewHolidayName(''); setEditingHolidayId(null); }} className="px-4 py-2.5 bg-white border border-rose-200 text-rose-700 text-sm font-bold rounded-xl hover:bg-rose-50 transition flex items-center shadow-sm">
+                  <CalendarDays size={16} className="mr-1.5"/> วันหยุดประจำปี
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
