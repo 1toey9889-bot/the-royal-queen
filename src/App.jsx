@@ -359,6 +359,7 @@ export default function App() {
     const [changeRequestReason, setChangeRequestReason] = useState('');
     const [showApprovalPanel, setShowApprovalPanel] = useState(false);
     const [isEditingDayType, setIsEditingDayType] = useState(false);
+    const [adminSelectedEmployeeId, setAdminSelectedEmployeeId] = useState('');
     const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
 
     const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
@@ -644,22 +645,38 @@ export default function App() {
       setIsScheduleProcessing(false);
     };
 
-    const handleBookShift = async (dateStr, dayTypeId, slot) => {
-      if (!loggedInUser?.employeeData) return;
+    const handleBookShift = async (dateStr, dayTypeId, slot, opts = {}) => {
+      const targetEmployeeId = opts.employeeId || loggedInUser?.employeeData?.id;
+      const targetEmployeeName = opts.employeeName || loggedInUser?.employeeData?.fullName;
+      if (!targetEmployeeId) return;
       if (!slot) { alert('กรุณาเลือกกะที่ต้องการจอง'); return; }
-      const docId = `${loggedInUser.employeeData.id}_${dateStr}`;
-      if (shiftSchedule.some(s => s.id === docId)) { alert('คุณมีกะที่จองไว้ในวันนี้แล้ว กรุณาใช้ปุ่ม "ขอเปลี่ยนกะ" แทน'); return; }
+      const docId = `${targetEmployeeId}_${dateStr}`;
+      const existing = shiftSchedule.find(s => s.id === docId);
+      if (existing && !opts.allowOverwrite) { alert('มีกะที่จองไว้ในวันนี้แล้ว กรุณาใช้ปุ่ม "ขอเปลี่ยนกะ" แทน'); return; }
+      if (existing && opts.allowOverwrite) {
+        if (!window.confirm(`ยืนยันเปลี่ยนกะของ ${targetEmployeeName} เป็น "${slot.label}" หรือไม่?`)) return;
+      }
       setIsScheduleProcessing(true);
       try {
-        await setDoc(doc(db, "shift_schedule", docId), {
-          employeeId: loggedInUser.employeeData.id,
-          employeeName: loggedInUser.employeeData.fullName,
+        const batch = writeBatch(db);
+        batch.set(doc(db, "shift_schedule", docId), {
+          employeeId: targetEmployeeId,
+          employeeName: targetEmployeeName,
           date: dateStr,
           dayTypeId,
           shiftSlotId: slot.id, shiftLabel: slot.label, shiftTime: slot.time, badgeClass: slot.badgeClass, dotClass: slot.dotClass,
-          bookedByUsername: loggedInUser.username,
+          bookedByUsername: loggedInUser?.username || 'unknown',
           bookedAt: new Date().toISOString()
         });
+        if (opts.allowOverwrite) {
+          // ถ้ามีคำขอเปลี่ยนกะค้างอยู่ของพนักงานคนนี้วันนี้ ให้ถือว่าจบไปแล้วเพราะ Admin แก้ไขตรงแทน
+          const pending = shiftSwapRequests.find(r => r.employeeId === targetEmployeeId && r.date === dateStr && r.status === 'pending');
+          if (pending) {
+            batch.update(doc(db, "shift_swap_requests", pending.id), { status: 'approved', reviewedByUsername: loggedInUser?.username || 'unknown', reviewedAt: new Date().toISOString() });
+          }
+          batch.set(doc(collection(db, "audit_logs")), { action: "ADMIN_EDIT_SHIFT", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'จอง'}กะของ ${targetEmployeeName} วันที่ ${dateStr} เป็น "${slot.label}"`, timestamp: new Date().toISOString() });
+        }
+        await batch.commit();
         setScheduleShiftPick('');
       } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
       setIsScheduleProcessing(false);
@@ -820,7 +837,7 @@ export default function App() {
               const isSunday = date.getDay() === 0;
 
               return (
-                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
+                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); setAdminSelectedEmployeeId(loggedInUser?.employeeData?.id || ''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
                   <div className="flex items-center justify-between mb-1">
                     {dayType ? (
                       <span className="text-[8px] font-bold text-slate-400 truncate pr-1" title={getDayTypeMeta(dayType.dayTypeId)?.label}>{getDayTypeMeta(dayType.dayTypeId)?.label}</span>
@@ -950,7 +967,7 @@ export default function App() {
         {activeTab === 'schedule' && (
           <div className="space-y-4">
             {selectedScheduleDate && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); }}>
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setAdminSelectedEmployeeId(''); }}>
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                   {(() => {
                     const dayShiftsForModal = shiftSchedule.filter(s => s.date === selectedScheduleDate);
@@ -966,7 +983,7 @@ export default function App() {
                       <>
                         <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
                           <h3 className="font-bold text-base">{dateLabel}</h3>
-                          <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                          <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); setAdminSelectedEmployeeId(''); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                         </div>
                         <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
 
@@ -1073,6 +1090,35 @@ export default function App() {
                                       <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick))} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">จองกะนี้</button>
                                     </div>
                                   )}
+                                </div>
+                              )}
+
+                              {canManageAllAttendance && (
+                                <div className="pt-4 border-t border-slate-200">
+                                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">จองกะให้พนักงาน (Admin)</h4>
+                                  <select value={adminSelectedEmployeeId} onChange={e => { setAdminSelectedEmployeeId(e.target.value); setScheduleShiftPick(''); }} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white mb-3 font-medium">
+                                    <option value="">-- เลือกพนักงาน --</option>
+                                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}{emp.id === loggedInUser?.employeeData?.id ? ' (ฉัน)' : ''}</option>)}
+                                  </select>
+                                  {adminSelectedEmployeeId && (() => {
+                                    const targetShift = dayShiftsForModal.find(s => s.employeeId === adminSelectedEmployeeId);
+                                    const targetEmpName = employees.find(e => e.id === adminSelectedEmployeeId)?.fullName || '';
+                                    return (
+                                      <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                        {targetShift && <p className="text-xs text-slate-500">กะปัจจุบันของ {targetEmpName}: <b className="text-slate-700">{targetShift.shiftLabel}</b></p>}
+                                        <div className="grid grid-cols-2 gap-2">
+                                          {availableSlots.filter(s => !targetShift || s.id !== targetShift.shiftSlotId).map(s => (
+                                            <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                              {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                        <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: adminSelectedEmployeeId, employeeName: targetEmpName, allowOverwrite: !!targetShift })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">
+                                          {targetShift ? `เปลี่ยนกะของ ${targetEmpName}` : `จองกะให้ ${targetEmpName}`}
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </>
