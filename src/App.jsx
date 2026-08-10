@@ -740,6 +740,16 @@ export default function App() {
       setIsScheduleProcessing(false);
     };
 
+    const handleDeleteShiftBooking = async (booking) => {
+      if (!window.confirm(`ยืนยันลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'}) หรือไม่?`)) return;
+      setIsScheduleProcessing(true);
+      try {
+        await deleteDoc(doc(db, "shift_schedule", booking.id));
+        await addDoc(collection(db, "audit_logs"), { action: "DELETE_SHIFT", user: loggedInUser?.username || 'unknown', details: `ลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'})`, timestamp: new Date().toISOString() });
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsScheduleProcessing(false);
+    };
+
     const pendingSwapRequests = useMemo(() => {
       return shiftSwapRequests.filter(r => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
     }, [shiftSwapRequests]);
@@ -998,7 +1008,12 @@ export default function App() {
                                   {dayShiftsForModal.map(s => (
                                     <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
                                       <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
-                                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                        {canManageAllAttendance && (
+                                          <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -1043,7 +1058,12 @@ export default function App() {
                                     {dayShiftsForModal.map(s => (
                                       <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
                                         <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
-                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                          {canManageAllAttendance && (
+                                            <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
+                                          )}
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
