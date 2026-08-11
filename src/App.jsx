@@ -129,6 +129,31 @@ const SHIFT_SLOTS_BY_DAY_TYPE = {
 const OFF_SHIFT_SLOT = { id: 'off', label: 'วันหยุด', time: '-', badgeClass: 'bg-slate-100 text-slate-600 border-slate-200', dotClass: 'bg-slate-400' };
 const getDayTypeMeta = (dayTypeId) => DAY_TYPES.find(d => d.id === dayTypeId) || null;
 const getShiftSlotsForDayType = (dayTypeId) => [...(SHIFT_SLOTS_BY_DAY_TYPE[dayTypeId] || []), OFF_SHIFT_SLOT];
+
+// ==========================================
+//  สีประจำตัวพนักงานในตารางกะ (ให้พนักงานเลือกเองเพื่อให้หาชื่อตัวเองในปฏิทินง่ายขึ้น)
+//  ใช้เป็นค่าสี hex ใส่ผ่าน inline style แทน class ของ Tailwind
+//  เพราะชื่อ class ที่ประกอบขึ้นตอนรัน (เช่น bg-rose-100) จะถูก Tailwind ตัดทิ้งตอน build จริง
+// ==========================================
+const EMPLOYEE_COLOR_OPTIONS = [
+  { id: 'default', label: 'ตามกะ', swatch: '#e2e8f0' },
+  { id: 'rose',    label: 'ชมพู',  swatch: '#fb7185', bg: '#ffe4e6', text: '#9f1239', border: '#fda4af' },
+  { id: 'amber',   label: 'ส้ม',   swatch: '#f59e0b', bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
+  { id: 'emerald', label: 'เขียว', swatch: '#10b981', bg: '#d1fae5', text: '#065f46', border: '#6ee7b7' },
+  { id: 'sky',     label: 'ฟ้า',   swatch: '#0ea5e9', bg: '#e0f2fe', text: '#075985', border: '#7dd3fc' },
+  { id: 'violet',  label: 'ม่วง',  swatch: '#8b5cf6', bg: '#ede9fe', text: '#5b21b6', border: '#c4b5fd' },
+  { id: 'teal',    label: 'เขียวน้ำทะเล', swatch: '#14b8a6', bg: '#ccfbf1', text: '#115e59', border: '#5eead4' },
+  { id: 'slate',   label: 'เทา',   swatch: '#64748b', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' },
+];
+
+// คืน inline style ของสีประจำตัวพนักงาน ถ้ายังไม่ได้ตั้ง (หรือเลือก "ตามกะ") จะคืน null เพื่อให้ใช้สีตามกะแบบเดิม
+const getEmployeeColorStyle = (employeeList, employeeId) => {
+  const colorId = employeeList?.find(e => e.id === employeeId)?.calendarColor;
+  if (!colorId || colorId === 'default') return null;
+  const c = EMPLOYEE_COLOR_OPTIONS.find(o => o.id === colorId);
+  if (!c || !c.bg) return null;
+  return { backgroundColor: c.bg, color: c.text, borderColor: c.border };
+};
 // ==========================================
 //  บันทึกการขาย (POS) - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
 //  (ถ้าประกาศไว้ข้างใน App ตัวคอมโพเนนต์จะถูกสร้างใหม่ทุก snapshot จาก Firestore ทำให้ตะกร้า/ฟอร์มที่คีย์ค้างไว้หายกลางคัน)
@@ -1142,6 +1167,16 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
     setIsScheduleProcessing(false);
   };
 
+  // ให้พนักงานตั้งสีประจำตัวของตัวเองในตารางกะ (บันทึกไว้ที่โปรไฟล์พนักงานของคนนั้น)
+  const handleSetMyCalendarColor = async (colorId) => {
+    if (!loggedInUser?.employeeData?.id) return;
+    setIsScheduleProcessing(true);
+    try {
+      await updateDoc(doc(db, "employees", loggedInUser.employeeData.id), { calendarColor: colorId });
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
   const handleDeleteShiftBooking = async (booking) => {
     if (!window.confirm(`ยืนยันลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'}) หรือไม่?`)) return;
     setIsScheduleProcessing(true);
@@ -1311,11 +1346,14 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                 </div>
                 {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
                 <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
-                  {dayShifts.slice(0, 3).map((s, i) => (
-                    <div key={i} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
-                      {(s.employeeName || '-').split(' ')[0]} {s.shiftLabel || '-'}
-                    </div>
-                  ))}
+                  {dayShifts.slice(0, 3).map((s, i) => {
+                    const empStyle = getEmployeeColorStyle(employees, s.employeeId);
+                    return (
+                      <div key={i} style={empStyle || undefined} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${empStyle ? '' : (s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200')}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
+                        {(s.employeeName || '-').split(' ')[0]} {s.shiftLabel || '-'}
+                      </div>
+                    );
+                  })}
                   {dayShifts.length > 3 && <div className="text-[9px] text-slate-400 font-bold px-1">+{dayShifts.length - 3} เพิ่มเติม</div>}
                   {myPendingRequest && <div className="text-[9px] font-bold px-1 py-0.5 rounded truncate bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center"><Bell size={8} className="mr-0.5 shrink-0"/>รออนุมัติ</div>}
                 </div>
@@ -1758,6 +1796,30 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
               </button>
             </div>
           </div>
+
+          {loggedInUser?.employeeData && (
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="shrink-0">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">สีประจำตัวของฉันในปฏิทิน</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">เลือกสีเพื่อให้หาชื่อตัวเองในตารางรายเดือนง่ายขึ้น</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                {EMPLOYEE_COLOR_OPTIONS.map(c => {
+                  const myCurrentColor = employees.find(e => e.id === loggedInUser.employeeData.id)?.calendarColor || 'default';
+                  const isActive = myCurrentColor === c.id;
+                  return (
+                    <button key={c.id} onClick={() => handleSetMyCalendarColor(c.id)} disabled={isScheduleProcessing}
+                      title={c.label}
+                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition active:scale-95 ${isActive ? 'ring-2 ring-offset-1 ring-slate-500 border-white' : 'border-white hover:scale-110'}`}
+                      style={{ backgroundColor: c.swatch }}
+                    >
+                      {c.id === 'default' && <span className="text-[9px] font-bold text-slate-600">ก</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
             <p className="text-[11px] font-bold text-slate-400 uppercase mb-2 tracking-wide">รูปแบบวันทำงาน 3 แบบ</p>
