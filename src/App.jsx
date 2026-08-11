@@ -75,7 +75,7 @@ const defaultPermissions = {
   stockDailyCheck: false, stockAssignCheck: false, stockCheckHistory: false,
   // สิทธิ์ดู "ประวัติการทำรายการ" แยกตามประเภทรายการ (เปิดเฉพาะประเภทที่อนุญาตให้ดู)
   histAddStock: false, histOverrideStock: false, histReturnStock: false,
-  histUnboxStock: false, histAssignCheck: false, histCompleteCheck: false
+  histUnboxStock: false, histAssignCheck: false, histCompleteCheck: false, histCancelTxn: false
 };
 
 // เมนูย่อยในระบบสต๊อก -> คีย์สิทธิ์ (ใช้ทั้งในหน้าตั้งค่าสิทธิ์และตอนตรวจสิทธิ์จริงใน StockView)
@@ -96,7 +96,11 @@ const HISTORY_ACTION_PERMS = [
   { action: 'UNBOX_STOCK', key: 'histUnboxStock', label: 'แกะกล่อง' },
   { action: 'ASSIGN_STOCK_CHECK', key: 'histAssignCheck', label: 'มอบหมายเช็คสต๊อก' },
   { action: 'COMPLETE_STOCK_CHECK', key: 'histCompleteCheck', label: 'เช็คสต๊อกประจำวัน' },
+  { action: 'CANCEL_STOCK_TXN', key: 'histCancelTxn', label: 'ยกเลิกรายการ' },
 ];
+
+// ประเภทรายการที่ "ยกเลิกย้อนกลับ" ได้ (ต้องมี meta ที่บันทึกโครงสร้างข้อมูลไว้ตอนทำรายการ)
+const CANCELLABLE_STOCK_ACTIONS = ['ADD_STOCK', 'UNBOX_STOCK', 'RETURN_STOCK'];
 
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE'];
 const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -2128,8 +2132,91 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       case 'UNBOX_STOCK': return { label: 'แกะกล่อง', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' };
       case 'ASSIGN_STOCK_CHECK': return { label: 'มอบหมายเช็คสต๊อก', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' };
       case 'COMPLETE_STOCK_CHECK': return { label: 'เช็คสต๊อกประจำวัน', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' };
+      case 'CANCEL_STOCK_TXN': return { label: 'ยกเลิกรายการ', badgeClass: 'bg-red-50 text-red-700 border-red-200' };
       default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
     }
+  };
+
+  // สิทธิ์ยกเลิกรายการย้อนกลับ (Admin หรือผู้มีสิทธิ์แก้ไขสต๊อก)
+  const canCancelStockTxn = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.stockEdit;
+
+  // ยกเลิกรายการนำเข้า / แกะกล่อง / ลูกค้าคืนของ แล้วคืนสต๊อกกลับให้ตรงตามเดิม
+  // ใช้ runTransaction เพื่อให้อ่านสต๊อกและเขียนกลับอยู่ในชุดเดียวกัน กันกรณีมีคนขาย/แก้สต๊อกพร้อมกัน
+  const handleCancelStockTransaction = async (log) => {
+    const m = log.meta;
+    if (!m) { alert('รายการนี้บันทึกไว้ก่อนมีระบบยกเลิก จึงไม่มีข้อมูลเพียงพอที่จะย้อนกลับได้อย่างปลอดภัย'); return; }
+    if (log.cancelled) { alert('รายการนี้ถูกยกเลิกไปแล้ว'); return; }
+    if (!window.confirm(`ยืนยันยกเลิกรายการนี้และคืนสต๊อกกลับหรือไม่?\n\n${log.details}`)) return;
+
+    setIsProcessing(true);
+    try {
+      await runTransaction(db, async (tx) => {
+        // ---------- อ่านข้อมูลทั้งหมดก่อน (ข้อกำหนดของ Firestore transaction) ----------
+        const logRef = doc(db, "audit_logs", log.id);
+        const logSnap = await tx.get(logRef);
+        if (!logSnap.exists()) throw new Error('ไม่พบรายการนี้ในระบบ');
+        if (logSnap.data().cancelled) throw new Error('รายการนี้เพิ่งถูกยกเลิกไปแล้ว');
+
+        if (log.action === 'ADD_STOCK') {
+          const pRef = doc(db, "products", m.productId);
+          const pSnap = await tx.get(pRef);
+          if (!pSnap.exists()) throw new Error('ไม่พบสินค้านี้ (อาจถูกลบไปแล้ว)');
+          const cur = Number(pSnap.data().stock) || 0;
+          if (cur < m.qty) throw new Error(`ยกเลิกไม่ได้: สต๊อกคงเหลือ ${cur} น้อยกว่าจำนวนที่นำเข้า ${m.qty} (อาจถูกขาย/ตัดออกไปแล้ว)`);
+          tx.update(pRef, { stock: increment(-Number(m.qty)) });
+
+        } else if (log.action === 'UNBOX_STOCK') {
+          const boxRef = doc(db, "products", m.boxProductId);
+          const panelRef = doc(db, "products", m.panelProductId);
+          const boxSnap = await tx.get(boxRef);
+          const panelSnap = await tx.get(panelRef);
+          if (!boxSnap.exists()) throw new Error('ไม่พบสินค้าต้นทาง (กล่อง) อาจถูกลบไปแล้ว');
+          if (!panelSnap.exists()) throw new Error('ไม่พบสินค้าปลายทาง (แผง) อาจถูกลบไปแล้ว');
+          const panelCur = Number(panelSnap.data().stock) || 0;
+          if (panelCur < m.panelQty) throw new Error(`ยกเลิกไม่ได้: สต๊อก "${panelSnap.data().name || ''}" เหลือ ${panelCur} น้อยกว่า ${m.panelQty} ที่ต้องหักคืน (อาจขายออกไปแล้ว)`);
+          tx.update(panelRef, { stock: increment(-Number(m.panelQty)) });
+          tx.update(boxRef, { stock: increment(Number(m.boxQty)) });
+
+        } else if (log.action === 'RETURN_STOCK') {
+          const pRef = doc(db, "products", m.productId);
+          const pSnap = await tx.get(pRef);
+          const saleRef = doc(db, "sales", m.saleId);
+          const saleSnap = await tx.get(saleRef);
+          if (pSnap.exists()) {
+            const cur = Number(pSnap.data().stock) || 0;
+            if (cur < m.qty) throw new Error(`ยกเลิกไม่ได้: สต๊อกคงเหลือ ${cur} น้อยกว่าจำนวนที่รับคืนไว้ ${m.qty} (อาจขายออกไปแล้ว)`);
+          }
+          // ---------- เขียน ----------
+          if (pSnap.exists()) tx.update(pRef, { stock: increment(-Number(m.qty)) });
+          if (saleSnap.exists()) {
+            // คืนบางส่วน: เพิ่มจำนวน/ยอดกลับเข้ารายการขายเดิม
+            tx.update(saleRef, { quantity: increment(Number(m.qty)), total: increment(Number(m.refundedRevenue)) });
+          } else if (m.originalSale) {
+            // คืนเต็มจำนวนจนรายการถูกลบ: สร้างรายการขายเดิมกลับคืน
+            tx.set(saleRef, m.originalSale);
+          }
+          // คืนยอดขาย/กำไรกลับเข้ายอดสรุปรายวันของวันที่ขาย
+          tx.set(doc(db, "daily_summary", m.saleDateStr), {
+            date: m.saleDateStr,
+            totalRevenue: increment(Number(m.refundedRevenue)),
+            totalProfit: increment(Number(m.refundedProfit))
+          }, { merge: true });
+
+        } else {
+          throw new Error('ประเภทรายการนี้ไม่รองรับการยกเลิก');
+        }
+
+        tx.update(logRef, { cancelled: true, cancelledBy: loggedInUser?.username || 'unknown', cancelledAt: new Date().toISOString() });
+        tx.set(doc(collection(db, "audit_logs")), {
+          action: "CANCEL_STOCK_TXN",
+          user: loggedInUser?.username || 'unknown',
+          details: `ยกเลิกรายการ [${getStockActionMeta(log.action).label}] — ${log.details}`,
+          timestamp: new Date().toISOString()
+        });
+      });
+      alert('ยกเลิกรายการและคืนสต๊อกเรียบร้อยแล้ว');
+    } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
+    setIsProcessing(false);
   };
 
   // ตรวจสิทธิ์เมนูย่อยในระบบสต๊อก
@@ -2259,7 +2346,8 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
           batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อก "${productNameForLog}" เป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
       } else {
           batch.update(productRef, { stock: increment(amount) });
-          batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `นำเข้า "${productNameForLog}" เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
+          batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `นำเข้า "${productNameForLog}" เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString(),
+            meta: { productId: selectedProduct, qty: amount } });
       }
       await batch.commit();
       setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0); setShowImportConfirm(false);
@@ -2305,7 +2393,22 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
 
               const refundedText = Number(refundedRevenue).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน "${returnProductName}" จำนวน ${qtyToReturn} ชิ้น เป็นเงิน ${refundedText} บาท (ออเดอร์ ${item.orderId || '-'})`, timestamp: new Date().toISOString() });
+              // เก็บข้อมูลรายการขายเดิมไว้ด้วย เผื่อกรณีคืนเต็มจำนวนแล้วเอกสารถูกลบ จะได้สร้างกลับคืนได้ตอนยกเลิก
+              const originalSaleSnapshot = {
+                orderId: item.orderId || '-',
+                customerName: item.customerName || '-',
+                store: item.store || '-',
+                productId: item.productId,
+                quantity: Number(item.quantity) || 0,
+                total: Number(item.total) || 0,
+                unitPrice: item.unitPrice !== undefined ? Number(item.unitPrice) : (Number(item.quantity) > 0 ? Number(item.total) / Number(item.quantity) : 0),
+                unitCost: unitCostForReturn,
+                date: item.date,
+                soldBy: item.soldBy || 'unknown',
+                transactionId: item.transactionId || item.date
+              };
+              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน "${returnProductName}" จำนวน ${qtyToReturn} ชิ้น เป็นเงิน ${refundedText} บาท (ออเดอร์ ${item.orderId || '-'})`, timestamp: new Date().toISOString(),
+                meta: { productId: item.productId, qty: qtyToReturn, saleId: item.id, refundedRevenue: refundedRevenue, refundedProfit: refundedProfit, saleDateStr: getLocalISODate(item.date), originalSale: originalSaleSnapshot } });
           }
           await batch.commit();
           alert('ทำรายการคืนสินค้าสำเร็จ');
@@ -2343,7 +2446,8 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
           const batch = writeBatch(db);
           batch.update(boxRef, { stock: increment(-boxQty) });
           batch.update(panelRef, { stock: increment(panelQtyToAdd) });
-          batch.set(doc(collection(db, "audit_logs")), { action: "UNBOX_STOCK", user: loggedInUser?.username, details: `แกะกล่อง "${boxProductData?.name || ''}" จำนวน ${boxQty} กล่อง แปลงเป็น "${panelProductData?.name || ''}" จำนวน ${panelQtyToAdd} แผง (อัตรา ${ratio} แผง/กล่อง)`, timestamp: new Date().toISOString() });
+          batch.set(doc(collection(db, "audit_logs")), { action: "UNBOX_STOCK", user: loggedInUser?.username, details: `แกะกล่อง "${boxProductData?.name || ''}" จำนวน ${boxQty} กล่อง แปลงเป็น "${panelProductData?.name || ''}" จำนวน ${panelQtyToAdd} แผง (อัตรา ${ratio} แผง/กล่อง)`, timestamp: new Date().toISOString(),
+            meta: { boxProductId: selectedBoxProduct, panelProductId: selectedPanelProduct, boxQty: boxQty, panelQty: panelQtyToAdd } });
           await batch.commit();
 
           alert('แกะกล่องสำเร็จ');
@@ -2778,16 +2882,27 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                           const meta = getStockActionMeta(log.action);
                           let dateStr = '-';
                           try { const d = new Date(log.timestamp); if (!isNaN(d.getTime())) dateStr = d.toLocaleString('th-TH'); } catch(e) {}
+                          const isCancellable = canCancelStockTxn && CANCELLABLE_STOCK_ACTIONS.includes(log.action) && !log.cancelled && !!log.meta;
                           return (
-                              <div key={log.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+                              <div key={log.id} className={`p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors ${log.cancelled ? 'bg-slate-50/80' : ''}`}>
                                   <span className={`shrink-0 w-fit text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg border ${meta.badgeClass}`}>{meta.label}</span>
                                   <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-slate-800 font-medium break-words">{log.details || '-'}</p>
+                                      <p className={`text-sm font-medium break-words ${log.cancelled ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{log.details || '-'}</p>
                                       <p className="text-[10px] md:text-xs text-slate-400 mt-1 flex items-center flex-wrap gap-x-3">
                                           <span className="flex items-center"><Clock size={11} className="mr-1"/>{dateStr}</span>
                                           <span className="flex items-center"><User size={11} className="mr-1"/>{log.user || '-'}</span>
+                                          {log.cancelled && (
+                                            <span className="flex items-center font-bold text-red-500">ยกเลิกโดย {log.cancelledBy || '-'}</span>
+                                          )}
                                       </p>
                                   </div>
+                                  {log.cancelled ? (
+                                      <span className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-red-50 text-red-600 border-red-200">ยกเลิกแล้ว</span>
+                                  ) : isCancellable ? (
+                                      <button onClick={() => handleCancelStockTransaction(log)} disabled={isProcessing} className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 transition disabled:opacity-40">
+                                          ยกเลิกรายการ
+                                      </button>
+                                  ) : null}
                               </div>
                           );
                       })
