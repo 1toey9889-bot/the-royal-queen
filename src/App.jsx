@@ -3827,7 +3827,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.34</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.35</p>
         </div>
       </div>
     </div>
@@ -4511,25 +4511,25 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-transparent">
-        <header className="bg-white/80 backdrop-blur-xl h-16 border-b border-white/60 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full shadow-sm">
+        <header className="bg-gradient-to-r from-white/90 via-[#FFFBF2]/90 to-white/90 backdrop-blur-xl h-16 border-b border-[#EADBBB]/70 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full shadow-sm">
           <div className="flex items-center space-x-3">
              <button 
                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-                className="p-2 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors hidden md:flex items-center justify-center border border-slate-200 active:scale-95"
+                className="p-2 bg-[#FFF8EA] hover:bg-[#0A142A] text-[#9A7434] hover:text-[#F3D999] rounded-xl transition-all hidden md:flex items-center justify-center border border-[#EADBBB] hover:border-[#CEA85E] active:scale-95 shadow-sm"
                 title={isSidebarCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
              >
                 <Menu size={18}/>
              </button>
           </div>
           <div className="flex items-center space-x-3 ml-auto w-full sm:w-auto justify-between sm:justify-end">
-            <div className="flex items-center space-x-2 text-xs md:text-sm text-slate-700 py-1.5 px-3 rounded-full border border-slate-200 bg-slate-50">
-               <User size={14} className="text-blue-600"/>
-              <span className="font-bold">{loggedInUser.username}</span>
-              <span className="text-slate-400 font-medium text-[10px] md:text-xs uppercase ml-1 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-100">
-                ({loggedInUser.role === 'admin' ? 'Admin' : 'Staff'})
+            <div className="flex items-center space-x-2 text-xs md:text-sm py-1.5 pl-2.5 pr-2 rounded-full border border-[#CEA85E]/40 bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#1d3560] shadow-md shadow-[#0A142A]/20">
+               <User size={14} className="text-[#F3D999]"/>
+              <span className="font-bold text-white tracking-wide">{loggedInUser.username}</span>
+              <span className="text-[#9A7434] font-bold text-[10px] md:text-xs uppercase tracking-wider bg-[#F3D999] px-2 py-0.5 rounded-full shadow-sm">
+                {loggedInUser.role === 'admin' ? 'Admin' : 'Staff'}
               </span>
              </div>
-            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1.5 text-red-500 hover:bg-red-50 hover:text-red-600 p-2 rounded-lg transition-all text-xs font-bold" title="ออกจากระบบ"><LogOut size={16}/></button>
+            <button onClick={() => { setLoggedInUser(null); setActiveTab('sales'); }} className="flex items-center space-x-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition-all text-xs font-bold border border-transparent hover:border-red-100 active:scale-95" title="ออกจากระบบ"><LogOut size={16}/></button>
           </div>
         </header>
 
