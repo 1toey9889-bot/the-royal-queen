@@ -15,7 +15,8 @@ import {
   Search, ArrowUpDown, ChevronDown, Scan, Minus, CheckCircle2, AlertCircle,
   Barcode, Store, UserCircle, FileText, Camera, Aperture, Image as ImageIcon, Menu,
   Clock, Briefcase, Fingerprint, UserPlus, Info, List, LayoutGrid, Calendar as CalendarIcon, 
-  ChevronLeft, ChevronRight, Video, FileQuestion, ArrowDownToLine, RefreshCcw, Bell
+  ChevronLeft, ChevronRight, Video, FileQuestion, ArrowDownToLine, RefreshCcw, Bell,
+  Sun, Cloud, CloudSun, CloudRain, CloudDrizzle, CloudLightning, CloudSnow, CloudFog, Droplets, MapPin, Thermometer
 } from 'lucide-react';
 //  ไลบรารีสำหรับสแกน Barcode แบบสด
 import { Scanner } from '@yudiel/react-qr-scanner'; 
@@ -42,6 +43,135 @@ const AppBackground = () => (
 );
 
 // ป้ายชื่อผู้พัฒนา มุมขวาล่าง (z ต่ำกว่าโมดัล จึงไม่บังหน้าต่างที่เปิดอยู่)
+// ==========================================
+//  วิดเจ็ต เวลา / วันที่ / สภาพอากาศ (แสดงในแถบเมนูด้านซ้าย)
+//  ใช้ Open-Meteo ซึ่งเรียกใช้ได้ฟรีและไม่ต้องใช้ API key
+// ==========================================
+const THAI_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+// แปลงรหัสสภาพอากาศมาตรฐาน WMO เป็นคำอธิบายภาษาไทย + ไอคอน
+const getWeatherInfo = (code) => {
+  if (code === 0) return { label: 'ท้องฟ้าโปร่ง', Icon: Sun, tone: 'text-amber-300' };
+  if (code === 1) return { label: 'โปร่งเป็นส่วนใหญ่', Icon: CloudSun, tone: 'text-amber-200' };
+  if (code === 2) return { label: 'มีเมฆบางส่วน', Icon: CloudSun, tone: 'text-slate-200' };
+  if (code === 3) return { label: 'มีเมฆมาก', Icon: Cloud, tone: 'text-slate-300' };
+  if (code === 45 || code === 48) return { label: 'หมอกลง', Icon: CloudFog, tone: 'text-slate-300' };
+  if (code >= 51 && code <= 57) return { label: 'ฝนละออง', Icon: CloudDrizzle, tone: 'text-sky-300' };
+  if (code >= 61 && code <= 67) return { label: 'ฝนตก', Icon: CloudRain, tone: 'text-sky-300' };
+  if (code >= 71 && code <= 77) return { label: 'หิมะตก', Icon: CloudSnow, tone: 'text-sky-200' };
+  if (code >= 80 && code <= 82) return { label: 'ฝนตกหนัก', Icon: CloudRain, tone: 'text-sky-400' };
+  if (code === 85 || code === 86) return { label: 'หิมะตกหนัก', Icon: CloudSnow, tone: 'text-sky-200' };
+  if (code >= 95) return { label: 'ฝนฟ้าคะนอง', Icon: CloudLightning, tone: 'text-yellow-300' };
+  return { label: 'ไม่ทราบสภาพอากาศ', Icon: Cloud, tone: 'text-slate-300' };
+};
+
+const SidebarInfoWidget = ({ isSidebarCollapsed }) => {
+  const [now, setNow] = useState(new Date());
+  const [weather, setWeather] = useState(null);
+  const [weatherError, setWeatherError] = useState(false);
+
+  // นาฬิกาเดินทุกวินาที
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // ดึงสภาพอากาศตามตำแหน่งจริง (ถ้าไม่อนุญาตจะใช้พิกัดกรุงเทพฯ) และรีเฟรชทุก 15 นาที
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async (lat, lon) => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+          `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code` +
+          `&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('weather request failed');
+        const data = await res.json();
+        if (cancelled) return;
+        setWeather({
+          temp: Math.round(data.current?.temperature_2m),
+          feels: Math.round(data.current?.apparent_temperature),
+          humidity: Math.round(data.current?.relative_humidity_2m),
+          code: data.current?.weather_code,
+          max: Math.round(data.daily?.temperature_2m_max?.[0]),
+          min: Math.round(data.daily?.temperature_2m_min?.[0]),
+        });
+        setWeatherError(false);
+      } catch (e) {
+        if (!cancelled) setWeatherError(true);
+      }
+    };
+
+    const start = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => load(pos.coords.latitude, pos.coords.longitude),
+          () => load(13.7563, 100.5018), // ไม่อนุญาตตำแหน่ง -> ใช้กรุงเทพฯ
+          { timeout: 8000 }
+        );
+      } else {
+        load(13.7563, 100.5018);
+      }
+    };
+
+    start();
+    const t = setInterval(start, 15 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  if (isSidebarCollapsed) return null;
+
+  const wx = weather ? getWeatherInfo(weather.code) : null;
+  const WxIcon = wx?.Icon;
+
+  return (
+    <div className="hidden md:block px-3 pb-4 mt-1">
+      <div className="rounded-2xl overflow-hidden border border-[#CEA85E]/40 shadow-md shadow-[#0A142A]/15">
+        {/* เวลา + วันที่ */}
+        <div className="bg-gradient-to-br from-[#0A142A] via-[#152747] to-[#1d3560] px-4 py-3 text-center">
+          <p className="text-2xl font-black text-[#F3D999] tracking-wider tabular-nums leading-none">
+            {now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </p>
+          <p className="text-[11px] font-bold text-white/90 mt-1.5">
+            {THAI_DAYS[now.getDay()]}ที่ {now.getDate()} {THAI_MONTHS[now.getMonth()]}
+          </p>
+          <p className="text-[10px] font-medium text-white/50">พ.ศ. {now.getFullYear() + 543}</p>
+        </div>
+
+        {/* สภาพอากาศ */}
+        <div className="bg-gradient-to-b from-[#FFFDF7] to-[#FBF7EE] px-4 py-3">
+          {weather ? (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-baseline">
+                  <span className="text-3xl font-black text-[#0A142A] leading-none tabular-nums">{weather.temp}</span>
+                  <span className="text-lg font-bold text-[#9A7434] ml-0.5">°</span>
+                </div>
+                {WxIcon && <WxIcon size={34} className="text-[#CEA85E]" strokeWidth={1.6}/>}
+              </div>
+              <p className="text-[11px] font-bold text-[#9A7434] mt-1">{wx.label}</p>
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-2 pt-2 border-t border-[#EADBBB]/70">
+                <span className="text-[10px] font-bold text-slate-500 tabular-nums">↑{weather.max}° ↓{weather.min}°</span>
+                <span className="text-[10px] font-medium text-slate-400 flex items-center tabular-nums">
+                  <Thermometer size={10} className="mr-0.5"/>รู้สึก {weather.feels}°
+                </span>
+                <span className="text-[10px] font-medium text-slate-400 flex items-center tabular-nums">
+                  <Droplets size={10} className="mr-0.5"/>{weather.humidity}%
+                </span>
+              </div>
+            </>
+          ) : weatherError ? (
+            <p className="text-[10px] text-slate-400 text-center py-2">ไม่สามารถโหลดสภาพอากาศได้</p>
+          ) : (
+            <p className="text-[10px] text-slate-400 text-center py-2 animate-pulse">กำลังโหลดสภาพอากาศ...</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AppCredit = () => (
   <div className="fixed bottom-2 right-3 z-[30] pointer-events-none select-none text-[10px] md:text-[11px] text-slate-400/90 font-medium tracking-wide">
     Developed by Chavanakorn Tiathotsanat
@@ -3827,7 +3957,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.37</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.38</p>
         </div>
       </div>
     </div>
@@ -4507,6 +4637,7 @@ export default function App() {
             {canAccess('users') && <button onClick={() => setActiveTab('users')} className={`${navItemBaseStyle} ${activeTab === 'users' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการผู้ใช้" : ""}><Users size={20} className={activeTab !== 'users' ? "text-slate-400 group-hover:text-[#CEA85E] transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>การจัดการผู้ใช้</span></button>}
             {canAccess('employees') && <button onClick={() => setActiveTab('employees')} className={`${navItemBaseStyle} ${activeTab === 'employees' ? navItemActiveStyle : navItemInactiveStyle}`} title={isSidebarCollapsed ? "การจัดการพนักงาน" : ""}><Briefcase size={20} className={activeTab !== 'employees' ? "text-slate-400 group-hover:text-[#CEA85E] transition-colors" : ""}/><span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isSidebarCollapsed ? 'md:w-0 md:opacity-0 md:ml-0' : 'md:w-auto md:opacity-100 ml-2.5'}`}>การจัดการพนักงาน</span></button>}
           </nav>
+          <SidebarInfoWidget isSidebarCollapsed={isSidebarCollapsed}/>
         </div>
       </div>
 
