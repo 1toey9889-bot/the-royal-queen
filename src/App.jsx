@@ -415,7 +415,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
 
   if (!isAttendanceValid) {
       return (
-          <div className="flex flex-col items-center justify-center p-8 md:p-12 bg-white rounded-3xl shadow-sm border border-orange-200 text-center animate-in zoom-in duration-300 max-w-2xl mx-auto mt-4 md:mt-10 relative overflow-hidden">
+          <div className="flex flex-col items-center justify-center p-8 md:p-12 bg-[#FFFDF7] rounded-3xl shadow-sm border border-orange-200 text-center animate-in zoom-in duration-300 max-w-2xl mx-auto mt-4 md:mt-10 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
               <AlertCircle size={64} className="text-orange-500 mb-4" />
               <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">แจ้งเตือน: จำเป็นต้องลงเวลาก่อนเริ่มขาย</h2>
@@ -458,19 +458,19 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 w-full h-full">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100">
+          <div className="bg-[#FFFDF7] rounded-[2rem] shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden border border-[#EADBBB]/50">
              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 md:p-5 text-center text-white shrink-0 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
                 <h3 className="text-lg md:text-xl font-bold relative z-10 tracking-wide">ยืนยันการทำรายการขาย</h3>
              </div>
-             <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1 w-full bg-slate-50/50">
-                <div className="grid grid-cols-2 gap-4 text-sm bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+             <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1 w-full bg-[#FBF7EE]/60">
+                <div className="grid grid-cols-2 gap-4 text-sm bg-[#FFFDF7] p-4 rounded-2xl border border-[#EADBBB]/60 shadow-sm">
                    <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">ร้านค้า</span><span className={`inline-block px-3.5 py-1.5 rounded-xl font-black text-xs md:text-sm shadow-sm border ${selectedStore.includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (selectedStore === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{selectedStore}</span></div>
                    <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">รหัสออเดอร์</span><span className="font-black text-slate-800 text-sm md:text-base bg-slate-100 px-3 py-1.5 rounded-xl block border border-slate-200 break-words">{orderId || '-'}</span></div>
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Package size={16} className="mr-1.5"/>รายการสินค้า ({cart.length})</h4>
-                  <div className="space-y-2 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm p-1.5">
+                  <div className="space-y-2 bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/60 overflow-hidden shadow-sm p-1.5">
                        {cart.map((item, idx) => (
                         <div key={idx} className="flex flex-row justify-between items-center text-sm p-2 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
                            <div className="flex-1 pr-4">
@@ -504,7 +504,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
 
       {scanMode && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 w-full h-full">
-           <div className="bg-white p-5 md:p-6 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh] border border-slate-100">
+           <div className="bg-[#FFFDF7] p-5 md:p-6 rounded-[2rem] w-full max-w-lg space-y-5 shadow-2xl flex flex-col max-h-[90vh] border border-[#EADBBB]/50">
              <div className="flex bg-slate-100/80 p-1.5 rounded-2xl shrink-0 gap-1.5 border border-slate-200/60 shadow-inner">
                 <button onClick={() => setScanMode('camera')} className={`flex-1 py-2.5 text-[11px] md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'camera' ? 'bg-white text-blue-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Barcode size={16} className="mr-1"/> สแกนโค้ด</button>
                 <button onClick={() => startOcrCamera()} className={`flex-1 py-2.5 text-[11px] md:text-sm font-bold rounded-xl flex justify-center items-center transition-all ${scanMode === 'ocr_camera' ? 'bg-white text-teal-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}><Camera size={16} className="mr-1"/> ดึงด้วย AI</button>
@@ -570,7 +570,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
         {message && <div className={`p-3 rounded-xl text-sm font-bold flex items-center justify-center shadow-sm animate-in fade-in slide-in-from-top-2 ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{message}</div>}
         
         <div className="flex flex-col gap-3 w-full mx-auto">
-           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
+           <div className="bg-[#FFFDF7] p-4 rounded-2xl border border-[#EADBBB]/50 shadow-sm w-full">
               <div className="flex items-center space-x-2 mb-3">
                  <Store size={18} className="text-orange-500"/>
                  <label className="text-sm font-bold text-slate-700">เลือกร้านค้า</label>
@@ -603,7 +603,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
               </div>
            </div>
 
-           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full">
+           <div className="bg-[#FFFDF7] p-4 rounded-2xl border border-[#EADBBB]/50 shadow-sm w-full">
               <div className="flex items-center space-x-2 mb-3">
                  <Barcode size={18} className="text-blue-500"/>
                  <label className="text-sm font-bold text-slate-700">รหัสออเดอร์ <span className="text-red-500 ml-1 opacity-80">*</span></label>
@@ -617,7 +617,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
            </div>
         </div>
 
-        <div className="relative z-[80] bg-white p-4 rounded-2xl border border-slate-100 shadow-sm w-full" ref={dropdownRef}>
+        <div className="relative z-[80] bg-[#FFFDF7] p-4 rounded-2xl border border-[#EADBBB]/50 shadow-sm w-full" ref={dropdownRef}>
           <div className="flex items-center space-x-2 mb-3">
              <Package size={18} className="text-emerald-500"/>
              <h3 className="text-sm font-bold text-slate-700">เลือกสินค้าลงตะกร้า</h3>
@@ -750,7 +750,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
                       const isFirstRow = itemIdx === 0;
                       return (
                         <tr key={sale.id} className="bg-white">
-                           <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>
+                           <td className={`p-2 text-slate-500 whitespace-nowrap border-l border-slate-100 ${isFirstRow ? 'border-t rounded-tl-xl bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>
                              {isFirstRow ? (
                                 <div className="flex flex-col space-y-1">
                                    <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold w-fit">ออเดอร์ {totalTodayOrders - groupIndex}</span>
@@ -758,11 +758,11 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
                                 </div>
                              ) : ''}
                           </td>
-                          <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
-                          <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
-                          <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
-                          <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-slate-50/50' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
-                          <td className={`p-2 text-right text-slate-700 font-bold whitespace-nowrap border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-xl bg-slate-50/50' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
+                          <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
+                          <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
+                          <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
+                          <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
+                          <td className={`p-2 text-right text-slate-700 font-bold whitespace-nowrap border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-xl bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
                         </tr>
                       );
                     })}
@@ -1275,8 +1275,8 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
     for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
 
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+      <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-[#EADBBB]/50 overflow-hidden mt-4">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-[#FBF7EE]/60">
           <button onClick={() => {
             const d = new Date(year, month - 1, 1);
             setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -1295,7 +1295,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
         </div>
         <div className="grid grid-cols-7 auto-rows-fr">
           {days.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] p-2"></div>;
+            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-[#FBF7EE]/40 min-h-[100px] p-2"></div>;
             
             const dateStr = getLocalISODate(date.toISOString());
             const dayLogs = calendarLogs.filter(l => getLocalISODate(l.timestamp) === dateStr).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -1336,8 +1336,8 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
     const todayStrForSchedule = getLocalISODate();
 
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+      <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-[#FBF7EE]/60">
           <button onClick={() => { const d = new Date(year, month - 2, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
           <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month-1]} {year + 543}</h3>
           <button onClick={() => { const d = new Date(year, month, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
@@ -1349,7 +1349,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
         </div>
         <div className="grid grid-cols-7 auto-rows-fr">
           {days.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] md:min-h-[110px] p-1.5"></div>;
+            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-[#FBF7EE]/40 min-h-[100px] md:min-h-[110px] p-1.5"></div>;
             const dateStr = getLocalISODate(date.toISOString());
             const dayShifts = shiftSchedule.filter(s => s.date === dateStr);
             const dayType = dayTypes.find(d => d.id === dateStr);
@@ -1403,7 +1403,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-[#FFFDF7] p-5 rounded-3xl shadow-sm border border-[#EADBBB]/50 space-y-4 md:space-y-0">
         <div className="flex items-center space-x-3">
           <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
           <div>
@@ -1425,7 +1425,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
 
       {activeTab === 'checkin' && (
         loggedInUser?.employeeData ? (
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+          <div className="bg-[#FFFDF7] p-6 rounded-3xl shadow-sm border border-[#EADBBB]/50 flex flex-col items-center">
             {isMyStockCheckPending && (
               <div className="w-full max-w-lg mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
                 <AlertCircle size={24} className="text-amber-500 shrink-0"/>
@@ -1486,7 +1486,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
+          <div className="flex flex-col items-center justify-center p-12 bg-[#FFFDF7] rounded-3xl shadow-sm border border-[#EADBBB]/50 text-center animate-in zoom-in duration-300">
             <UserCircle size={64} className="text-slate-300 mb-4"/>
             <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
             <p className="text-slate-500 mt-2 text-sm leading-relaxed">
@@ -1501,7 +1501,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
         <div className="space-y-4">
           {selectedScheduleDate && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setAdminSelectedEmployeeId(''); }}>
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#FFFDF7] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 {(() => {
                   const dayShiftsForModal = shiftSchedule.filter(s => s.date === selectedScheduleDate);
                   const myShiftForModal = dayShiftsForModal.find(s => s.employeeId === loggedInUser?.employeeData?.id);
@@ -1518,7 +1518,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                         <h3 className="font-bold text-base">{dateLabel}</h3>
                         <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); setAdminSelectedEmployeeId(''); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                       </div>
-                      <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+                      <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-[#FBF7EE]/60">
 
                         {isPastSelected ? (
                           <div>
@@ -1686,12 +1686,12 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
 
           {showApprovalPanel && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setShowApprovalPanel(false)}>
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#FFFDF7] rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
                   <h3 className="font-bold text-lg flex items-center"><Bell size={18} className="mr-2"/> คำขอเปลี่ยนกะที่รออนุมัติ</h3>
                   <button onClick={() => setShowApprovalPanel(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                 </div>
-                <div className="p-5 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
+                <div className="p-5 space-y-3 overflow-y-auto flex-1 bg-[#FBF7EE]/60">
                   {pendingSwapRequests.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-8">ไม่มีคำขอที่รออนุมัติ</p>
                   ) : (
@@ -1700,7 +1700,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                       try { reqDateLabel = new Date(req.date + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }); } catch(e) {}
                       const othersThatDay = shiftSchedule.filter(s => s.date === req.date && s.employeeId !== req.employeeId);
                       return (
-                        <div key={req.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        <div key={req.id} className="p-4 bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/50 shadow-sm">
                           <div className="flex justify-between items-start mb-2 gap-2">
                             <div>
                               <p className="font-bold text-slate-800 text-sm">{req.employeeName}</p>
@@ -1737,12 +1737,12 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
 
           {showHolidayPanel && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }}>
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#FFFDF7] rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="bg-gradient-to-r from-rose-500 to-red-500 p-4 text-white flex justify-between items-center shrink-0">
                   <h3 className="font-bold text-lg flex items-center"><CalendarDays size={18} className="mr-2"/> วันหยุดประจำปี</h3>
                   <button onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                 </div>
-                <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-[#FBF7EE]/60">
                   {canManageAllAttendance && (
                     <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-2">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">เพิ่มวันหยุดใหม่</p>
@@ -1765,7 +1765,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                   {holidaysForYearFilter.length === 0 ? (
                     <p className="text-sm text-slate-400 bg-white p-4 rounded-xl border border-slate-100 text-center">ยังไม่มีวันหยุดในปีนี้</p>
                   ) : (
-                    <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                    <div className="bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/50 divide-y divide-slate-50 overflow-hidden">
                       {holidaysForYearFilter.map(h => {
                         let hDateLabel = h.date;
                         try { hDateLabel = new Date(h.date + 'T12:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) {}
@@ -1804,7 +1804,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
             </div>
           )}
 
-          <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="bg-[#FFFDF7] p-4 md:p-5 rounded-3xl shadow-sm border border-[#EADBBB]/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
               <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
@@ -1823,7 +1823,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
           </div>
 
           {loggedInUser?.employeeData && (
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/50 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="shrink-0">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">สีประจำตัวของฉันในปฏิทิน</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">เลือกสีเพื่อให้หาชื่อตัวเองในตารางรายเดือนง่ายขึ้น</p>
@@ -1846,7 +1846,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+          <div className="bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/50 p-4 shadow-sm">
             <p className="text-[11px] font-bold text-slate-400 uppercase mb-2 tracking-wide">รูปแบบวันทำงาน 3 แบบ</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
               {DAY_TYPES.map(dt => (
@@ -1869,8 +1869,8 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
       )}
 
       {activeTab === 'history' && (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-50/50 gap-4">
+        <div className="bg-[#FFFDF7] rounded-3xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
+          <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#FBF7EE]/60 gap-4">
             <div className="flex items-center space-x-3 w-full lg:w-auto">
               <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-full sm:w-auto">
                 <button onClick={() => setHistoryViewMode('list')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'list' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><List size={16} className="mr-1.5"/> รายวัน</button>
@@ -1909,9 +1909,9 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
             </div>
           </div>
 
-          <div className="p-4 md:p-6 bg-slate-50/30">
+          <div className="p-4 md:p-6 bg-[#FBF7EE]/40">
             {historyViewMode === 'list' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
                 <table className="w-full text-left border-collapse min-w-[500px]">
                   <thead>
                     <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-[10px] md:text-xs uppercase border-b border-slate-200">
@@ -1967,7 +1967,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
             )}
 
             {historyViewMode === 'table' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
                  <div className="overflow-x-auto">
                    <table className="w-full text-left border-collapse min-w-[800px]">
                      <thead>
@@ -1992,8 +1992,8 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                          tableData.map((row, idx) => {
                            const thDate = new Date(row.date).toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
                            return (
-                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                               <td className="px-4 py-4 font-black text-slate-700 text-center bg-slate-50/30">{thDate}</td>
+                             <tr key={idx} className="border-b border-slate-100 hover:bg-[#FBF7EE]/60 transition-colors">
+                               <td className="px-4 py-4 font-black text-slate-700 text-center bg-[#FBF7EE]/40">{thDate}</td>
                                {Array.from({length: 8}).map((_, i) => {
                                  const log = row.logs[i];
                                  return (
@@ -2028,12 +2028,12 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
       {/* Modal Manual Add/Edit */}
       {showManualModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-[#FFFDF7] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
               <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shadow-md relative z-10">
                 <h3 className="font-bold text-lg flex items-center tracking-wide"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
                 <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
               </div>
-              <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50/50">
+              <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-[#FBF7EE]/60">
                  <div>
                    <label className="block text-xs font-bold text-slate-600 mb-1.5">พนักงาน</label>
                    <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800" disabled={!canManageAllAttendance}>
@@ -2500,12 +2500,12 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
       {showImportConfirm && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="bg-[#FFFDF7] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                   <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex justify-between items-center">
                       <h3 className="font-bold text-lg flex items-center"><ArrowDownToLine size={18} className="mr-2"/> ยืนยันการนำเข้าสินค้า</h3>
                       <button onClick={() => setShowImportConfirm(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
                   </div>
-                  <div className="p-5 space-y-4 bg-slate-50/50">
+                  <div className="p-5 space-y-4 bg-[#FBF7EE]/60">
                       <div>
                           <span className="text-xs font-bold text-slate-500 block mb-1 uppercase tracking-wide">สินค้า</span>
                           <span className="font-black text-slate-800 text-base">{getProduct(selectedProduct)?.name || '-'}</span>
@@ -2534,7 +2534,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               </div>
           </div>
       )}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
+      <div className="bg-[#FFFDF7] p-5 rounded-2xl shadow-sm border border-[#EADBBB]/50 flex flex-col sm:flex-row justify-between gap-4">
           <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
           <div className="flex flex-wrap gap-2">
               {!isExecutiveView && canUseStockMenu('stockImport') && (
@@ -2564,7 +2564,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       </div>
 
       {mode === 'add' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-200">
+          <div className="bg-[#FFFDF7] p-6 rounded-2xl shadow-sm border border-emerald-200">
               <h3 className="font-bold text-emerald-800 mb-4">นำเข้าสินค้า (บวกเพิ่มจากสต๊อกเดิม)</h3>
               <div className="flex flex-col sm:flex-row gap-4">
                   <div className="relative flex-1" ref={importDropdownRef}>
@@ -2611,7 +2611,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'assign_check' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+          <div className="bg-[#FFFDF7] p-6 rounded-2xl shadow-sm border border-amber-200">
               <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อก</h3>
               <p className="text-xs text-slate-500 mb-4">เลือกวันที่และพนักงาน มอบหมายล่วงหน้าได้หลายวัน — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้ในวันนั้น</p>
 
@@ -2666,7 +2666,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'check' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
+          <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
               {isTodayCheckCurrentlyValid ? (
                   <div className="p-8 text-center">
                       <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3"/>
@@ -2727,7 +2727,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'check_history' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-cyan-200 overflow-hidden">
+          <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-cyan-200 overflow-hidden">
               <div className="p-5 border-b border-slate-100 bg-cyan-50/30">
                   <h3 className="font-bold text-cyan-800 mb-1">ประวัติการเช็คสต๊อกย้อนหลัง</h3>
                   <p className="text-xs text-slate-500">ดูได้ว่าแต่ละวันใครเป็นคนเช็ค และผลเป็นอย่างไร (ทุกคนดูได้)</p>
@@ -2745,7 +2745,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                           try { dateLabel = new Date(check.id + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
                           return (
                               <div key={check.id}>
-                                  <div onClick={() => setExpandedCheckDate(isExpanded ? null : check.id)} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/60 transition-colors">
+                                  <div onClick={() => setExpandedCheckDate(isExpanded ? null : check.id)} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-[#FBF7EE]/60 transition-colors">
                                       <div>
                                           <p className="font-bold text-slate-800 text-sm">{dateLabel}</p>
                                           <p className="text-xs text-slate-500 mt-0.5 flex items-center"><User size={11} className="mr-1"/> ผู้เช็ค: {check.checkerEmployeeName || check.completedByUsername || '-'}</p>
@@ -2758,7 +2758,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                       </div>
                                   </div>
                                   {isExpanded && (
-                                      <div className="px-4 pb-4 bg-slate-50/50 animate-in fade-in duration-200">
+                                      <div className="px-4 pb-4 bg-[#FBF7EE]/60 animate-in fade-in duration-200">
                                           <div className="bg-white rounded-xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
                                               {(check.items || []).length === 0 ? (
                                                   <p className="p-3 text-xs text-slate-400 text-center">ไม่มีรายละเอียดรายการ</p>
@@ -2795,7 +2795,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'unbox' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200">
+          <div className="bg-[#FFFDF7] p-6 rounded-2xl shadow-sm border border-purple-200">
               <h3 className="font-bold text-purple-800 mb-4">แกะกล่อง (แปลงหน่วยจากกล่องใหญ่เป็นแผงย่อย)</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
@@ -2842,7 +2842,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'edit' && (
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-200">
+         <div className="bg-[#FFFDF7] p-6 rounded-2xl shadow-sm border border-blue-200">
               <h3 className="font-bold text-blue-800 mb-4">แก้ไขสต๊อก (แทนที่ค่าเดิมเพื่อแก้บัคข้อมูล)</h3>
               <div className="flex flex-col sm:flex-row gap-4">
                   <input type="text" value={getProduct(selectedProduct)?.name || ''} disabled className="flex-1 p-3 bg-slate-100 border rounded-xl font-medium"/>
@@ -2853,7 +2853,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
        )}
 
       {mode === 'return' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
+          <div className="bg-[#FFFDF7] p-6 rounded-2xl shadow-sm border border-orange-200">
               <h3 className="font-bold text-orange-800 mb-4">ระบบรับคืนสินค้าจากลูกค้า (ดึงของกลับสต๊อก)</h3>
               <div className="flex gap-4 mb-6">
                   <input type="text" placeholder="ระบุรหัสออเดอร์ (เช่น ORD-123)..." value={returnOrderId} onChange={e=>setReturnOrderId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-orange-500"/>
@@ -2881,7 +2881,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
 
                   return (
                     <div className="space-y-4">
-                        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="bg-[#FFFDF7] rounded-2xl border border-[#EADBBB]/50 overflow-hidden shadow-sm">
                             <div className={`bg-gradient-to-r ${gradientHeaderClass} px-4 py-3 flex flex-wrap gap-3 items-center border-b`}>
                                 <span className="text-slate-600 text-xs md:text-sm font-bold flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 shadow-sm">
                                     <Clock size={14} className="mr-1.5 text-slate-400"/> {headTime} น.
@@ -2900,7 +2900,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left min-w-[680px]">
                                     <thead>
-                                        <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
+                                        <tr className="bg-[#FBF7EE]/60 text-slate-400 text-[10px] uppercase border-b border-slate-100">
                                             <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์</th>
                                             <th className="px-4 py-2 font-bold">สินค้า</th>
                                             <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
@@ -2932,7 +2932,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                 </table>
                             </div>
 
-                            <div className="bg-slate-50/50 border-t border-slate-100 px-4 py-3 flex flex-wrap justify-between items-center gap-2 text-xs md:text-sm">
+                            <div className="bg-[#FBF7EE]/60 border-t border-slate-100 px-4 py-3 flex flex-wrap justify-between items-center gap-2 text-xs md:text-sm">
                                 <div className="font-bold text-slate-500">
                                     รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{orderTotalQty} ชิ้น</span>
                                 </div>
@@ -2956,7 +2956,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'history' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
+          <div className="bg-[#FFFDF7] rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
               <div className="p-5 border-b border-slate-100 bg-indigo-50/30">
                   <h3 className="font-bold text-indigo-800 mb-4">ประวัติการทำรายการคลังสินค้า</h3>
                   <div className="flex flex-wrap gap-3">
@@ -2989,7 +2989,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                           try { const d = new Date(log.timestamp); if (!isNaN(d.getTime())) dateStr = d.toLocaleString('th-TH'); } catch(e) {}
                           const isCancellable = canCancelStockTxn && CANCELLABLE_STOCK_ACTIONS.includes(log.action) && !log.cancelled && !!log.meta;
                           return (
-                              <div key={log.id} className={`p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors ${log.cancelled ? 'bg-slate-50/80' : ''}`}>
+                              <div key={log.id} className={`p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-[#FBF7EE]/60 transition-colors ${log.cancelled ? 'bg-slate-50/80' : ''}`}>
                                   <span className={`shrink-0 w-fit text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg border ${meta.badgeClass}`}>{meta.label}</span>
                                   <div className="flex-1 min-w-0">
                                       <p className={`text-sm font-medium break-words ${log.cancelled ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{log.details || '-'}</p>
@@ -3256,7 +3256,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center space-y-4 xl:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center space-y-4 xl:space-y-0 bg-[#FFFDF7] p-4 md:p-5 rounded-2xl shadow-sm border border-[#EADBBB]/50 mb-4">
         <div className="flex items-center space-x-3 shrink-0">
           <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600"><History size={20}/></div>
           <div>
@@ -3309,7 +3309,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
       
       <div className="space-y-5">
         {groupedHistorySales.length === 0 ? (
-          <div className="text-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+          <div className="text-center p-12 bg-[#FFFDF7] rounded-3xl shadow-sm border border-[#EADBBB]/50 flex flex-col items-center">
             <Info size={40} className="text-slate-300 mb-3"/>
             <p className="text-slate-500 font-medium text-sm">ไม่มีรายการขายในเงื่อนไขที่คุณเลือก</p>
           </div>
@@ -3334,7 +3334,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
             }
 
             return (
-              <div key={group.id} className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden transition-all hover:shadow-md relative">
+              <div key={group.id} className="bg-[#FFFDF7] rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-[#EADBBB]/50 overflow-hidden transition-all hover:shadow-md relative">
                 
                 <div className={`bg-gradient-to-r ${gradientHeaderClass} px-4 py-3 flex flex-wrap gap-3 justify-between items-center border-b`}>
                   <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -3386,7 +3386,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
                  <div className="p-0 overflow-x-auto">
                   <table className="w-full text-left min-w-[600px]">
                     <thead>
-                      <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
+                      <tr className="bg-[#FBF7EE]/60 text-slate-400 text-[10px] uppercase border-b border-slate-100">
                         <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์ / เวลา</th>
                         <th className="px-4 py-2 font-bold">สินค้า</th>
                         <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
@@ -3467,7 +3467,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
                   </table>
                 </div>
 
-                <div className="bg-slate-50/50 border-t border-slate-100 px-4 py-3 flex justify-between items-center text-xs md:text-sm">
+                <div className="bg-[#FBF7EE]/60 border-t border-slate-100 px-4 py-3 flex justify-between items-center text-xs md:text-sm">
                   <div className="font-bold text-slate-500">
                     รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{group.totalItems} ชิ้น</span>
                   </div>
@@ -3579,7 +3579,7 @@ const UsersManagementView = ({ users, loggedInUser }) => {
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-[#FFFDF7] p-4 md:p-5 rounded-2xl shadow-sm border border-[#EADBBB]/50">
         <div>
           <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
           <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
@@ -3723,7 +3723,7 @@ const ProductsView = ({ products, loggedInUser, formatMoney, getLocalISODate, do
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-      <div className="flex flex-col bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+      <div className="flex flex-col bg-[#FFFDF7] p-4 md:p-5 rounded-2xl shadow-sm border border-[#EADBBB]/50 space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
           <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการสินค้า</h2>
           <div className="flex space-x-2 w-full sm:w-auto">
@@ -3827,7 +3827,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.35</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.36</p>
         </div>
       </div>
     </div>
@@ -3868,7 +3868,7 @@ const EmployeeManagementView = ({ employees, users }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 sm:space-y-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#FFFDF7] p-5 rounded-3xl shadow-sm border border-[#EADBBB]/50 space-y-4 sm:space-y-0">
         <div className="flex items-center space-x-3">
           <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Briefcase size={24}/></div>
           <div>
@@ -3884,7 +3884,7 @@ const EmployeeManagementView = ({ employees, users }) => {
       </div>
 
       {isAdding && (
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-top-4">
+        <div className="bg-[#FFFDF7] p-6 rounded-3xl shadow-sm border border-[#EADBBB]/50 animate-in fade-in slide-in-from-top-4">
           <h3 className="font-bold text-slate-800 mb-4 border-b border-slate-100 pb-3">เพิ่มข้อมูลพนักงาน</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
              <div>
@@ -3923,7 +3923,7 @@ const EmployeeManagementView = ({ employees, users }) => {
         {employees.map(emp => {
           const linkedUser = users.find(u => u.id === emp.userId);
           return (
-            <div key={emp.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center relative overflow-hidden group hover:shadow-md transition-all">
+            <div key={emp.id} className="bg-[#FFFDF7] p-5 rounded-3xl shadow-sm border border-[#EADBBB]/50 flex flex-col items-center text-center relative overflow-hidden group hover:shadow-md transition-all">
               <button onClick={() => handleDelete(emp.id)} className="absolute top-3 right-3 text-red-400 hover:bg-red-50 hover:text-red-600 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
               <div className="w-24 h-24 rounded-full overflow-hidden mb-4 border-4 border-slate-50 shadow-inner">
                 <img src={emp.imageUrl} alt={emp.fullName} className="w-full h-full object-cover" onError={(e) => e.target.src = 'https://via.placeholder.com/150'} />
@@ -4083,7 +4083,7 @@ const DashboardView = ({ products, sales, productMap, getProduct, formatMoney, g
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 bg-white p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/60">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0 bg-[#FFFDF7] p-5 md:p-6 rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-[#EADBBB]/50/60">
         <div className="flex items-center space-x-3 md:space-x-4">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 md:p-3 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><BarChart3 size={24} className="w-5 h-5 md:w-6 md:h-6"/></div>
           <h2 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">สรุปยอดขาย</h2>
@@ -4113,13 +4113,13 @@ const DashboardView = ({ products, sales, productMap, getProduct, formatMoney, g
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
-        <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+        <div className="bg-[#FFFDF7] p-5 md:p-6 rounded-3xl shadow-sm border border-[#EADBBB]/50 relative overflow-hidden group hover:shadow-md transition-shadow">
           <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 group-hover:w-2 transition-all"></div>
           <h3 className="font-bold text-slate-500 text-sm flex items-center mb-2"><TrendingUp size={16} className="mr-2 text-blue-500"/> ยอดขายรวม</h3>
           <p className="text-xl md:text-2xl font-black text-slate-800 mt-2 truncate">฿{formatMoney(dashboardStats.totalRevenue)}</p>
           <p className="text-xs text-slate-400 mt-2 font-medium">{dashboardStats.totalOrders} ออเดอร์ ({dashboardStats.totalQty} ชิ้น)</p>
         </div>
-        <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+        <div className="bg-[#FFFDF7] p-5 md:p-6 rounded-3xl shadow-sm border border-[#EADBBB]/50 relative overflow-hidden group hover:shadow-md transition-shadow">
           <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-400 group-hover:w-2 transition-all"></div>
           <h3 className="font-bold text-slate-500 text-sm flex items-center mb-2"><Package size={16} className="mr-2 text-orange-500"/> ต้นทุนสินค้ารวม</h3>
           <p className="text-xl md:text-2xl font-black text-slate-800 mt-2 truncate">฿{formatMoney(dashboardStats.totalCost)}</p>
@@ -4133,8 +4133,8 @@ const DashboardView = ({ products, sales, productMap, getProduct, formatMoney, g
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-       <div className="px-5 py-4 border-b border-slate-100 flex items-center space-x-3 bg-slate-50/50">
+      <div className="bg-[#FFFDF7] rounded-3xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
+       <div className="px-5 py-4 border-b border-slate-100 flex items-center space-x-3 bg-[#FBF7EE]/60">
           <CalendarDays size={20} className="text-slate-400"/>
           <h3 className="text-base font-black text-slate-800">สินค้าขายดี</h3>
         </div>
