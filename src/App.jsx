@@ -69,8 +69,34 @@ const defaultPermissions = {
   products: false, productsEdit: false, productsExport: false,
   stock: false, stockEdit: false, stockExport: false,
   history: false, historyEdit: false,
-  attendance: false, attendanceEdit: false 
+  attendance: false, attendanceEdit: false,
+  // สิทธิ์ย่อยรายเมนูในระบบสต๊อก (ถ้ามี stockEdit จะได้ทุกเมนูเหมือนเดิม สิทธิ์ย่อยไว้ให้เปิดเฉพาะบางเมนู)
+  stockImport: false, stockUnbox: false, stockReturn: false,
+  stockDailyCheck: false, stockAssignCheck: false, stockCheckHistory: false,
+  // สิทธิ์ดู "ประวัติการทำรายการ" แยกตามประเภทรายการ (เปิดเฉพาะประเภทที่อนุญาตให้ดู)
+  histAddStock: false, histOverrideStock: false, histReturnStock: false,
+  histUnboxStock: false, histAssignCheck: false, histCompleteCheck: false
 };
+
+// เมนูย่อยในระบบสต๊อก -> คีย์สิทธิ์ (ใช้ทั้งในหน้าตั้งค่าสิทธิ์และตอนตรวจสิทธิ์จริงใน StockView)
+const STOCK_MENU_PERMS = [
+  { key: 'stockImport', label: 'นำเข้าสินค้า' },
+  { key: 'stockUnbox', label: 'แกะกล่อง' },
+  { key: 'stockReturn', label: 'ลูกค้าคืนของ' },
+  { key: 'stockDailyCheck', label: 'เช็คสต๊อกวันนี้' },
+  { key: 'stockAssignCheck', label: 'มอบหมายเช็คสต๊อก' },
+  { key: 'stockCheckHistory', label: 'ประวัติการเช็คสต๊อก' },
+];
+
+// ประเภทรายการในประวัติการทำรายการ -> คีย์สิทธิ์การมองเห็น
+const HISTORY_ACTION_PERMS = [
+  { action: 'ADD_STOCK', key: 'histAddStock', label: 'นำเข้าสินค้า' },
+  { action: 'OVERRIDE_STOCK', key: 'histOverrideStock', label: 'แก้ไขสต๊อก' },
+  { action: 'RETURN_STOCK', key: 'histReturnStock', label: 'ลูกค้าคืนของ' },
+  { action: 'UNBOX_STOCK', key: 'histUnboxStock', label: 'แกะกล่อง' },
+  { action: 'ASSIGN_STOCK_CHECK', key: 'histAssignCheck', label: 'มอบหมายเช็คสต๊อก' },
+  { action: 'COMPLETE_STOCK_CHECK', key: 'histCompleteCheck', label: 'เช็คสต๊อกประจำวัน' },
+];
 
 const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE'];
 const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -2044,10 +2070,23 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
     }
   };
 
+  // ตรวจสิทธิ์เมนูย่อยในระบบสต๊อก
+  // (Admin หรือคนที่มี stockEdit ได้ทุกเมนูเหมือนเดิม ไม่กระทบผู้ใช้เดิม ส่วนสิทธิ์ย่อยไว้เปิดเฉพาะบางเมนูให้พนักงาน)
+  const canUseStockMenu = (permKey) =>
+    loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.stockEdit || !!loggedInUser?.permissions?.[permKey];
+
+  // ประเภทรายการที่ผู้ใช้คนนี้มีสิทธิ์ "มองเห็น" ในประวัติการทำรายการ
+  const allowedHistoryActions = useMemo(() => {
+    if (loggedInUser?.role === 'admin' || loggedInUser?.permissions?.stockEdit) return HISTORY_ACTION_PERMS.map(h => h.action);
+    return HISTORY_ACTION_PERMS.filter(h => loggedInUser?.permissions?.[h.key]).map(h => h.action);
+  }, [loggedInUser]);
+
+  const canViewStockHistory = allowedHistoryActions.length > 0;
+
   const stockHistoryLogs = useMemo(() => {
-    const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK', 'ASSIGN_STOCK_CHECK', 'COMPLETE_STOCK_CHECK'];
     return auditLogs
-      .filter(log => stockActions.includes(log.action))
+      // แสดงเฉพาะประเภทรายการที่ผู้ใช้คนนี้ได้รับสิทธิ์ให้ดูเท่านั้น
+      .filter(log => allowedHistoryActions.includes(log.action))
       .filter(log => historyActionFilter === 'all' || log.action === historyActionFilter)
       .filter(log => {
         if (!historyFromDate && !historyToDate) return true;
@@ -2056,7 +2095,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
         if (historyToDate && d > historyToDate) return false;
         return true;
       });
-  }, [auditLogs, historyActionFilter, historyFromDate, historyToDate]);
+  }, [auditLogs, historyActionFilter, historyFromDate, historyToDate, allowedHistoryActions]);
 
   // สถานะเช็คสต๊อกของวันนี้ (ใครถูกมอบหมาย / เช็คเสร็จหรือยัง)
   const todayStrForCheck = getLocalISODate();
@@ -2149,15 +2188,16 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       // ตรวจว่าสินค้ายังอยู่จริงก่อนอัปเดต (กันกรณีถูกลบไปแล้ว แล้ว batch ล้มเหลวโดยไม่รู้สาเหตุ)
       const productSnap = await getDoc(productRef);
       if (!productSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้านี้ (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
+      const productNameForLog = productSnap.data()?.name || getProduct(selectedProduct)?.name || '-';
       const batch = writeBatch(db);
       if (isAbsoluteOverride) {
           // คำนวณส่วนต่างจากค่าเดิมที่ผู้ดูแลระบบเห็นตอนกดแก้ไข ป้องกัน Race Condition
           const diff = amount - Number(originalStock);
           batch.update(productRef, { stock: increment(diff) });
-          batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อกเป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
+          batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อก "${productNameForLog}" เป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
       } else {
           batch.update(productRef, { stock: increment(amount) });
-          batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
+          batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `นำเข้า "${productNameForLog}" เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
       }
       await batch.commit();
       setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0); setShowImportConfirm(false);
@@ -2300,18 +2340,22 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
           <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
           <div className="flex flex-wrap gap-2">
-              {canEditTab('stock') && !isExecutiveView && (
-                 <>
-                      <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
-                      <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
-                      <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
-                      <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
-                   </>
+              {!isExecutiveView && canUseStockMenu('stockImport') && (
+                  <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
               )}
-              {!isExecutiveView && (canEditTab('stock') || isMyAssignedCheckToday) && (
+              {!isExecutiveView && canUseStockMenu('stockUnbox') && (
+                  <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
+              )}
+              {!isExecutiveView && canUseStockMenu('stockReturn') && (
+                  <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
+              )}
+              {!isExecutiveView && canViewStockHistory && (
+                  <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
+              )}
+              {!isExecutiveView && (canUseStockMenu('stockDailyCheck') || isMyAssignedCheckToday) && (
                   <button onClick={() => { setCheckResults({}); setMode('check'); }} className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-lg shadow flex items-center ${isMyAssignedCheckToday ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}><CheckCircle2 size={16} className="mr-1"/> เช็คสต๊อกวันนี้{isMyAssignedCheckToday ? ' ⚠️' : ''}</button>
               )}
-              {!isExecutiveView && loggedInUser?.role === 'admin' && (
+              {!isExecutiveView && (loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.stockAssignCheck) && (
                   <button onClick={() => { setAssignDate(getLocalISODate()); setAssignEmployeeId(''); setMode('assign_check'); }} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
               )}
               {!isExecutiveView && (
@@ -2645,12 +2689,9 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                   <div className="flex flex-wrap gap-3">
                       <select value={historyActionFilter} onChange={e => setHistoryActionFilter(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white font-medium">
                           <option value="all">ทุกประเภทรายการ</option>
-                          <option value="ADD_STOCK">นำเข้าสินค้า</option>
-                          <option value="OVERRIDE_STOCK">แก้ไขสต๊อก</option>
-                          <option value="RETURN_STOCK">ลูกค้าคืนของ</option>
-                          <option value="UNBOX_STOCK">แกะกล่อง</option>
-                          <option value="ASSIGN_STOCK_CHECK">มอบหมายเช็คสต๊อก</option>
-                          <option value="COMPLETE_STOCK_CHECK">เช็คสต๊อกประจำวัน</option>
+                          {HISTORY_ACTION_PERMS.filter(h => allowedHistoryActions.includes(h.action)).map(h => (
+                            <option key={h.action} value={h.action}>{h.label}</option>
+                          ))}
                       </select>
                       <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1">
                           <input type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
@@ -3180,11 +3221,57 @@ const UsersManagementView = ({ users, loggedInUser }) => {
       const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] };
       if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false;
       if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
-      if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
+      if (perm === 'stock' && !newPerms.stock) {
+        newPerms.stockEdit = false; newPerms.stockExport = false;
+        // ปิดสิทธิ์ย่อยทั้งหมดด้วย ถ้าไม่ให้เข้าเมนูสต๊อกแล้ว
+        STOCK_MENU_PERMS.forEach(m => { newPerms[m.key] = false; });
+        HISTORY_ACTION_PERMS.forEach(h => { newPerms[h.key] = false; });
+      }
       if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false;
       if (perm === 'attendance' && !newPerms.attendance) newPerms.attendanceEdit = false;
       return { ...prev, permissions: newPerms };
     });
+  };
+
+  // สิทธิ์ย่อยของระบบสต๊อก (เมนูที่ใช้ได้ + ประเภทรายการที่ดูได้ในประวัติการทำรายการ)
+  // แสดงเฉพาะตอนที่เปิดสิทธิ์ "สต๊อกสินค้า" ไว้แล้ว และยังไม่ได้ให้ stockEdit (เพราะ stockEdit = ได้ทุกเมนูอยู่แล้ว)
+  const renderStockSubPerms = () => {
+    if (!editForm.permissions?.stock) return null;
+    const hasFullEdit = !!editForm.permissions?.stockEdit;
+    return (
+      <div className="ml-5 mt-1.5 space-y-1.5">
+        <div className="bg-slate-50 p-2 rounded border border-slate-200">
+          <span className="text-[10px] font-bold text-slate-600 block mb-1">เมนูที่ใช้ได้ในระบบสต๊อก</span>
+          {hasFullEdit ? (
+            <span className="text-[9px] text-emerald-600 font-bold">เปิด "อัปเดตตัวเลขได้" อยู่ = ใช้ได้ทุกเมนูอัตโนมัติ</span>
+          ) : (
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {STOCK_MENU_PERMS.map(m => (
+                <label key={m.key} className="flex items-center space-x-1 text-[10px] text-slate-500 cursor-pointer">
+                  <input type="checkbox" checked={editForm.permissions[m.key] || false} onChange={()=>handlePermissionChange(m.key)} className="rounded text-blue-500 w-2.5 h-2.5"/>
+                  <span>{m.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-slate-50 p-2 rounded border border-slate-200">
+          <span className="text-[10px] font-bold text-slate-600 block mb-1">ประวัติการทำรายการ: ให้ดูประเภทไหนได้บ้าง</span>
+          {hasFullEdit ? (
+            <span className="text-[9px] text-emerald-600 font-bold">เปิด "อัปเดตตัวเลขได้" อยู่ = ดูได้ทุกประเภทอัตโนมัติ</span>
+          ) : (
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {HISTORY_ACTION_PERMS.map(h => (
+                <label key={h.key} className="flex items-center space-x-1 text-[10px] text-slate-500 cursor-pointer">
+                  <input type="checkbox" checked={editForm.permissions[h.key] || false} onChange={()=>handlePermissionChange(h.key)} className="rounded text-indigo-500 w-2.5 h-2.5"/>
+                  <span>{h.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleSave = async (id) => {
@@ -3237,7 +3324,7 @@ const UsersManagementView = ({ users, loggedInUser }) => {
 
                       <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
                       <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>{renderStockSubPerms()}
                       <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
                     </div>
                   )}
@@ -3260,7 +3347,7 @@ const UsersManagementView = ({ users, loggedInUser }) => {
                         </div>
                         <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
                         <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>{renderStockSubPerms()}
                         <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
                       </div>
                     )
