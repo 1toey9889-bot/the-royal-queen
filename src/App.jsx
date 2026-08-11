@@ -2289,6 +2289,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               if (productSnap.exists()) {
                   batch.update(productRef, { stock: increment(qtyToReturn) });
               }
+              const returnProductName = productSnap.data()?.name || getProduct(item.productId)?.name || 'สินค้าถูกลบไปแล้ว';
               
               const newQty = item.quantity - qtyToReturn;
               const unitCostForReturn = item.unitCost !== undefined ? Number(item.unitCost) : Number(getProduct(item.productId)?.cost || 0);
@@ -2302,8 +2303,9 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               }
               // หักยอดขาย/กำไรส่วนที่ลูกค้าคืนออกจากยอดสรุปรายวันของวันที่ขาย
               applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
-              
-              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน ${qtyToReturn} ชิ้น ออเดอร์ ${item.orderId}`, timestamp: new Date().toISOString() });
+
+              const refundedText = Number(refundedRevenue).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน "${returnProductName}" จำนวน ${qtyToReturn} ชิ้น เป็นเงิน ${refundedText} บาท (ออเดอร์ ${item.orderId || '-'})`, timestamp: new Date().toISOString() });
           }
           await batch.commit();
           alert('ทำรายการคืนสินค้าสำเร็จ');
