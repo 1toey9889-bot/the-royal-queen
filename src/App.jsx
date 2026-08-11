@@ -3692,32 +3692,87 @@ const DashboardView = ({ products, sales, productMap, getProduct, formatMoney, g
 
   const exportDashboardToExcel = () => {
     if (filteredSales.length === 0) { alert("ไม่มีข้อมูลในเงื่อนไขที่เลือก"); return; }
-    let timeLabel = timeframe === 'daily' ? `ประจำวันที่ ${filterDate}` : timeframe === 'monthly' ? `ประจำเดือน ${filterMonth}` : timeframe === 'yearly' ? `ประจำปี ${filterYear}` : `ภาพรวมทั้งหมด (สะสม)`;
-    const productLabel = filterProductId === 'all' ? 'ทุกสินค้า' : (getProduct(filterProductId)?.name || 'ไม่ทราบชื่อ');
-    const storeLabel = filterStore === 'all' ? 'ทุกร้านค้า' : filterStore;
-    
+
+    // ครอบค่าทุกช่องด้วยเครื่องหมายคำพูด กัน , ในชื่อสินค้าทำให้คอลัมน์เพี้ยน
+    const cell = (v) => `"${String(v === undefined || v === null ? '' : v).replace(/"/g, '""')}"`;
+    const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // วันที่แบบ 9/8/2569
+    const fmtThaiDate = (iso) => {
+      const parts = getLocalISODate(iso).split('-');
+      return `${Number(parts[2])}/${Number(parts[1])}/${Number(parts[0]) + 543}`;
+    };
+
+    // จำนวนพร้อมหน่วย เดาหน่วยจากชื่อสินค้า (เช่น "Chela Mg (แผง)" -> "9แผง")
+    const qtyLabel = (productName, qty) => {
+      const n = String(productName || '');
+      if (n.includes('ยกกล่อง') || n.includes('กล่อง')) return `${qty}กล่อง`;
+      if (n.includes('แผง')) return `${qty}แผง`;
+      return `${qty}`;
+    };
+
+    // ป้ายเดือนตามช่วงเวลาที่เลือกอยู่บนหน้าจอ
+    let periodLabel = '';
+    if (timeframe === 'daily') {
+      const [y, m, d] = filterDate.split('-').map(Number);
+      periodLabel = `${THAI_MONTHS[m - 1]} ${y + 543} (วันที่ ${d})`;
+    } else if (timeframe === 'monthly') {
+      const [y, m] = filterMonth.split('-').map(Number);
+      periodLabel = `${THAI_MONTHS[m - 1]} ${y + 543}`;
+    } else if (timeframe === 'yearly') {
+      periodLabel = `ปี ${Number(filterYear) + 543}`;
+    } else {
+      periodLabel = 'ทั้งหมด (สะสม)';
+    }
+
+    // ถ้าเลือก "ทุกร้านค้า" ให้แยกเป็นบล็อกทีละร้าน (เรียงตามลำดับใน STORE_OPTIONS) ถ้าเลือกร้านเดียวก็ออกเฉพาะร้านนั้น
+    const storesInData = [...new Set(filteredSales.map(s => s.store || '-'))];
+    const storeList = filterStore === 'all'
+      ? [...STORE_OPTIONS.filter(s => storesInData.includes(s)), ...storesInData.filter(s => !STORE_OPTIONS.includes(s))]
+      : [filterStore];
+
     const csvRows = [];
-    csvRows.push(['รายงานสรุปยอดขาย - The Resilient Clinic']);
-    csvRows.push(['ช่วงเวลา:', timeLabel]);
-    csvRows.push(['ร้านค้า:', storeLabel]);
-    csvRows.push(['สินค้าที่เลือก:', productLabel]);
-    csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
-    csvRows.push([]); 
-    csvRows.push(['วันที่-เวลา', 'รหัสออเดอร์', 'ร้านค้า', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'จำนวน', 'ต้นทุนรวม', 'ยอดขาย', 'กำไรสุทธิ', 'ผู้ทำรายการ']);
-    filteredSales.forEach(s => {
-      const p = getProduct(s.productId);
-      const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
-      const qty = Number(s.quantity) || 0;
-      const total = Number(s.total) || 0;
-      const actualPricePerUnit = s.unitPrice !== undefined ? Number(s.unitPrice) : (qty > 0 ? (total / qty) : 0);
-      const rowCost = itemCost * qty;
-      const rowProfit = total - rowCost;
-      let safeDate = '-'; try { const d = new Date(s.date); if(!isNaN(d.getTime())) safeDate = d.toLocaleString('th-TH'); } catch(e) {}
-      csvRows.push([`"${safeDate}"`, `"${s.orderId || '-'}"`, `"${s.store || '-'}"`, `"${p ? p.name : 'สินค้าถูกลบไปแล้ว'}"`, itemCost, actualPricePerUnit.toFixed(2), qty, rowCost, total, rowProfit, `"${s.soldBy || '-'}"`]);
+    storeList.forEach((storeName, storeIdx) => {
+      const rows = filteredSales
+        .filter(s => (s.store || '-') === storeName)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      if (rows.length === 0) return;
+
+      if (storeIdx > 0) { csvRows.push([]); csvRows.push([]); }
+      csvRows.push([cell(`${storeName} The Resilient Wellness`)]);
+      csvRows.push([cell(`เดือน ${periodLabel}`)]);
+      csvRows.push(['วันที่', 'รายการ', 'จำนวน', 'ราคาคลินิก', 'ยอดสุทธิ', 'รวม'].map(cell));
+
+      let running = 0;
+      let lastDateShown = '';
+      rows.forEach(s => {
+        const p = getProduct(s.productId);
+        const name = p ? p.name : 'สินค้าถูกลบไปแล้ว';
+        const qty = Number(s.quantity) || 0;
+        const net = Number(s.total) || 0;
+        const itemCost = s.unitCost !== undefined ? Number(s.unitCost) : (p ? Number(p.cost) : 0);
+        running += net;
+
+        const thisDate = fmtThaiDate(s.date);
+        // แสดงวันที่เฉพาะแถวแรกของแต่ละวัน (เหมือนแบบฟอร์มที่บัญชีใช้)
+        const dateCell = thisDate === lastDateShown ? '' : thisDate;
+        lastDateShown = thisDate;
+
+        csvRows.push([
+          cell(dateCell),
+          cell(name),
+          cell(qtyLabel(name, qty)),
+          cell(itemCost > 0 ? money(itemCost) : '-'),
+          cell(money(net)),
+          cell(money(running)),
+        ]);
+      });
+
+      csvRows.push([cell(''), cell('รวมทั้งหมด'), cell(''), cell(''), cell(''), cell(money(running))]);
     });
-    csvRows.push([]);
-    csvRows.push(['สรุปยอดรวมทั้งหมด', '', '', '', '', '', dashboardStats.totalQty, dashboardStats.totalCost, dashboardStats.totalRevenue, dashboardStats.totalProfit, '']);
-    downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานยอดขาย_${timeLabel}.csv`);
+
+    const fileStoreLabel = filterStore === 'all' ? 'ทุกร้านค้า' : filterStore;
+    downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `ยอดขาย_${fileStoreLabel}_${periodLabel}.csv`);
   };
 
   return (
@@ -3877,8 +3932,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // หมายเหตุสำคัญ: effect นี้ต้องรันครั้งเดียวตอน mount เท่านั้น (dependency = [])
+    // เดิมใส่ [isUsersLoaded, isLoading] ซึ่งเป็นค่าที่ listener ข้างในนี้เป็นคนเซ็ตเอง
+    // ทำให้ทุกครั้งที่ค่าเปลี่ยน React จะ cleanup แล้วสมัคร listener ใหม่ทั้ง 11 ตัว = อ่านข้อมูลทุก collection ใหม่ทั้งหมด
+    // ผลคือเปิดหน้าเว็บ 1 ครั้ง อ่านข้อมูลซ้ำถึง 3 รอบ กินโควตา Firestore เกินจำเป็นมาก
+    const usersReadyRef = { current: false };
+    const salesReadyRef = { current: false };
+
     const connectionTimeout = setTimeout(() => {
-      if (!isUsersLoaded || isLoading) setLoadError("การเชื่อมต่อใช้เวลานานผิดปกติ กรุณาตรวจสอบอินเทอร์เน็ตหรือรีเฟรชหน้าจอใหม่");
+      if (!usersReadyRef.current || !salesReadyRef.current) setLoadError("การเชื่อมต่อใช้เวลานานผิดปกติ กรุณาตรวจสอบอินเทอร์เน็ตหรือรีเฟรชหน้าจอใหม่");
     }, 10000);
 
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -3887,9 +3949,10 @@ export default function App() {
         setDoc(doc(db, "users", "default_user"), { username: 'user', password: '123456', role: 'staff', permissions: defaultPermissions });
       } else {
         setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        usersReadyRef.current = true;
         setIsUsersLoaded(true); setLoadError('');
       }
-    }, (error) => { console.error("Users Error:", error); setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้"); setIsUsersLoaded(true); });
+    }, (error) => { console.error("Users Error:", error); setLoadError("ไม่สามารถดึงข้อมูลบัญชีผู้ใช้ได้"); usersReadyRef.current = true; setIsUsersLoaded(true); });
 
     const unsubscribeProducts = onSnapshot(collection(db, "products"), (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -3897,6 +3960,7 @@ export default function App() {
 
     const unsubscribeSales = onSnapshot(collection(db, "sales"), (snapshot) => {
       setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      salesReadyRef.current = true;
       setIsLoading(false); setLoadError('');
     });
 
@@ -3937,7 +4001,7 @@ export default function App() {
       unsubscribeSales(); unsubscribeEmployees(); unsubscribeAttendance(); unsubscribeAuditLogs(); unsubscribeStockChecks();
       unsubscribeShiftSchedule(); unsubscribeShiftSwapRequests(); unsubscribeDayTypes(); unsubscribeCompanyHolidays();
     };
-  }, [isUsersLoaded, isLoading]);
+  }, []); // รันครั้งเดียวตอน mount เท่านั้น (ห้ามใส่ isUsersLoaded/isLoading ที่ listener ข้างในเป็นคนเซ็ต ไม่งั้นจะสมัคร listener ซ้ำและอ่านข้อมูลซ้ำ)
 
   useEffect(() => {
     if (loggedInUser) {
