@@ -1936,7 +1936,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
                         const logDate = new Date(log.timestamp);
                         const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
                         return (
-                          <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
+                          <tr key={log.id} className="border-b border-slate-50 hover:bg-[#FBF7EE]/80 transition-colors group">
                             <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
                             <td className="p-4">
                               <div className="flex items-center space-x-3">
@@ -2914,7 +2914,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                             const qty = Number(item.quantity) || 0;
                                             const unitPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : (qty > 0 ? Number(item.total) / qty : 0);
                                             return (
-                                                <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                <tr key={idx} className="border-b border-slate-50 hover:bg-[#FBF7EE]/80 transition-colors">
                                                     <td className="px-4 py-2 font-bold">{item.orderId || '-'}</td>
                                                     <td className="px-4 py-2 font-medium">{getProduct(item.productId)?.name || 'สินค้าถูกลบไปแล้ว'}</td>
                                                     <td className="px-4 py-2 text-center"><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{qty}</span></td>
@@ -3017,17 +3017,17 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       )}
 
       {mode === 'view' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b flex gap-4">
+          <div className="bg-[#FFFDF7] rounded-xl shadow-sm border border-[#EADBBB]/50 overflow-hidden">
+              <div className="p-4 bg-[#FBF7EE]/70 border-b border-[#EADBBB]/50 flex gap-4">
                   <input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded-lg text-sm outline-none focus:border-blue-500"/>
                   <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="p-2 border rounded-lg text-sm bg-white outline-none focus:border-blue-500"><option value="name_asc">ชื่อ (ก-ฮ)</option><option value="stock_asc">สต๊อกเหลือน้อย</option><option value="stock_desc">สต๊อกคงเหลือมาก</option></select>
               </div>
               <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                       <thead><tr className="bg-slate-50/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
+                       <thead><tr className="bg-[#F7F1E4]/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
                       <tbody className="text-sm">
                           {filteredAndSortedProducts.map((p, idx) => (
-                               <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
+                               <tr key={p.id} className="border-b hover:bg-[#FBF7EE] transition-colors">
                                   <td className="py-3 px-4 text-center font-bold text-slate-400">{idx+1}</td>
                                   <td className="py-3 px-4 font-medium text-slate-800">{p.name}</td>
                                   <td className="py-3 px-4 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(p.stock) <= 5 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>{p.stock}</span></td>
@@ -3399,7 +3399,7 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
                       {group.items.map((sale) => {
                         const isCurrentRowEditing = isEditing === sale.id;
                         return (
-                          <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors align-top">
+                          <tr key={sale.id} className="border-b border-slate-50 hover:bg-[#FBF7EE]/80 transition-colors align-top">
                             <td className="px-4 py-2 font-bold">
                               {isCurrentRowEditing ? (
                                 <div className="flex flex-col space-y-1.5">
@@ -3586,10 +3586,10 @@ const UsersManagementView = ({ users, loggedInUser }) => {
         </div>
          {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14}/><span>เพิ่มผู้ใช้</span></button>}
       </div>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
+      <div className="bg-[#FFFDF7] rounded-xl shadow-sm border border-[#EADBBB]/50 overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
-            <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs uppercase"><th className="p-3 md:p-4 font-bold">Username</th><th className="p-3 md:p-4 font-bold">รหัสผ่าน</th><th className="p-3 md:p-4 font-bold">ระดับสิทธิ์</th><th className="p-3 md:p-4 font-bold">ตั้งค่าความสามารถ (Permissions)</th><th className="p-3 md:p-4 font-bold text-right">จัดการ</th></tr>
+            <tr className="bg-[#F7F1E4]/80 text-slate-500 border-b border-slate-100 text-xs uppercase"><th className="p-3 md:p-4 font-bold">Username</th><th className="p-3 md:p-4 font-bold">รหัสผ่าน</th><th className="p-3 md:p-4 font-bold">ระดับสิทธิ์</th><th className="p-3 md:p-4 font-bold">ตั้งค่าความสามารถ (Permissions)</th><th className="p-3 md:p-4 font-bold text-right">จัดการ</th></tr>
           </thead>
           <tbody className="text-xs md:text-sm">
             {isAdding && (
@@ -3617,7 +3617,7 @@ const UsersManagementView = ({ users, loggedInUser }) => {
               </tr>
             )}
             {users.map(u => (
-              <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 align-top transition-colors">
+              <tr key={u.id} className="border-b border-slate-100 hover:bg-[#FBF7EE] align-top transition-colors">
                 <td className="p-3 md:p-4 font-bold text-slate-800 pt-5">{u.username}</td>
                 <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} />) : (<span className="text-slate-400 tracking-widest">••••••</span>)}</td>
                 <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select>) : (<span className={`px-2 py-1 rounded text-[9px] font-bold border ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role.toUpperCase()}</span>)}</td>
@@ -3737,10 +3737,10 @@ const ProductsView = ({ products, loggedInUser, formatMoney, getLocalISODate, do
         </div>
       </div>
       
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
+      <div className="bg-[#FFFDF7] rounded-xl shadow-sm border border-[#EADBBB]/50 overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
-            <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm"><th className="p-3 md:p-4 font-bold text-center w-16">ลำดับ</th><th className="p-3 md:p-4 font-bold">ชื่อสินค้า</th><th className="p-3 md:p-4 font-bold">ราคาคลินิก</th><th className="p-3 md:p-4 font-bold">ราคาขาย</th>{canEditTab('products') && <th className="p-3 md:p-4 font-bold text-right">จัดการ</th>}</tr>
+            <tr className="bg-[#F7F1E4]/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm"><th className="p-3 md:p-4 font-bold text-center w-16">ลำดับ</th><th className="p-3 md:p-4 font-bold">ชื่อสินค้า</th><th className="p-3 md:p-4 font-bold">ราคาคลินิก</th><th className="p-3 md:p-4 font-bold">ราคาขาย</th>{canEditTab('products') && <th className="p-3 md:p-4 font-bold text-right">จัดการ</th>}</tr>
           </thead>
           <tbody className="text-xs md:text-sm">
             {isAdding && (
@@ -3753,7 +3753,7 @@ const ProductsView = ({ products, loggedInUser, formatMoney, getLocalISODate, do
               </tr>
             )}
             {filteredAndSortedProducts.map((product, index) => (
-              <tr key={product.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+              <tr key={product.id} className="border-b border-slate-50 hover:bg-[#FBF7EE] transition-colors">
                 <td className="p-3 md:p-4 text-center font-bold text-slate-400">{index + 1}</td>
                 <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-slate-800">{product.name}</span>}</td>
                 <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded border border-orange-100">฿{formatMoney(product.cost)}</span>}</td>
@@ -3827,7 +3827,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.36</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.37</p>
         </div>
       </div>
     </div>
