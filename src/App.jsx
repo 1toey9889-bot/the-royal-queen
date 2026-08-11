@@ -2060,7 +2060,7 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
 //  ระบบจัดการคลังสินค้า (Stock) - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
 //  (ถ้าประกาศไว้ข้างใน App รายการที่ติ๊กเช็คสต๊อกค้างไว้/ฟอร์มนำเข้าสินค้าจะรีเซ็ตเองทุก snapshot จาก Firestore)
 // ==========================================
-const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, loggedInUser, isExecutiveView, getProduct, getLocalISODate, downloadMobileSafeCSV, canEditTab, canExportTab, isStockCheckPendingFor, applySummaryDelta }) => {
+const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, loggedInUser, isExecutiveView, getProduct, formatMoney, getLocalISODate, downloadMobileSafeCSV, canEditTab, canExportTab, isStockCheckPendingFor, applySummaryDelta }) => {
   const [mode, setMode] = useState('view');
   const [selectedProduct, setSelectedProduct] = useState('');
   const [stockAmount, setStockAmount] = useState('');
@@ -2838,23 +2838,99 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                   <input type="text" placeholder="ระบุรหัสออเดอร์ (เช่น ORD-123)..." value={returnOrderId} onChange={e=>setReturnOrderId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-orange-500"/>
                   <button onClick={handleSearchReturnOrder} className="px-6 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-md flex items-center"><Search size={18} className="mr-1"/> ค้นหา</button>
               </div>
-              {returnItems.length > 0 && (
-                  <div className="space-y-4">
-                       <table className="w-full text-left text-sm border-collapse">
-                          <thead><tr className="bg-slate-50"><th className="p-3">สินค้า</th><th className="p-3">จำนวนที่ซื้อ</th><th className="p-3">จำนวนที่จะคืน</th></tr></thead>
-                          <tbody>
-                               {returnItems.map((item, idx) => (
-                                  <tr key={idx} className="border-b">
-                                      <td className="p-3 font-medium">{getProduct(item.productId)?.name || 'Unknown'}</td>
-                                      <td className="p-3 font-bold">{item.quantity}</td>
-                                      <td className="p-3"><input type="number" max={item.quantity} min="0" value={item.returnQty} onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }} className="w-24 p-2 border rounded outline-none text-center focus:border-orange-500"/></td>
-                                  </tr>
-                              ))}
-                           </tbody>
-                      </table>
-                      <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
-                  </div>
-               )}
+              {returnItems.length > 0 && (() => {
+                  // ข้อมูลหัวออเดอร์ (ทุกรายการมาจากออเดอร์เดียวกัน จึงอ้างอิงรายการแรกได้)
+                  const head = returnItems[0];
+                  let headTime = '-', headDate = '-';
+                  try { const d = new Date(head.date); if (!isNaN(d.getTime())) { headTime = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); headDate = d.toLocaleDateString('th-TH'); } } catch(e) {}
+                  const headStore = head.store || '-';
+                  let gradientHeaderClass = "from-slate-50 to-white border-slate-200";
+                  let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
+                  if (headStore.includes('Shopee')) { gradientHeaderClass = "from-[#FFF0ED] to-white border-[#FFE4DF]"; badgeStoreClass = "bg-[#EE4D2D] text-white border-transparent"; }
+                  else if (headStore.includes('Lazada')) { gradientHeaderClass = "from-[#F2F3FF] to-white border-[#E6E8FF]"; badgeStoreClass = "bg-[#0F146D] text-white border-transparent"; }
+                  else if (headStore === 'LINE') { gradientHeaderClass = "from-[#E5F9E5] to-white border-[#CCF2CC]"; badgeStoreClass = "bg-[#00C300] text-white border-transparent"; }
+
+                  const orderTotalQty = returnItems.reduce((s, it) => s + (Number(it.quantity) || 0), 0);
+                  const orderTotalValue = returnItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
+                  const refundQty = returnItems.reduce((s, it) => s + (Number(it.returnQty) || 0), 0);
+                  const refundValue = returnItems.reduce((s, it) => {
+                    const q = Number(it.quantity) || 0;
+                    return s + (q > 0 ? (Number(it.total) / q) * (Number(it.returnQty) || 0) : 0);
+                  }, 0);
+
+                  return (
+                    <div className="space-y-4">
+                        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                            <div className={`bg-gradient-to-r ${gradientHeaderClass} px-4 py-3 flex flex-wrap gap-3 items-center border-b`}>
+                                <span className="text-slate-600 text-xs md:text-sm font-bold flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 shadow-sm">
+                                    <Clock size={14} className="mr-1.5 text-slate-400"/> {headTime} น.
+                                </span>
+                                <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
+                                    <Store size={12} className="inline mr-1"/> {headStore}
+                                </span>
+                                <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
+                                    <User size={12} className="mr-1"/> {head.soldBy || '-'}
+                                </span>
+                                <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
+                                    <CalendarDays size={12} className="mr-1"/> {headDate}
+                                </span>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left min-w-[680px]">
+                                    <thead>
+                                        <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
+                                            <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์</th>
+                                            <th className="px-4 py-2 font-bold">สินค้า</th>
+                                            <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
+                                            <th className="px-4 py-2 font-bold text-right w-[100px]">ราคา/ชิ้น</th>
+                                            <th className="px-4 py-2 font-bold text-right w-[120px]">ยอดรวมย่อย</th>
+                                            <th className="px-4 py-2 font-bold text-center w-[130px]">จำนวนที่จะคืน</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-[11px] md:text-xs text-slate-700">
+                                        {returnItems.map((item, idx) => {
+                                            const qty = Number(item.quantity) || 0;
+                                            const unitPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : (qty > 0 ? Number(item.total) / qty : 0);
+                                            return (
+                                                <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                    <td className="px-4 py-2 font-bold">{item.orderId || '-'}</td>
+                                                    <td className="px-4 py-2 font-medium">{getProduct(item.productId)?.name || 'สินค้าถูกลบไปแล้ว'}</td>
+                                                    <td className="px-4 py-2 text-center"><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{qty}</span></td>
+                                                    <td className="px-4 py-2 text-right">฿{formatMoney(unitPrice)}</td>
+                                                    <td className="px-4 py-2 text-right font-black text-slate-800">฿{formatMoney(item.total)}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <input type="number" max={qty} min="0" value={item.returnQty}
+                                                            onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }}
+                                                            className="w-20 p-2 border-2 border-orange-200 rounded-lg outline-none text-center font-bold focus:border-orange-500"/>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="bg-slate-50/50 border-t border-slate-100 px-4 py-3 flex flex-wrap justify-between items-center gap-2 text-xs md:text-sm">
+                                <div className="font-bold text-slate-500">
+                                    รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{orderTotalQty} ชิ้น</span>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                    <span className="font-bold text-slate-500 uppercase text-[10px] md:text-xs">ยอดรวมสุทธิ</span>
+                                    <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 drop-shadow-sm">฿{formatMoney(orderTotalValue)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3 flex flex-wrap justify-between items-center gap-2">
+                            <span className="text-sm font-bold text-orange-800">ยอดที่จะรับคืนครั้งนี้</span>
+                            <span className="text-sm font-bold text-orange-800">{refundQty} ชิ้น · ฿{formatMoney(refundValue)}</span>
+                        </div>
+
+                        <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
+                    </div>
+                  );
+               })()}
           </div>
       )}
 
@@ -4345,7 +4421,7 @@ export default function App() {
             {activeTab === 'stock' && <StockView
               products={products} sales={sales} users={users} employees={employees}
               auditLogs={auditLogs} stockChecks={stockChecks} loggedInUser={loggedInUser}
-              isExecutiveView={isExecutiveView} getProduct={getProduct} getLocalISODate={getLocalISODate}
+              isExecutiveView={isExecutiveView} getProduct={getProduct} formatMoney={formatMoney} getLocalISODate={getLocalISODate}
               downloadMobileSafeCSV={downloadMobileSafeCSV} canEditTab={canEditTab} canExportTab={canExportTab}
               isStockCheckPendingFor={isStockCheckPendingFor} applySummaryDelta={applySummaryDelta}
             />}
@@ -4443,7 +4519,7 @@ export default function App() {
             {activeTab === 'stock' && canAccess('stock') && <StockView
               products={products} sales={sales} users={users} employees={employees}
               auditLogs={auditLogs} stockChecks={stockChecks} loggedInUser={loggedInUser}
-              isExecutiveView={isExecutiveView} getProduct={getProduct} getLocalISODate={getLocalISODate}
+              isExecutiveView={isExecutiveView} getProduct={getProduct} formatMoney={formatMoney} getLocalISODate={getLocalISODate}
               downloadMobileSafeCSV={downloadMobileSafeCSV} canEditTab={canEditTab} canExportTab={canExportTab}
               isStockCheckPendingFor={isStockCheckPendingFor} applySummaryDelta={applySummaryDelta}
             />}
