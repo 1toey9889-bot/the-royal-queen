@@ -1964,6 +1964,1448 @@ const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsL
     </div>
   );
 };
+// ==========================================
+//  ระบบจัดการคลังสินค้า (Stock) - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
+//  (ถ้าประกาศไว้ข้างใน App รายการที่ติ๊กเช็คสต๊อกค้างไว้/ฟอร์มนำเข้าสินค้าจะรีเซ็ตเองทุก snapshot จาก Firestore)
+// ==========================================
+const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, loggedInUser, isExecutiveView, getProduct, getLocalISODate, downloadMobileSafeCSV, canEditTab, canExportTab, isStockCheckPendingFor, applySummaryDelta }) => {
+  const [mode, setMode] = useState('view');
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [stockAmount, setStockAmount] = useState('');
+  const [originalStock, setOriginalStock] = useState(0); // เพิ่ม State สำหรับเก็บค่า stock เดิมก่อนแก้
+
+  // สำหรับค้นหาสินค้าแบบพิมพ์ค้นหา และ popup ยืนยันตอนนำเข้าสินค้า
+  const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
+  const [importProductSearchTerm, setImportProductSearchTerm] = useState('');
+  const importDropdownRef = useRef(null);
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+
+  const [returnOrderId, setReturnOrderId] = useState('');
+  const [returnItems, setReturnItems] = useState([]);
+
+  // สำหรับฟีเจอร์แกะกล่อง (แปลงหน่วยจากกล่องใหญ่ -> แผงย่อย)
+  const [selectedBoxProduct, setSelectedBoxProduct] = useState('');
+  const [selectedPanelProduct, setSelectedPanelProduct] = useState('');
+  const [unboxQty, setUnboxQty] = useState(1);
+  const [unboxRatio, setUnboxRatio] = useState('');
+
+  // สำหรับหน้าประวัติการทำรายการคลังสินค้า
+  const [historyActionFilter, setHistoryActionFilter] = useState('all');
+  const [historyFromDate, setHistoryFromDate] = useState('');
+  const [historyToDate, setHistoryToDate] = useState('');
+
+  // สำหรับระบบมอบหมายเช็คสต๊อก (Admin เลือกวันที่ + พนักงาน มอบหมายล่วงหน้าได้)
+  const [assignDate, setAssignDate] = useState(getLocalISODate());
+  const [assignEmployeeId, setAssignEmployeeId] = useState('');
+  const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
+
+  // สำหรับระบบเช็คสต๊อกประจำวัน (พนักงานที่ Admin มอบหมายเป็นผู้เช็ค)
+  const [checkResults, setCheckResults] = useState({}); // { [productId]: { status: 'match'|'mismatch', note } }
+
+  // สำหรับหน้าประวัติการเช็คสต๊อกย้อนหลัง (ดูได้ทุกคน)
+  const [expandedCheckDate, setExpandedCheckDate] = useState(null);
+  
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc');
+
+  useEffect(() => {
+    const handleClickOutside = (event) => { if (importDropdownRef.current && !importDropdownRef.current.contains(event.target)) setIsImportDropdownOpen(false); };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredImportProducts = useMemo(() => {
+    if (!importProductSearchTerm) return products;
+    return products.filter(p => String(p?.name || '').toLowerCase().includes(String(importProductSearchTerm || '').toLowerCase()));
+  }, [products, importProductSearchTerm]);
+
+  const filteredAndSortedProducts = useMemo(() => {
+    let result = [...products];
+    if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+    result.sort((a, b) => {
+      if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
+      if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
+      if (sortBy === 'stock_asc') return (Number(a.stock) || 0) - (Number(b.stock) || 0);
+      return 0;
+    });
+    return result;
+  }, [products, searchTerm, sortBy]);
+
+  const getStockActionMeta = (action) => {
+    switch (action) {
+      case 'ADD_STOCK': return { label: 'นำเข้าสินค้า', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      case 'OVERRIDE_STOCK': return { label: 'แก้ไขสต๊อก', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'RETURN_STOCK': return { label: 'ลูกค้าคืนของ', badgeClass: 'bg-orange-50 text-orange-700 border-orange-200' };
+      case 'UNBOX_STOCK': return { label: 'แกะกล่อง', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' };
+      case 'ASSIGN_STOCK_CHECK': return { label: 'มอบหมายเช็คสต๊อก', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' };
+      case 'COMPLETE_STOCK_CHECK': return { label: 'เช็คสต๊อกประจำวัน', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' };
+      default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
+    }
+  };
+
+  const stockHistoryLogs = useMemo(() => {
+    const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK', 'ASSIGN_STOCK_CHECK', 'COMPLETE_STOCK_CHECK'];
+    return auditLogs
+      .filter(log => stockActions.includes(log.action))
+      .filter(log => historyActionFilter === 'all' || log.action === historyActionFilter)
+      .filter(log => {
+        if (!historyFromDate && !historyToDate) return true;
+        const d = getLocalISODate(log.timestamp);
+        if (historyFromDate && d < historyFromDate) return false;
+        if (historyToDate && d > historyToDate) return false;
+        return true;
+      });
+  }, [auditLogs, historyActionFilter, historyFromDate, historyToDate]);
+
+  // สถานะเช็คสต๊อกของวันนี้ (ใครถูกมอบหมาย / เช็คเสร็จหรือยัง)
+  const todayStrForCheck = getLocalISODate();
+  const todayStockCheck = stockChecks.find(c => c.id === todayStrForCheck) || null;
+  const isMyAssignedCheckToday = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
+  const isTodayCheckCurrentlyValid = !!todayStockCheck?.completed;
+  // นับเฉพาะสินค้าที่ "ยังมีอยู่จริงตอนนี้" และถูกติ๊กแล้ว กันกรณีสินค้าถูกลบ/เพิ่มระหว่างเช็คแล้วนับจำนวนคลาดเคลื่อน
+  const checkedProductCount = products.filter(p => checkResults[p.id]).length;
+
+  // ประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์แล้ว เรียงวันล่าสุดก่อน (สำหรับหน้าประวัติที่พนักงานทุกคนดูได้)
+  const completedStockCheckHistory = useMemo(() => {
+    return stockChecks.filter(c => c.completed).sort((a, b) => b.id.localeCompare(a.id));
+  }, [stockChecks]);
+
+  // เลื่อนวันที่ไปข้างหน้า N วัน (คำนวณจากตัวเลข ปี/เดือน/วัน ตรงๆ กันปัญหา timezone)
+  const addDaysToDateStr = (dateStr, days) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  };
+
+  // ตารางมอบหมายเช็คสต๊อก 14 วันข้างหน้า (สำหรับให้ Admin ดูภาพรวมและมอบหมายล่วงหน้า)
+  const upcomingScheduleDays = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = addDaysToDateStr(todayStrForCheck, i);
+      const check = stockChecks.find(c => c.id === d);
+      days.push({ date: d, assignedEmployeeName: check?.assignedEmployeeName || null, completed: !!check?.completed });
+    }
+    return days;
+  }, [stockChecks, todayStrForCheck]);
+
+  const handleAssignStockCheck = async () => {
+    if (!assignEmployeeId || !assignDate) return;
+    setIsProcessing(true);
+    try {
+      const emp = employees.find(e => e.id === assignEmployeeId);
+      if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
+      await setDoc(doc(db, "stock_checks", assignDate), {
+        date: assignDate,
+        assignedEmployeeId: emp.id,
+        assignedEmployeeName: emp.fullName,
+        assignedByUsername: loggedInUser?.username || 'unknown',
+        assignedAt: new Date().toISOString(),
+        completed: false
+      }, { merge: true });
+      await addDoc(collection(db, "audit_logs"), { action: "ASSIGN_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `มอบหมายให้ ${emp.fullName} เช็คสต๊อกวันที่ ${assignDate}`, timestamp: new Date().toISOString() });
+      setAssignSuccessMsg(`มอบหมาย ${emp.fullName} วันที่ ${assignDate} เรียบร้อย`);
+      setTimeout(() => setAssignSuccessMsg(''), 3000);
+      setAssignEmployeeId('');
+      setAssignDate(prev => addDaysToDateStr(prev, 1));
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsProcessing(false);
+  };
+
+  const handleSubmitStockCheck = async () => {
+    if (checkedProductCount < products.length) { alert('กรุณาเช็คสต๊อกให้ครบทุกรายการก่อนยืนยัน'); return; }
+    setIsProcessing(true);
+    try {
+      const items = products.map(p => ({
+        productId: p.id,
+        productName: p.name,
+        status: checkResults[p.id]?.status || 'match',
+        systemStock: Number(p.stock) || 0,
+        actualCount: (checkResults[p.id]?.status === 'mismatch' && checkResults[p.id]?.actualCount !== '' && checkResults[p.id]?.actualCount !== undefined) ? Number(checkResults[p.id].actualCount) : null,
+        note: checkResults[p.id]?.note || ''
+      }));
+      const mismatchCount = items.filter(i => i.status === 'mismatch').length;
+      await setDoc(doc(db, "stock_checks", todayStrForCheck), {
+        completed: true,
+        completedAt: new Date().toISOString(),
+        completedByUsername: loggedInUser?.username || 'unknown',
+        checkerEmployeeName: todayStockCheck?.assignedEmployeeName || loggedInUser?.employeeData?.fullName || '',
+        items, mismatchCount
+      }, { merge: true });
+      await addDoc(collection(db, "audit_logs"), { action: "COMPLETE_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `เช็คสต๊อกประจำวัน ${todayStrForCheck} เสร็จสิ้น (ไม่ตรง ${mismatchCount} รายการ)`, timestamp: new Date().toISOString() });
+      alert(mismatchCount > 0 ? `บันทึกผลการเช็คสต๊อกสำเร็จ พบรายการไม่ตรง ${mismatchCount} รายการ` : 'บันทึกผลการเช็คสต๊อกสำเร็จ สต๊อกตรงทั้งหมด');
+      setMode('view'); setCheckResults({});
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsProcessing(false);
+  };
+  
+  const handleUpdateStock = async (isAbsoluteOverride = false) => {
+    if (!selectedProduct || !stockAmount || isNaN(stockAmount)) return;
+    setIsProcessing(true);
+    try {
+      const productRef = doc(db, "products", selectedProduct);
+      const amount = Number(stockAmount);
+      // ตรวจว่าสินค้ายังอยู่จริงก่อนอัปเดต (กันกรณีถูกลบไปแล้ว แล้ว batch ล้มเหลวโดยไม่รู้สาเหตุ)
+      const productSnap = await getDoc(productRef);
+      if (!productSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้านี้ (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
+      const batch = writeBatch(db);
+      if (isAbsoluteOverride) {
+          // คำนวณส่วนต่างจากค่าเดิมที่ผู้ดูแลระบบเห็นตอนกดแก้ไข ป้องกัน Race Condition
+          const diff = amount - Number(originalStock);
+          batch.update(productRef, { stock: increment(diff) });
+          batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อกเป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
+      } else {
+          batch.update(productRef, { stock: increment(amount) });
+          batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
+      }
+      await batch.commit();
+      setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0); setShowImportConfirm(false);
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); setShowImportConfirm(false); }
+    setIsProcessing(false);
+  };
+
+  const handleSearchReturnOrder = () => {
+      const items = sales.filter(s => s.orderId === returnOrderId.trim());
+      if (items.length === 0) alert('ไม่พบออเดอร์นี้ในระบบ');
+      setReturnItems(items.map(item => ({...item, returnQty: item.quantity})));
+  };
+
+  const handleProcessReturn = async () => {
+      const itemsToReturn = returnItems.filter(item => Number(item.returnQty) > 0);
+      if(itemsToReturn.length === 0) return;
+      setIsProcessing(true);
+      try {
+          const batch = writeBatch(db);
+          for(let item of itemsToReturn) {
+              const qtyToReturn = Number(item.returnQty);
+              if(qtyToReturn > item.quantity) throw new Error("คืนเกินจำนวนที่ซื้อ");
+              
+              // ป้องกันกรณีสินค้าถูกลบไปแล้วด้วย getDoc ก่อน update
+              const productRef = doc(db, "products", item.productId);
+              const productSnap = await getDoc(productRef);
+              if (productSnap.exists()) {
+                  batch.update(productRef, { stock: increment(qtyToReturn) });
+              }
+              
+              const newQty = item.quantity - qtyToReturn;
+              const unitCostForReturn = item.unitCost !== undefined ? Number(item.unitCost) : Number(getProduct(item.productId)?.cost || 0);
+              const refundedRevenue = (Number(item.total) / Number(item.quantity)) * qtyToReturn;
+              const refundedProfit = refundedRevenue - (unitCostForReturn * qtyToReturn);
+              if(newQty === 0) {
+                  batch.delete(doc(db, "sales", item.id));
+              } else {
+                  const newTotal = (item.total / item.quantity) * newQty;
+                  batch.update(doc(db, "sales", item.id), { quantity: newQty, total: newTotal });
+              }
+              // หักยอดขาย/กำไรส่วนที่ลูกค้าคืนออกจากยอดสรุปรายวันของวันที่ขาย
+              applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
+              
+              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน ${qtyToReturn} ชิ้น ออเดอร์ ${item.orderId}`, timestamp: new Date().toISOString() });
+          }
+          await batch.commit();
+          alert('ทำรายการคืนสินค้าสำเร็จ');
+          setMode('view'); setReturnOrderId(''); setReturnItems([]);
+      } catch (err) { alert("Error: " + err.message); }
+      setIsProcessing(false);
+  };
+
+  const handleUnbox = async () => {
+      if (!selectedBoxProduct || !selectedPanelProduct) { alert('กรุณาเลือกสินค้าต้นทางและปลายทางให้ครบ'); return; }
+      if (selectedBoxProduct === selectedPanelProduct) { alert('สินค้าต้นทางและปลายทางต้องไม่ใช่รายการเดียวกัน'); return; }
+      const boxQty = Number(unboxQty);
+      const ratio = Number(unboxRatio);
+      if (!boxQty || boxQty < 1) { alert('กรุณาระบุจำนวนกล่องที่จะแกะให้ถูกต้อง'); return; }
+      if (!ratio || ratio < 1) { alert('กรุณาระบุจำนวนแผงต่อกล่องให้ถูกต้อง'); return; }
+
+      setIsProcessing(true);
+      try {
+          const boxRef = doc(db, "products", selectedBoxProduct);
+          const panelRef = doc(db, "products", selectedPanelProduct);
+
+          // อ่านค่าล่าสุดจากฐานข้อมูลก่อนตัดสต๊อกจริง ป้องกันกรณีมีคนอื่นแก้สต๊อกพร้อมกัน (ไม่ใช้ค่า cache ฝั่ง client)
+          const boxSnap = await getDoc(boxRef);
+          if (!boxSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าต้นทาง (อาจถูกลบไปแล้ว)");
+          const panelSnap = await getDoc(panelRef);
+          if (!panelSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าปลายทาง (อาจถูกลบไปแล้ว)");
+
+          const boxProductData = boxSnap.data();
+          const panelProductData = panelSnap.data();
+          const currentBoxStock = Number(boxProductData?.stock) || 0;
+          if (currentBoxStock < boxQty) throw new Error(`สต๊อกกล่องไม่พอ (คงเหลือ ${currentBoxStock} กล่อง)`);
+
+          const panelQtyToAdd = boxQty * ratio;
+
+          const batch = writeBatch(db);
+          batch.update(boxRef, { stock: increment(-boxQty) });
+          batch.update(panelRef, { stock: increment(panelQtyToAdd) });
+          batch.set(doc(collection(db, "audit_logs")), { action: "UNBOX_STOCK", user: loggedInUser?.username, details: `แกะกล่อง "${boxProductData?.name || ''}" จำนวน ${boxQty} กล่อง แปลงเป็น "${panelProductData?.name || ''}" จำนวน ${panelQtyToAdd} แผง (อัตรา ${ratio} แผง/กล่อง)`, timestamp: new Date().toISOString() });
+          await batch.commit();
+
+          alert('แกะกล่องสำเร็จ');
+          setMode('view'); setSelectedBoxProduct(''); setSelectedPanelProduct(''); setUnboxQty(1); setUnboxRatio('');
+      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+      setIsProcessing(false);
+  };
+
+  const exportStockReport = () => {
+      if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
+      const csvRows = [];
+      csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Resilient Clinic']);
+      csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
+      csvRows.push([]);
+      csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
+      filteredAndSortedProducts.forEach((p, index) => { csvRows.push([index + 1, `"${p.name || ''}"`, Number(p.stock) || 0]); });
+      downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานจำนวนสต๊อกคงเหลือ_${getLocalISODate()}.csv`);
+  };
+
+  return (
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
+      {showImportConfirm && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold text-lg flex items-center"><ArrowDownToLine size={18} className="mr-2"/> ยืนยันการนำเข้าสินค้า</h3>
+                      <button onClick={() => setShowImportConfirm(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                  </div>
+                  <div className="p-5 space-y-4 bg-slate-50/50">
+                      <div>
+                          <span className="text-xs font-bold text-slate-500 block mb-1 uppercase tracking-wide">สินค้า</span>
+                          <span className="font-black text-slate-800 text-base">{getProduct(selectedProduct)?.name || '-'}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 bg-white p-4 rounded-2xl border border-slate-200 items-center">
+                          <div className="text-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">คงเหลือเดิม</span>
+                              <span className="text-xl font-black text-slate-700">{Number(getProduct(selectedProduct)?.stock) || 0}</span>
+                          </div>
+                          <div className="text-center flex flex-col items-center justify-center text-emerald-600">
+                              <Plus size={18}/>
+                              <span className="text-lg font-black">{Number(stockAmount) || 0}</span>
+                          </div>
+                          <div className="text-center">
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase block mb-1">คงเหลือใหม่</span>
+                              <span className="text-xl font-black text-emerald-700">{(Number(getProduct(selectedProduct)?.stock) || 0) + (Number(stockAmount) || 0)}</span>
+                          </div>
+                      </div>
+                  </div>
+                  <div className="p-4 bg-white border-t border-slate-100 flex space-x-3">
+                      <button type="button" onClick={() => setShowImportConfirm(false)} disabled={isProcessing} className="flex-1 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition">ยกเลิก</button>
+                      <button type="button" onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center">
+                          {isProcessing ? 'กำลังบันทึก...' : <><CheckCircle2 size={16} className="mr-1.5"/> ยืนยันนำเข้า</>}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
+          <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
+          <div className="flex flex-wrap gap-2">
+              {canEditTab('stock') && !isExecutiveView && (
+                 <>
+                      <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
+                      <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
+                      <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
+                      <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
+                   </>
+              )}
+              {!isExecutiveView && (canEditTab('stock') || isMyAssignedCheckToday) && (
+                  <button onClick={() => { setCheckResults({}); setMode('check'); }} className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-lg shadow flex items-center ${isMyAssignedCheckToday ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}><CheckCircle2 size={16} className="mr-1"/> เช็คสต๊อกวันนี้{isMyAssignedCheckToday ? ' ⚠️' : ''}</button>
+              )}
+              {!isExecutiveView && loggedInUser?.role === 'admin' && (
+                  <button onClick={() => { setAssignDate(getLocalISODate()); setAssignEmployeeId(''); setMode('assign_check'); }} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
+              )}
+              {!isExecutiveView && (
+                  <button onClick={() => { setExpandedCheckDate(null); setMode('check_history'); }} className="px-4 py-2 bg-cyan-600 text-white text-sm font-bold rounded-lg shadow hover:bg-cyan-700 flex items-center"><CalendarDays size={16} className="mr-1"/> ประวัติการเช็คสต๊อก</button>
+              )}
+              {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
+              {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
+           </div>
+      </div>
+
+      {mode === 'add' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-200">
+              <h3 className="font-bold text-emerald-800 mb-4">นำเข้าสินค้า (บวกเพิ่มจากสต๊อกเดิม)</h3>
+              <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1" ref={importDropdownRef}>
+                      <div onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)} className="w-full p-3 border border-slate-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all bg-white hover:border-emerald-300">
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                             <Search size={16} className={`shrink-0 transition-colors ${isImportDropdownOpen ? 'text-emerald-500' : 'text-slate-400'}`}/>
+                             <span className={`truncate ${selectedProduct ? 'text-slate-800 font-medium' : 'text-slate-400 font-medium'}`}>
+                                {selectedProduct ? `${getProduct(selectedProduct)?.name} (คงเหลือ: ${getProduct(selectedProduct)?.stock})` : '-- เลือกสินค้า / พิมพ์ค้นหา --'}
+                             </span>
+                          </div>
+                          <ChevronDown size={16} className={`shrink-0 transition-transform duration-300 ${isImportDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`}/>
+                      </div>
+                      {isImportDropdownOpen && (
+                          <div className="absolute w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-[280px] flex flex-col top-full left-0 z-[100] animate-in fade-in overflow-hidden">
+                              <div className="p-2 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                                  <div className="relative">
+                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                                      <input type="text" className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={importProductSearchTerm} onChange={(e) => setImportProductSearchTerm(e.target.value)} autoFocus />
+                                  </div>
+                              </div>
+                              <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white">
+                                  {filteredImportProducts.length === 0 ? (
+                                      <li className="px-3 py-4 text-center text-slate-400 text-sm">ไม่พบสินค้าที่ค้นหา</li>
+                                  ) : (
+                                      filteredImportProducts.map(p => (
+                                          <li key={p.id} onClick={() => { setSelectedProduct(p.id); setIsImportDropdownOpen(false); setImportProductSearchTerm(''); }} className="px-3 py-2 rounded-lg text-sm flex justify-between items-center cursor-pointer transition-all bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100">
+                                              <span className="font-bold text-sm text-slate-800">{p.name}</span>
+                                              <span className="text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border bg-emerald-50 text-emerald-700 border-emerald-200">คงเหลือ {p.stock}</span>
+                                          </li>
+                                      ))
+                                  )}
+                              </ul>
+                          </div>
+                      )}
+                  </div>
+                   <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
+                  <button onClick={() => {
+                      if (!selectedProduct) { alert('กรุณาเลือกสินค้าที่จะนำเข้า'); return; }
+                      if (!stockAmount || isNaN(stockAmount) || Number(stockAmount) <= 0) { alert('กรุณาระบุจำนวนที่นำเข้าให้ถูกต้อง'); return; }
+                      setShowImportConfirm(true);
+                  }} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
+              </div>
+          </div>
+      )}
+
+      {mode === 'assign_check' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+              <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อก</h3>
+              <p className="text-xs text-slate-500 mb-4">เลือกวันที่และพนักงาน มอบหมายล่วงหน้าได้หลายวัน — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้ในวันนั้น</p>
+
+              {assignSuccessMsg && (
+                  <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-700 flex items-center">
+                      <CheckCircle2 size={16} className="mr-2 shrink-0"/> {assignSuccessMsg}
+                  </div>
+              )}
+
+              {(() => {
+                  const existingCheck = stockChecks.find(c => c.id === assignDate);
+                  return existingCheck?.assignedEmployeeId ? (
+                      <div className={`mb-4 p-3 rounded-xl border text-sm font-bold flex items-center ${existingCheck.completed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                          {existingCheck.completed ? <CheckCircle2 size={16} className="mr-2 shrink-0"/> : <AlertCircle size={16} className="mr-2 shrink-0"/>}
+                          วันที่ {assignDate} มอบหมายให้ {existingCheck.assignedEmployeeName} — {existingCheck.completed ? 'เช็คสต๊อกเสร็จแล้ว' : 'ยังไม่ได้เช็คสต๊อก'}
+                      </div>
+                  ) : null;
+              })()}
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                  <input type="date" value={assignDate} min={getLocalISODate()} onChange={e => setAssignDate(e.target.value)} className="p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white"/>
+                  <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white">
+                      <option value="">-- เลือกพนักงาน --</option>
+                      {employees.filter(emp => users.some(u => u.id === emp.userId)).map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                  </select>
+                  <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId || !assignDate} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-slate-100">
+                  <h4 className="text-sm font-bold text-slate-700 mb-3">ตารางเช็คสต๊อก 14 วันข้างหน้า (คลิกวันที่เพื่อแก้ไข)</h4>
+                  <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
+                      {upcomingScheduleDays.map(day => {
+                          const dObj = new Date(day.date + 'T12:00:00');
+                          const label = dObj.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+                          const isToday = day.date === todayStrForCheck;
+                          return (
+                              <div key={day.date} onClick={() => { setAssignSuccessMsg(''); setAssignDate(day.date); }} className={`flex items-center justify-between px-4 py-2.5 rounded-xl border cursor-pointer transition ${assignDate === day.date ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                                  <span className={`text-sm font-bold ${isToday ? 'text-amber-700' : 'text-slate-600'}`}>{label}{isToday ? ' (วันนี้)' : ''}</span>
+                                  {day.assignedEmployeeName ? (
+                                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${day.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                          {day.assignedEmployeeName}{day.completed ? ' ✓' : ''}
+                                      </span>
+                                  ) : (
+                                      <span className="text-xs text-slate-400 font-medium">ยังไม่มอบหมาย</span>
+                                  )}
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {mode === 'check' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
+              {isTodayCheckCurrentlyValid ? (
+                  <div className="p-8 text-center">
+                      <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3"/>
+                      <h3 className="font-bold text-slate-800 text-lg mb-1">เช็คสต๊อกวันนี้เสร็จแล้ว</h3>
+                      <p className="text-sm text-slate-500 mb-1">โดย {todayStockCheck.completedByUsername} เมื่อ {new Date(todayStockCheck.completedAt).toLocaleString('th-TH')}</p>
+                      <p className="text-sm font-bold">
+                          {todayStockCheck.mismatchCount > 0 ? <span className="text-red-600">พบรายการไม่ตรง {todayStockCheck.mismatchCount} รายการ</span> : <span className="text-emerald-600">สต๊อกตรงทั้งหมด</span>}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-4">หากต้องการเช็คใหม่ ให้ Admin มอบหมายซ้ำอีกครั้งที่เมนู "มอบหมายเช็คสต๊อก"</p>
+                  </div>
+              ) : (
+                  <>
+                      <div className="p-5 border-b border-slate-100 bg-teal-50/30">
+                          <h3 className="font-bold text-teal-800 mb-1">เช็คสต๊อกประจำวันที่ {new Date().toLocaleDateString('th-TH')}</h3>
+                          {todayStockCheck?.assignedEmployeeName ? (
+                              <p className="text-xs text-slate-500 font-medium">ผู้รับผิดชอบวันนี้: {todayStockCheck.assignedEmployeeName}</p>
+                          ) : (
+                              <p className="text-xs text-slate-400 font-medium">วันนี้ยังไม่มีการมอบหมายผู้เช็ค — เช็คล่วงหน้าได้ตามปกติ</p>
+                          )}
+                          <div className="mt-3 flex items-center gap-3">
+                              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-teal-500 transition-all" style={{ width: `${(checkedProductCount / (products.length || 1)) * 100}%` }}></div>
+                              </div>
+                              <span className="text-xs font-bold text-teal-700 shrink-0">{checkedProductCount}/{products.length} รายการ</span>
+                          </div>
+                      </div>
+                      <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
+                          {products.map(p => {
+                              const r = checkResults[p.id];
+                              return (
+                                  <div key={p.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                                      <div className="flex-1 min-w-0">
+                                          <p className="font-bold text-slate-800 text-sm">{p.name}</p>
+                                          <p className="text-xs text-slate-400">ในระบบ: {p.stock} ชิ้น</p>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                          <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'match'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'match' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✓ ตรง</button>
+                                          <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'mismatch'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'mismatch' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✕ ไม่ตรง</button>
+                                      </div>
+                                      {r?.status === 'mismatch' && (
+                                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                              <input type="number" placeholder="นับได้จริง..." value={r?.actualCount ?? ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], actualCount: e.target.value}}))} className="w-full sm:w-28 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500 text-center font-bold"/>
+                                              <input type="text" placeholder="หมายเหตุ (ถ้ามี)..." value={r?.note || ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], note: e.target.value}}))} className="w-full sm:w-48 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500"/>
+                                          </div>
+                                      )}
+                                  </div>
+                              );
+                          })}
+                      </div>
+                      <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                          <button onClick={handleSubmitStockCheck} disabled={isProcessing || checkedProductCount < products.length} className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-700 transition">
+                              ยืนยันเช็คสต๊อก ({checkedProductCount}/{products.length})
+                          </button>
+                      </div>
+                  </>
+              )}
+          </div>
+      )}
+
+      {mode === 'check_history' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-cyan-200 overflow-hidden">
+              <div className="p-5 border-b border-slate-100 bg-cyan-50/30">
+                  <h3 className="font-bold text-cyan-800 mb-1">ประวัติการเช็คสต๊อกย้อนหลัง</h3>
+                  <p className="text-xs text-slate-500">ดูได้ว่าแต่ละวันใครเป็นคนเช็ค และผลเป็นอย่างไร (ทุกคนดูได้)</p>
+              </div>
+              <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                  {completedStockCheckHistory.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400">
+                          <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
+                          <p className="font-medium text-sm">ยังไม่มีประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์</p>
+                      </div>
+                  ) : (
+                      completedStockCheckHistory.map(check => {
+                          const isExpanded = expandedCheckDate === check.id;
+                          let dateLabel = check.id;
+                          try { dateLabel = new Date(check.id + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
+                          return (
+                              <div key={check.id}>
+                                  <div onClick={() => setExpandedCheckDate(isExpanded ? null : check.id)} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/60 transition-colors">
+                                      <div>
+                                          <p className="font-bold text-slate-800 text-sm">{dateLabel}</p>
+                                          <p className="text-xs text-slate-500 mt-0.5 flex items-center"><User size={11} className="mr-1"/> ผู้เช็ค: {check.checkerEmployeeName || check.completedByUsername || '-'}</p>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${check.mismatchCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                              {check.mismatchCount > 0 ? `ไม่ตรง ${check.mismatchCount} รายการ` : 'ตรงทั้งหมด'}
+                                          </span>
+                                          <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}/>
+                                      </div>
+                                  </div>
+                                  {isExpanded && (
+                                      <div className="px-4 pb-4 bg-slate-50/50 animate-in fade-in duration-200">
+                                          <div className="bg-white rounded-xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                                              {(check.items || []).length === 0 ? (
+                                                  <p className="p-3 text-xs text-slate-400 text-center">ไม่มีรายละเอียดรายการ</p>
+                                              ) : (
+                                                  check.items.map((item, idx) => (
+                                                      <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
+                                                          <div className="flex-1 min-w-0">
+                                                              <span className="text-sm font-medium text-slate-700">{item.productName}</span>
+                                                              {item.note && <p className="text-xs text-slate-400 italic mt-0.5">{item.note}</p>}
+                                                          </div>
+                                                          <div className="flex items-center gap-2 shrink-0">
+                                                              {(item.systemStock !== undefined || (item.actualCount !== undefined && item.actualCount !== null)) && (
+                                                                  <span className="text-xs text-slate-500 whitespace-nowrap">
+                                                                      {item.systemStock !== undefined && <>{item.status === 'mismatch' ? 'ระบบ' : 'คงเหลือ'}: <b className="text-slate-700">{item.systemStock}</b></>}
+                                                                      {item.actualCount !== undefined && item.actualCount !== null && <> · นับได้จริง: <b className="text-red-600">{item.actualCount}</b></>}
+                                                                  </span>
+                                                              )}
+                                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border shrink-0 ${item.status === 'mismatch' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                                                  {item.status === 'mismatch' ? '✕ ไม่ตรง' : '✓ ตรง'}
+                                                              </span>
+                                                          </div>
+                                                      </div>
+                                                  ))
+                                              )}
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+                          );
+                      })
+                  )}
+              </div>
+          </div>
+      )}
+
+      {mode === 'unbox' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200">
+              <h3 className="font-bold text-purple-800 mb-4">แกะกล่อง (แปลงหน่วยจากกล่องใหญ่เป็นแผงย่อย)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าต้นทาง (หน่วยกล่อง)</label>
+                      <select value={selectedBoxProduct} onChange={(e) => {
+                          const boxId = e.target.value;
+                          setSelectedBoxProduct(boxId);
+                          const boxP = products.find(p => p.id === boxId);
+                          if (boxP && boxP.name && boxP.name.includes('ยกกล่อง')) {
+                              const guessName = boxP.name.replace('ยกกล่อง', 'แผง').trim();
+                              const guess = products.find(p => p.name && p.name.trim() === guessName);
+                              if (guess) setSelectedPanelProduct(guess.id);
+                          }
+                      }} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
+                          <option value="">-- เลือกสินค้า --</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
+                      </select>
+                  </div>
+                  <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าปลายทาง (หน่วยแผง)</label>
+                      <select value={selectedPanelProduct} onChange={(e) => setSelectedPanelProduct(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
+                          <option value="">-- เลือกสินค้า --</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
+                      </select>
+                  </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนกล่องที่จะแกะ</label>
+                      <input type="number" min="1" value={unboxQty} onChange={(e) => setUnboxQty(Math.max(1, parseInt(e.target.value) || 1))} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
+                  </div>
+                  <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนแผงต่อ 1 กล่อง</label>
+                      <input type="number" min="1" placeholder="เช่น 50" value={unboxRatio} onChange={(e) => setUnboxRatio(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
+                  </div>
+              </div>
+              {selectedBoxProduct && selectedPanelProduct && unboxRatio && (
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-4 text-sm text-purple-800 font-bold">
+                      จะตัดสต๊อก "{getProduct(selectedBoxProduct)?.name}" ออก {unboxQty} กล่อง และเพิ่มสต๊อก "{getProduct(selectedPanelProduct)?.name}" อีก {Number(unboxQty) * Number(unboxRatio)} แผง
+                  </div>
+              )}
+              <button onClick={handleUnbox} disabled={isProcessing} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl shadow-md hover:bg-purple-700 transition-colors">ยืนยันแกะกล่อง</button>
+          </div>
+      )}
+
+      {mode === 'edit' && (
+         <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-200">
+              <h3 className="font-bold text-blue-800 mb-4">แก้ไขสต๊อก (แทนที่ค่าเดิมเพื่อแก้บัคข้อมูล)</h3>
+              <div className="flex flex-col sm:flex-row gap-4">
+                  <input type="text" value={getProduct(selectedProduct)?.name || ''} disabled className="flex-1 p-3 bg-slate-100 border rounded-xl font-medium"/>
+                  <input type="number" placeholder="จำนวนที่ถูกต้อง..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-blue-500"/>
+                  <button onClick={() => handleUpdateStock(true)} disabled={isProcessing} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md">เซ็ตค่าใหม่</button>
+              </div>
+          </div>
+       )}
+
+      {mode === 'return' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
+              <h3 className="font-bold text-orange-800 mb-4">ระบบรับคืนสินค้าจากลูกค้า (ดึงของกลับสต๊อก)</h3>
+              <div className="flex gap-4 mb-6">
+                  <input type="text" placeholder="ระบุรหัสออเดอร์ (เช่น ORD-123)..." value={returnOrderId} onChange={e=>setReturnOrderId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-orange-500"/>
+                  <button onClick={handleSearchReturnOrder} className="px-6 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-md flex items-center"><Search size={18} className="mr-1"/> ค้นหา</button>
+              </div>
+              {returnItems.length > 0 && (
+                  <div className="space-y-4">
+                       <table className="w-full text-left text-sm border-collapse">
+                          <thead><tr className="bg-slate-50"><th className="p-3">สินค้า</th><th className="p-3">จำนวนที่ซื้อ</th><th className="p-3">จำนวนที่จะคืน</th></tr></thead>
+                          <tbody>
+                               {returnItems.map((item, idx) => (
+                                  <tr key={idx} className="border-b">
+                                      <td className="p-3 font-medium">{getProduct(item.productId)?.name || 'Unknown'}</td>
+                                      <td className="p-3 font-bold">{item.quantity}</td>
+                                      <td className="p-3"><input type="number" max={item.quantity} min="0" value={item.returnQty} onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }} className="w-24 p-2 border rounded outline-none text-center focus:border-orange-500"/></td>
+                                  </tr>
+                              ))}
+                           </tbody>
+                      </table>
+                      <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
+                  </div>
+               )}
+          </div>
+      )}
+
+      {mode === 'history' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
+              <div className="p-5 border-b border-slate-100 bg-indigo-50/30">
+                  <h3 className="font-bold text-indigo-800 mb-4">ประวัติการทำรายการคลังสินค้า</h3>
+                  <div className="flex flex-wrap gap-3">
+                      <select value={historyActionFilter} onChange={e => setHistoryActionFilter(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white font-medium">
+                          <option value="all">ทุกประเภทรายการ</option>
+                          <option value="ADD_STOCK">นำเข้าสินค้า</option>
+                          <option value="OVERRIDE_STOCK">แก้ไขสต๊อก</option>
+                          <option value="RETURN_STOCK">ลูกค้าคืนของ</option>
+                          <option value="UNBOX_STOCK">แกะกล่อง</option>
+                          <option value="ASSIGN_STOCK_CHECK">มอบหมายเช็คสต๊อก</option>
+                          <option value="COMPLETE_STOCK_CHECK">เช็คสต๊อกประจำวัน</option>
+                      </select>
+                      <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1">
+                          <input type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
+                          <span className="text-slate-400 text-xs font-bold">-</span>
+                          <input type="date" value={historyToDate} onChange={e => setHistoryToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
+                      </div>
+                      {(historyActionFilter !== 'all' || historyFromDate || historyToDate) && (
+                          <button onClick={() => { setHistoryActionFilter('all'); setHistoryFromDate(''); setHistoryToDate(''); }} className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition">ล้างตัวกรอง</button>
+                      )}
+                  </div>
+              </div>
+              <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                  {stockHistoryLogs.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400">
+                          <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
+                          <p className="font-medium text-sm">ไม่พบประวัติการทำรายการตามเงื่อนไขที่เลือก</p>
+                      </div>
+                  ) : (
+                      stockHistoryLogs.map(log => {
+                          const meta = getStockActionMeta(log.action);
+                          let dateStr = '-';
+                          try { const d = new Date(log.timestamp); if (!isNaN(d.getTime())) dateStr = d.toLocaleString('th-TH'); } catch(e) {}
+                          return (
+                              <div key={log.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+                                  <span className={`shrink-0 w-fit text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg border ${meta.badgeClass}`}>{meta.label}</span>
+                                  <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-slate-800 font-medium break-words">{log.details || '-'}</p>
+                                      <p className="text-[10px] md:text-xs text-slate-400 mt-1 flex items-center flex-wrap gap-x-3">
+                                          <span className="flex items-center"><Clock size={11} className="mr-1"/>{dateStr}</span>
+                                          <span className="flex items-center"><User size={11} className="mr-1"/>{log.user || '-'}</span>
+                                      </p>
+                                  </div>
+                              </div>
+                          );
+                      })
+                  )}
+              </div>
+          </div>
+      )}
+
+      {mode === 'view' && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 bg-slate-50 border-b flex gap-4">
+                  <input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded-lg text-sm outline-none focus:border-blue-500"/>
+                  <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="p-2 border rounded-lg text-sm bg-white outline-none focus:border-blue-500"><option value="name_asc">ชื่อ (ก-ฮ)</option><option value="stock_asc">สต๊อกเหลือน้อย</option><option value="stock_desc">สต๊อกคงเหลือมาก</option></select>
+              </div>
+              <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                       <thead><tr className="bg-slate-50/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
+                      <tbody className="text-sm">
+                          {filteredAndSortedProducts.map((p, idx) => (
+                               <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
+                                  <td className="py-3 px-4 text-center font-bold text-slate-400">{idx+1}</td>
+                                  <td className="py-3 px-4 font-medium text-slate-800">{p.name}</td>
+                                  <td className="py-3 px-4 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(p.stock) <= 5 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>{p.stock}</span></td>
+                                  {!isExecutiveView && canEditTab('stock') && (
+                                      <td className="py-3 px-4 text-right">
+                                           <button onClick={() => {
+                                               setSelectedProduct(p.id); 
+                                               setStockAmount(p.stock); 
+                                               setOriginalStock(p.stock); // เก็บค่าก่อนแก้ เพื่อคำนวณ diff
+                                               setMode('edit');
+                                           }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="แก้ไขแบบแทนที่ค่าเดิม"><Edit2 size={16}/></button>
+                                      </td>
+                                   )}
+                              </tr>
+                          ))}
+                           {filteredAndSortedProducts.length === 0 && (<tr><td colSpan="4" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูล</td></tr>)}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
+     </div>
+  );
+};
+// ==========================================
+//  ประวัติการขาย - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
+//  (ถ้าประกาศไว้ข้างใน App ฟอร์มแก้ไขออเดอร์ที่เปิดค้างไว้และตัวกรองที่เลือกไว้จะรีเซ็ตเองทุก snapshot จาก Firestore)
+// ==========================================
+const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduct, formatMoney, getLocalISODate, groupSalesByTransaction, canEditTab, applySummaryDelta, getSaleProfit }) => {
+  const [timeframe, setTimeframe] = useState('daily');
+  const currentDateStr = getLocalISODate();
+  const [filterDate, setFilterDate] = useState(currentDateStr);
+  const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7));
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
+  const [filterStore, setFilterStore] = useState('all');
+  const [filterProductId, setFilterProductId] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const currentYearNum = new Date().getFullYear();
+  const yearOptions = Array.from({length: 8}, (_, i) => currentYearNum - 5 + i);
+
+  const [isEditing, setIsEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
+  const [isEditingGroup, setIsEditingGroup] = useState(null);
+  const [groupEditTotal, setGroupEditTotal] = useState('');
+  const [groupEditStore, setGroupEditStore] = useState(''); // เก็บค่าร้านค้าที่แก้ไข กรณีพนักงานลงร้านผิด
+  
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const formatForInput = (isoString) => {
+    try { const d = new Date(isoString);
+      if (isNaN(d.getTime())) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); } catch (e) { return '';
+    }
+  };
+
+  const filteredSalesFlat = useMemo(() => {
+    return sales.filter(s => {
+      const saleDateLocal = getLocalISODate(s.date);
+      const saleMonthLocal = saleDateLocal.substring(0, 7);
+      const saleYearLocal = saleDateLocal.substring(0, 4);
+
+      let isTimeMatch = false;
+      if (timeframe === 'daily') isTimeMatch = (saleDateLocal === filterDate);
+      else if (timeframe === 'monthly') isTimeMatch = (saleMonthLocal === filterMonth);
+      else if (timeframe === 'yearly') isTimeMatch = (saleYearLocal === filterYear);
+      else if (timeframe === 'all') isTimeMatch = true;
+
+      const isStoreMatch = filterStore === 'all' || s.store === filterStore;
+      const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
+      
+      const searchMatch = !searchTerm || 
+          (s.orderId && s.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (getProduct(s.productId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+      return isTimeMatch && isStoreMatch && isProductMatch && searchMatch;
+    });
+  }, [sales, timeframe, filterDate, filterMonth, filterYear, filterStore, filterProductId, searchTerm, productMap]);
+
+  const groupedHistorySales = groupSalesByTransaction(filteredSalesFlat);
+
+  const handleDelete = async (sale) => {
+    if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์ย่อยนี้?\n\n*สต๊อกสินค้าจะถูกคืนกลับอัตโนมัติ*')) return;
+    setIsProcessing(true);
+    try {
+      const productRef = doc(db, "products", sale.productId);
+      const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
+      const batch = writeBatch(db);
+      if (productSnap.exists()) {
+          batch.update(productRef, { stock: increment(Number(sale.quantity)) });
+      }
+      batch.delete(doc(db, "sales", sale.id));
+      // หักยอดสรุปรายวันกลับ (ลบเฉพาะรายการย่อย ไม่ลดจำนวนออเดอร์ เพราะออเดอร์ยังอยู่)
+      applySummaryDelta(batch, getLocalISODate(sale.date), -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
+      await batch.commit();
+    } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+    setIsProcessing(false);
+  };
+
+  const handleDeleteGroup = async (group) => {
+    if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้ทั้งหมด?\n\n*สต๊อกสินค้าทั้งหมดในออเดอร์จะถูกคืนกลับอัตโนมัติ*')) return;
+    setIsProcessing(true);
+    try {
+      const returnQuantities = {};
+      group.items.forEach(sale => { returnQuantities[sale.productId] = (returnQuantities[sale.productId] || 0) + Number(sale.quantity); });
+      
+      const batch = writeBatch(db);
+      for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
+         const productRef = doc(db, "products", productId);
+         const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
+         if (productSnap.exists()) {
+             batch.update(productRef, { stock: increment(qtyToReturn) });
+         }
+      }
+      for (const sale of group.items) { batch.delete(doc(db, "sales", sale.id)); }
+
+      // หักยอดสรุปรายวันกลับทั้งออเดอร์ พร้อมลดจำนวนออเดอร์ลง 1
+      // (แยกตามวันของแต่ละรายการ เผื่อกรณีรายการในออเดอร์ถูกแก้วันที่ไว้ต่างกัน)
+      const revenueByDate = {}; const profitByDate = {};
+      group.items.forEach(sale => {
+        const d = getLocalISODate(sale.date);
+        revenueByDate[d] = (revenueByDate[d] || 0) + (Number(sale.total) || 0);
+        profitByDate[d] = (profitByDate[d] || 0) + getSaleProfit(sale);
+      });
+      const orderDateForCount = getLocalISODate(group.date);
+      Object.keys(revenueByDate).forEach(d => {
+        applySummaryDelta(batch, d, -revenueByDate[d], -profitByDate[d], d === orderDateForCount ? -1 : 0);
+      });
+      
+      await batch.commit();
+    } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+    setIsProcessing(false);
+  };
+
+  const handleSaveEdit = async (sale) => {
+    setIsProcessing(true);
+    try {
+      const oldQty = Number(sale.quantity) || 0;
+      const newQty = Math.max(1, Number(editForm.quantity) || 1);
+      const oldProductId = sale.productId; const newProductId = editForm.productId;
+      const newPData = getProduct(newProductId);
+      if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
+
+      const oldPRef = doc(db, "products", oldProductId);
+      const oldPSnap = await getDoc(oldPRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
+      const newPRef = doc(db, "products", newProductId);
+      const batch = writeBatch(db);
+
+      if (oldProductId !== newProductId) {
+         // ตรวจว่าสินค้าปลายทางยังอยู่จริงก่อนตัดสต๊อก (กันกรณีถูกลบไปแล้ว แล้วทำให้ batch ทั้งชุดล้มเหลว)
+         const newPSnap = await getDoc(newPRef);
+         if (!newPSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าที่เลือก (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
+         if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(oldQty) });
+         batch.update(newPRef, { stock: increment(-newQty) });
+      } else if (oldQty !== newQty) {
+         const diff = newQty - oldQty;
+         if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(-diff) });
+      }
+
+      let newDateIso = sale.date;
+      try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
+
+      const newTotal = Number(editForm.customPrice) * newQty;
+      const newUnitCost = Number(newPData.cost) || 0;
+      const newProfit = newTotal - (newUnitCost * newQty);
+      const oldDateStr = getLocalISODate(sale.date);
+      const newDateStr = getLocalISODate(newDateIso);
+      // ปรับยอดสรุปรายวันตามส่วนต่าง ถ้าย้ายวันด้วยให้ถอนยอดออกจากวันเดิมแล้วไปบวกที่วันใหม่
+      if (oldDateStr === newDateStr) {
+        applySummaryDelta(batch, newDateStr, newTotal - (Number(sale.total) || 0), newProfit - getSaleProfit(sale), 0);
+      } else {
+        applySummaryDelta(batch, oldDateStr, -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
+        applySummaryDelta(batch, newDateStr, newTotal, newProfit, 0);
+      }
+
+      batch.update(doc(db, "sales", sale.id), {
+        productId: newProductId, quantity: newQty, total: newTotal, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
+      });
+      await batch.commit();
+      setIsEditing(null);
+    } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+    setIsProcessing(false);
+  };
+
+  const handleSaveGroupEdit = async (group) => {
+    setIsProcessing(true);
+    try {
+      // ตรวจสอบว่ามีการแก้ไขร้านค้าหรือไม่ (กรณีพนักงานลงร้านผิด)
+      const oldStore = group.store || group.items[0]?.store || '';
+      const newStore = groupEditStore || oldStore;
+      const storeChanged = newStore !== oldStore;
+
+      const newFinalTotal = Number(groupEditTotal); const oldTotal = group.totalOrderValue;
+      const totalChanged = newFinalTotal !== oldTotal;
+
+      if (!storeChanged && !totalChanged) { setIsEditingGroup(null); setIsProcessing(false); return; }
+
+      const ratio = oldTotal > 0 ? (newFinalTotal / oldTotal) : 1; let remainingTotal = newFinalTotal;
+
+      const batch = writeBatch(db);
+      for (let i = 0; i < group.items.length; i++) {
+        const sale = group.items[i];
+        const isLastItem = i === group.items.length - 1; const baseItemTotal = Number(sale.total);
+        const updateData = {};
+        if (totalChanged) {
+          let rowTotal = 0;
+          if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
+          const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
+          updateData.total = rowTotal; updateData.unitPrice = unitPrice;
+          // ปรับยอดสรุปรายวันตามส่วนต่างของแต่ละรายการ (กำไรขยับตามยอดขายที่เปลี่ยน ต้นทุนเท่าเดิม)
+          const revenueDelta = rowTotal - baseItemTotal;
+          applySummaryDelta(batch, getLocalISODate(sale.date), revenueDelta, revenueDelta, 0);
+        }
+        if (storeChanged) { updateData.store = newStore; }
+        batch.update(doc(db, "sales", sale.id), updateData);
+      }
+
+      if (storeChanged) {
+        batch.set(doc(collection(db, "audit_logs")), { action: "EDIT_ORDER_STORE", user: loggedInUser?.username || 'unknown', details: `แก้ไขร้านค้าออเดอร์ ${group.orderId || group.items[0]?.orderId || '-'} จาก ${oldStore || '-'} เป็น ${newStore}`, timestamp: new Date().toISOString() });
+      }
+
+      await batch.commit();
+      setIsEditingGroup(null);
+    } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
+    setIsProcessing(false);
+  };
+
+  return (
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center space-y-4 xl:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
+        <div className="flex items-center space-x-3 shrink-0">
+          <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600"><History size={20}/></div>
+          <div>
+             <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
+            <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">ค้นหา กรองข้อมูล หรือแก้ไขออเดอร์</p>
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end mt-3 md:mt-0">
+           <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+             <span className="text-xs text-slate-500 font-bold">ดูแบบ</span>
+             <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
+               <option value="daily">รายวัน</option>
+               <option value="monthly">รายเดือน</option>
+               <option value="yearly">รายปี</option>
+               <option value="all">ทั้งหมด</option>
+             </select>
+           </div>
+
+           {timeframe !== 'all' && (
+             <div className="flex items-center space-x-2 bg-blue-50/80 px-3 py-2 rounded-xl border border-blue-100 shadow-inner">
+               {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
+               {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
+               {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
+             </div>
+           )}
+
+           <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+             <span className="text-xs text-slate-500 font-bold">ร้านค้า</span>
+             <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
+               <option value="all">ทุกร้านค้า</option>
+               {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+             </select>
+           </div>
+
+           <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
+             <span className="text-xs text-slate-500 font-bold">สินค้า</span>
+             <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none max-w-[120px] md:max-w-[150px] font-black text-blue-700">
+               <option value="all">ดูทั้งหมด</option>
+               {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+             </select>
+           </div>
+
+           <div className="relative flex-1 sm:max-w-xs min-w-[150px]">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+             <input type="text" placeholder="ค้นหาออเดอร์, สินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs md:text-sm focus:border-blue-500 outline-none transition-all" />
+           </div>
+        </div>
+      </div>
+      
+      <div className="space-y-5">
+        {groupedHistorySales.length === 0 ? (
+          <div className="text-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+            <Info size={40} className="text-slate-300 mb-3"/>
+            <p className="text-slate-500 font-medium text-sm">ไม่มีรายการขายในเงื่อนไขที่คุณเลือก</p>
+          </div>
+        ) : (
+          groupedHistorySales.map((group, groupIndex) => {
+             let timeString = '-'; 
+            try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
+            
+            const mainStore = group.store || group.items[0]?.store || '-';
+            let gradientHeaderClass = "from-slate-50 to-white border-slate-200";
+             let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
+            
+            if (mainStore.includes('Shopee')) {
+              gradientHeaderClass = "from-[#FFF0ED] to-white border-[#FFE4DF]";
+              badgeStoreClass = "bg-[#EE4D2D] text-white border-transparent";
+            } else if (mainStore.includes('Lazada')) {
+              gradientHeaderClass = "from-[#F2F3FF] to-white border-[#E6E8FF]";
+              badgeStoreClass = "bg-[#0F146D] text-white border-transparent";
+            } else if (mainStore === 'LINE') {
+              gradientHeaderClass = "from-[#E5F9E5] to-white border-[#CCF2CC]";
+              badgeStoreClass = "bg-[#00C300] text-white border-transparent";
+            }
+
+            return (
+              <div key={group.id} className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden transition-all hover:shadow-md relative">
+                
+                <div className={`bg-gradient-to-r ${gradientHeaderClass} px-4 py-3 flex flex-wrap gap-3 justify-between items-center border-b`}>
+                  <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    <span className="bg-blue-600 text-white text-xs md:text-sm font-black px-3 py-1.5 rounded-lg shadow-sm">
+                      ออเดอร์ที่ {groupedHistorySales.length - groupIndex}
+                    </span>
+                    <span className="text-slate-600 text-xs md:text-sm font-bold flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 shadow-sm">
+                      <Clock size={14} className="mr-1.5 text-slate-400"/> {timeString} น.
+                    </span>
+                    {isEditingGroup === group.id ? (
+                      <select value={groupEditStore} onChange={e => setGroupEditStore(e.target.value)} className="text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border-2 border-blue-400 bg-white text-blue-700 outline-none focus:border-blue-600 cursor-pointer">
+                        {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
+                        <Store size={12} className="inline mr-1"/> {mainStore}
+                      </span>
+                    )}
+                    <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
+                      <User size={12} className="mr-1"/> {group.soldBy || group.items[0]?.soldBy || '-'}
+                    </span>
+                  </div>
+
+                  {canEditTab('history') && (
+                    <div className="flex items-center space-x-2 ml-auto w-full sm:w-auto justify-end">
+                       {isEditingGroup === group.id ? (
+                        <>
+                          <button onClick={() => handleSaveGroupEdit(group)} disabled={isProcessing} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
+                              <Save size={14} className="mr-1"/> บันทึกการแก้ไข
+                          </button>
+                          <button onClick={() => setIsEditingGroup(null)} disabled={isProcessing} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
+                             <X size={14} className="mr-1"/> ยกเลิก
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setGroupEditStore(STORE_OPTIONS.includes(mainStore) ? mainStore : STORE_OPTIONS[0]); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
+                            <Edit2 size={12} className="mr-1"/> แก้ไขออเดอร์
+                          </button>
+                          <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-red-200 flex items-center">
+                            <Trash2 size={12} className="mr-1"/> ลบออเดอร์
+                          </button>
+                         </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                 <div className="p-0 overflow-x-auto">
+                  <table className="w-full text-left min-w-[600px]">
+                    <thead>
+                      <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
+                        <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์ / เวลา</th>
+                        <th className="px-4 py-2 font-bold">สินค้า</th>
+                        <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
+                        <th className="px-4 py-2 font-bold text-right w-[100px]">ราคา/ชิ้น</th>
+                        <th className="px-4 py-2 font-bold text-right w-[120px]">ยอดรวมย่อย</th>
+                        {canEditTab('history') && <th className="px-4 py-2 font-bold text-center w-[80px]">จัดการ</th>}
+                      </tr>
+                     </thead>
+                    <tbody className="text-[11px] md:text-xs text-slate-700">
+                      {group.items.map((sale) => {
+                        const isCurrentRowEditing = isEditing === sale.id;
+                        return (
+                          <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors align-top">
+                            <td className="px-4 py-2 font-bold">
+                              {isCurrentRowEditing ? (
+                                <div className="flex flex-col space-y-1.5">
+                                  <input type="text" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner" placeholder="รหัสออเดอร์" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/>
+                                   <input type="datetime-local" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner text-[10px] md:text-xs text-blue-700" title="แก้ไขวันเวลาออเดอร์" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col">
+                                  <span>{sale.orderId || '-'}</span>
+                                  {timeframe !== 'daily' && (
+                                     <span className="text-[10px] text-slate-400 font-medium mt-0.5">{new Date(sale.date).toLocaleDateString('th-TH')}</span>
+                                   )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 font-medium">
+                              {isCurrentRowEditing ? (
+                                <select value={editForm.productId} onChange={e => setEditForm({...editForm, productId: e.target.value, customPrice: getProduct(e.target.value)?.price||0})} className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none bg-white shadow-inner">
+                                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                              ) : (
+                                getProduct(sale.productId)?.name || 'ลบแล้ว'
+                               )}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {isCurrentRowEditing ? (
+                                <input type="number" className="w-12 mx-auto p-1.5 border border-blue-300 rounded text-center focus:border-blue-600 outline-none shadow-inner" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} />
+                              ) : (
+                                  <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{sale.quantity}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {isCurrentRowEditing ? (
+                                <input type="number" className="w-20 p-1.5 border border-blue-300 rounded text-right focus:border-blue-600 outline-none shadow-inner ml-auto" value={editForm.customPrice} onChange={e => setEditForm({...editForm, customPrice: e.target.value})} placeholder="ราคา/ชิ้น"/>
+                              ) : (
+                                `฿${formatMoney(sale.unitPrice || (sale.total / sale.quantity))}`
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-right font-black text-slate-800">
+                              {isCurrentRowEditing ? (
+                                <span className="text-blue-600">฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
+                              ) : (
+                                 `฿${formatMoney(sale.total)}`
+                              )}
+                            </td>
+                             {canEditTab('history') && (
+                              <td className="px-4 py-2 text-center">
+                                {isCurrentRowEditing ? (
+                                  <div className="flex justify-center space-x-1.5">
+                                    <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-white bg-emerald-500 hover:bg-emerald-600 p-1.5 rounded-md shadow-sm transition"><Save size={14}/></button>
+                                     <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-600 bg-slate-200 hover:bg-slate-300 p-1.5 rounded-md shadow-sm transition"><X size={14}/></button>
+                                  </div>
+                                ) : (
+                                   <div className="flex justify-center space-x-1">
+                                    <button onClick={() => { setIsEditing(sale.id); setIsEditingGroup(null); setEditForm({productId: sale.productId, quantity: sale.quantity, date: formatForInput(sale.date), store: sale.store || STORE_OPTIONS[0], customPrice: sale.unitPrice || (sale.total/sale.quantity), orderId: sale.orderId || ''}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 rounded transition" title="แก้ไขรายการย่อย"><Edit2 size={14}/></button>
+                                    <button onClick={() => handleDelete(sale)} className="text-red-500 hover:bg-red-100 p-1.5 rounded transition" title="ลบรายการย่อย"><Trash2 size={14}/></button>
+                                  </div>
+                                 )}
+                              </td>
+                            )}
+                           </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="bg-slate-50/50 border-t border-slate-100 px-4 py-3 flex justify-between items-center text-xs md:text-sm">
+                  <div className="font-bold text-slate-500">
+                    รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{group.totalItems} ชิ้น</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                     <span className="font-bold text-slate-500 uppercase text-[10px] md:text-xs">ยอดรวมสุทธิ</span>
+                    {isEditingGroup === group.id ? (
+                      <input type="number" className="w-28 p-2 border-2 border-blue-400 rounded-lg text-right font-black focus:border-blue-600 outline-none text-blue-800 bg-white shadow-inner" value={groupEditTotal} onChange={e => setGroupEditTotal(e.target.value)} />
+                    ) : (
+                      <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 drop-shadow-sm">
+                         ฿{formatMoney(group.totalOrderValue)}
+                      </span>
+                    )}
+                  </div>
+                 </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+// ==========================================
+//  การจัดการผู้ใช้ - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
+//  (ถ้าประกาศไว้ข้างใน App ฟอร์มเพิ่ม/แก้ไขที่กรอกค้างไว้จะรีเซ็ตเองทุก snapshot จาก Firestore)
+// ==========================================
+const UsersManagementView = ({ users, loggedInUser }) => {
+  const [isEditing, setIsEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
+  const [isAdding, setIsAdding] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handlePermissionChange = (perm) => {
+    setEditForm(prev => {
+      const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] };
+      if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false;
+      if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
+      if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
+      if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false;
+      if (perm === 'attendance' && !newPerms.attendance) newPerms.attendanceEdit = false;
+      return { ...prev, permissions: newPerms };
+    });
+  };
+
+  const handleSave = async (id) => {
+    setIsProcessing(true);
+    try {
+      await updateDoc(doc(db, "users", id), { password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions });
+      setIsEditing(null);
+    } catch (error) { alert("Error: " + error.message); }
+    setIsProcessing(false);
+  };
+  const handleAdd = async () => {
+    if (!editForm.username || !editForm.password) { alert('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (users.find(u => u.username === editForm.username)) { alert('ชื่อนี้มีอยู่แล้ว'); return; }
+    setIsProcessing(true);
+    try {
+      await addDoc(collection(db, "users"), { username: editForm.username, password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions });
+      setIsAdding(false); setEditForm({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
+    } catch(error) { alert("Error: " + error.message); }
+    setIsProcessing(false);
+  };
+
+  return (
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div>
+          <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
+          <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
+        </div>
+         {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14}/><span>เพิ่มผู้ใช้</span></button>}
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[700px]">
+          <thead>
+            <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs uppercase"><th className="p-3 md:p-4 font-bold">Username</th><th className="p-3 md:p-4 font-bold">รหัสผ่าน</th><th className="p-3 md:p-4 font-bold">ระดับสิทธิ์</th><th className="p-3 md:p-4 font-bold">ตั้งค่าความสามารถ (Permissions)</th><th className="p-3 md:p-4 font-bold text-right">จัดการ</th></tr>
+          </thead>
+          <tbody className="text-xs md:text-sm">
+            {isAdding && (
+              <tr className="bg-blue-50/60 align-top border-b border-blue-100">
+                 <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
+                <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} /></td>
+                <td className="p-3"><select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select></td>
+                <td className="p-3">
+                  {editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px]">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                    <div className="flex flex-col space-y-2">
+                      <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
+                      <div className="bg-white p-2 rounded border border-slate-200">
+                        <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
+                        <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
+                      </div>
+
+                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                      <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
+                    </div>
+                  )}
+                </td>
+                <td className="p-3 text-right whitespace-nowrap space-x-1"><button onClick={handleAdd} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16}/></button><button onClick={() => setIsAdding(false)} disabled={isProcessing} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><X size={16}/></button></td>
+              </tr>
+            )}
+            {users.map(u => (
+              <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 align-top transition-colors">
+                <td className="p-3 md:p-4 font-bold text-slate-800 pt-5">{u.username}</td>
+                <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} />) : (<span className="text-slate-400 tracking-widest">••••••</span>)}</td>
+                <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select>) : (<span className={`px-2 py-1 rounded text-[9px] font-bold border ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role.toUpperCase()}</span>)}</td>
+                <td className="p-3 md:p-4">
+                  {isEditing === u.id ? (editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                      <div className="flex flex-col space-y-2 mt-1">
+                        <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm">
+                          <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
+                          <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
+                        <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
+                      </div>
+                    )
+                  ) : (u.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-50 border border-purple-100 px-2 py-1 rounded text-[9px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                        <span className="bg-blue-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded">ขาย (POS)</span>
+                        {u.permissions?.attendance && <span className="bg-indigo-50 text-indigo-600 border border-indigo-200 font-bold text-[9px] px-1.5 py-0.5 rounded">ลงเวลา</span>}
+                         {u.permissions?.dashboard && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">Dashboard</span>}
+                        {u.permissions?.products && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">การจัดการสินค้า</span>}
+                        {u.permissions?.stock && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">สต๊อกสินค้า</span>}
+                        {u.permissions?.history && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">ประวัติการขาย</span>}
+                      </div>
+                    )
+                   )}
+                </td>
+                <td className="p-3 md:p-4 text-right space-x-1 whitespace-nowrap pt-4">
+                  {isEditing === u.id ? (<><button onClick={() => handleSave(u.id)} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16}/></button><button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-500 hover:bg-slate-100 p-1.5 rounded"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role, permissions: u.permissions || defaultPermissions}); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบผู้ใช้นี้ออกจากระบบ?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-500 hover:bg-red-50 p-1.5 rounded ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={16}/></button></>)}
+                </td>
+              </tr>
+             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+//  การจัดการสินค้า - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
+//  (ถ้าประกาศไว้ข้างใน App ฟอร์มเพิ่ม/แก้ไขที่กรอกค้างไว้จะรีเซ็ตเองทุก snapshot จาก Firestore)
+// ==========================================
+const ProductsView = ({ products, loggedInUser, formatMoney, getLocalISODate, downloadMobileSafeCSV, canEditTab, canExportTab }) => {
+  const [isEditing, setIsEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
+  const [isAdding, setIsAdding] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc');
+  const filteredAndSortedProducts = useMemo(() => {
+    let result = [...products];
+    if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+    result.sort((a, b) => {
+      if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
+      if (sortBy === 'name_desc') return String(b.name || '').localeCompare(String(a.name || ''), 'th');
+      if (sortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+      if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
+      if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
+      return 0;
+    });
+    return result;
+  }, [products, searchTerm, sortBy]);
+  const exportProductsReport = () => {
+    if (products.length === 0) return;
+    const csvRows = [];
+    csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Resilient Clinic']);
+    csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
+    csvRows.push([]);
+    csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
+    let sumStock = 0; let sumCostValue = 0; let sumSaleValue = 0; let sumExpectedProfit = 0;
+    filteredAndSortedProducts.forEach((p, index) => {
+      const stock = Number(p.stock) || 0; const costVal = stock * (Number(p.cost) || 0); const saleVal = stock * (Number(p.price) || 0); const profitVal = saleVal - costVal;
+      sumStock += stock; sumCostValue += costVal; sumSaleValue += saleVal; sumExpectedProfit += profitVal;
+      csvRows.push([index + 1, `"${p.name || ''}"`, p.cost || 0, p.price || 0, (Number(p.price) || 0) - (Number(p.cost) || 0), stock, costVal, saleVal, profitVal]);
+    });
+    csvRows.push([]); csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
+    downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `สรุปข้อมูลสินค้าและมูลค่าสต๊อก_${getLocalISODate()}.csv`);
+  };
+  const handleSave = async (id) => {
+    setIsProcessing(true);
+    try {
+      await updateDoc(doc(db, "products", id), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0 });
+      await addDoc(collection(db, "audit_logs"), { action: "EDIT_PRODUCT", user: loggedInUser?.username || 'unknown', details: `แก้ไขข้อมูลสินค้า ${editForm.name}`, timestamp: new Date().toISOString() });
+      setIsEditing(null);
+    } catch (error) { alert("Error: " + error.message); }
+    setIsProcessing(false);
+  };
+  const handleAdd = async () => {
+    if (!editForm.name) return;
+    setIsProcessing(true);
+    try {
+      await addDoc(collection(db, "products"), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0, stock: 0 });
+      await addDoc(collection(db, "audit_logs"), { action: "ADD_PRODUCT", user: loggedInUser?.username || 'unknown', details: `เพิ่มสินค้าใหม่ ${editForm.name}`, timestamp: new Date().toISOString() });
+      setIsAdding(false);
+      setEditForm({ name: '', cost: '', price: '' });
+    } catch (error) { alert("Error: " + error.message);
+    }
+    setIsProcessing(false);
+  };
+
+  return (
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
+      <div className="flex flex-col bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+          <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการสินค้า</h2>
+          <div className="flex space-x-2 w-full sm:w-auto">
+             {canExportTab('products') && (<button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14}/><span>ส่งออก Excel</span></button>)}
+            {!isAdding && canEditTab('products') && (<button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition shadow-sm text-xs font-bold"><Plus size={14}/><span>เพิ่มสินค้าใหม่</span></button>)}
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-3 border-t border-slate-100">
+          <div className="relative flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-xs md:text-sm focus:border-blue-500 outline-none transition-all" /></div>
+          <div className="flex items-center space-x-2 w-full sm:w-auto"><div className="bg-slate-50 p-2 rounded-lg border border-slate-200"><ArrowUpDown size={16} className="text-slate-500"/></div><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full sm:w-auto border border-slate-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:border-blue-500 outline-none bg-white transition-all"><option value="name_asc">ชื่อ (ก - ฮ)</option><option value="name_desc">ชื่อ (ฮ - ก)</option><option value="price_desc">ราคาขาย (มากไปน้อย)</option><option value="price_asc">ราคาขาย (น้อยไปมาก)</option></select></div>
+        </div>
+      </div>
+      
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px]">
+          <thead>
+            <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm"><th className="p-3 md:p-4 font-bold text-center w-16">ลำดับ</th><th className="p-3 md:p-4 font-bold">ชื่อสินค้า</th><th className="p-3 md:p-4 font-bold">ราคาคลินิก</th><th className="p-3 md:p-4 font-bold">ราคาขาย</th>{canEditTab('products') && <th className="p-3 md:p-4 font-bold text-right">จัดการ</th>}</tr>
+          </thead>
+          <tbody className="text-xs md:text-sm">
+            {isAdding && (
+              <tr className="border-b border-blue-100 bg-blue-50/50">
+                <td className="p-3 text-center text-blue-500 font-bold">*</td>
+                <td className="p-2 md:p-3"><input className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ชื่อสินค้า..." value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></td>
+                <td className="p-2 md:p-3"><input type="number" className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ราคาคลินิก..." value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /></td>
+                <td className="p-2 md:p-3"><input type="number" className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ราคาขาย..." value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /></td>
+                <td className="p-2 md:p-3 text-right space-x-1.5 whitespace-nowrap"><button onClick={handleAdd} className="text-emerald-600 bg-emerald-50 p-2 rounded-lg hover:bg-emerald-100 transition"><Save size={16}/></button><button onClick={() => setIsAdding(false)} className="text-red-500 bg-red-50 p-2 rounded-lg hover:bg-red-100 transition"><X size={16}/></button></td>
+              </tr>
+            )}
+            {filteredAndSortedProducts.map((product, index) => (
+              <tr key={product.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td className="p-3 md:p-4 text-center font-bold text-slate-400">{index + 1}</td>
+                <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-slate-800">{product.name}</span>}</td>
+                <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded border border-orange-100">฿{formatMoney(product.cost)}</span>}</td>
+                <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">฿{formatMoney(product.price)}</span>}</td>
+                {canEditTab('products') && (
+                  <td className="p-3 md:p-4 text-right space-x-1.5 whitespace-nowrap">
+                    {isEditing === product.id ? (<><button onClick={() => handleSave(product.id)} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded transition"><Save size={16}/></button><button onClick={() => setIsEditing(null)} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded transition"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-50 border border-transparent p-1.5 rounded transition"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) { await deleteDoc(doc(db, "products", product.id));
+                    await addDoc(collection(db, "audit_logs"), { action: "DELETE_PRODUCT", user: loggedInUser?.username || 'unknown', details: `ลบสินค้า ${product.name}`, timestamp: new Date().toISOString() });
+                    } }} className="text-red-500 hover:bg-red-50 border border-transparent p-1.5 rounded transition"><Trash2 size={16}/></button></>)}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {filteredAndSortedProducts.length === 0 && !isAdding && (<tr><td colSpan="5" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+
+
 
 
 
@@ -2513,1431 +3955,9 @@ export default function App() {
   };
 
 
-  const SalesHistoryView = () => {
-    const [timeframe, setTimeframe] = useState('daily');
-    const currentDateStr = getLocalISODate();
-    const [filterDate, setFilterDate] = useState(currentDateStr);
-    const [filterMonth, setFilterMonth] = useState(currentDateStr.substring(0, 7));
-    const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
-    const [filterStore, setFilterStore] = useState('all');
-    const [filterProductId, setFilterProductId] = useState('all');
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    const currentYearNum = new Date().getFullYear();
-    const yearOptions = Array.from({length: 8}, (_, i) => currentYearNum - 5 + i);
 
-    const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ productId: '', quantity: 1, date: '', store: '', customPrice: '', orderId: ''});
-    const [isEditingGroup, setIsEditingGroup] = useState(null);
-    const [groupEditTotal, setGroupEditTotal] = useState('');
-    const [groupEditStore, setGroupEditStore] = useState(''); // เก็บค่าร้านค้าที่แก้ไข กรณีพนักงานลงร้านผิด
-    
-    const [isProcessing, setIsProcessing] = useState(false);
 
-    const formatForInput = (isoString) => {
-      try { const d = new Date(isoString);
-        if (isNaN(d.getTime())) return ''; d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); } catch (e) { return '';
-      }
-    };
 
-    const filteredSalesFlat = useMemo(() => {
-      return sales.filter(s => {
-        const saleDateLocal = getLocalISODate(s.date);
-        const saleMonthLocal = saleDateLocal.substring(0, 7);
-        const saleYearLocal = saleDateLocal.substring(0, 4);
-
-        let isTimeMatch = false;
-        if (timeframe === 'daily') isTimeMatch = (saleDateLocal === filterDate);
-        else if (timeframe === 'monthly') isTimeMatch = (saleMonthLocal === filterMonth);
-        else if (timeframe === 'yearly') isTimeMatch = (saleYearLocal === filterYear);
-        else if (timeframe === 'all') isTimeMatch = true;
-
-        const isStoreMatch = filterStore === 'all' || s.store === filterStore;
-        const isProductMatch = filterProductId === 'all' || s.productId === filterProductId;
-        
-        const searchMatch = !searchTerm || 
-            (s.orderId && s.orderId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (getProduct(s.productId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-        return isTimeMatch && isStoreMatch && isProductMatch && searchMatch;
-      });
-    }, [sales, timeframe, filterDate, filterMonth, filterYear, filterStore, filterProductId, searchTerm, productMap]);
-
-    const groupedHistorySales = groupSalesByTransaction(filteredSalesFlat);
-
-    const handleDelete = async (sale) => {
-      if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์ย่อยนี้?\n\n*สต๊อกสินค้าจะถูกคืนกลับอัตโนมัติ*')) return;
-      setIsProcessing(true);
-      try {
-        const productRef = doc(db, "products", sale.productId);
-        const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
-        const batch = writeBatch(db);
-        if (productSnap.exists()) {
-            batch.update(productRef, { stock: increment(Number(sale.quantity)) });
-        }
-        batch.delete(doc(db, "sales", sale.id));
-        // หักยอดสรุปรายวันกลับ (ลบเฉพาะรายการย่อย ไม่ลดจำนวนออเดอร์ เพราะออเดอร์ยังอยู่)
-        applySummaryDelta(batch, getLocalISODate(sale.date), -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
-        await batch.commit();
-      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
-      setIsProcessing(false);
-    };
-
-    const handleDeleteGroup = async (group) => {
-      if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบออเดอร์นี้ทั้งหมด?\n\n*สต๊อกสินค้าทั้งหมดในออเดอร์จะถูกคืนกลับอัตโนมัติ*')) return;
-      setIsProcessing(true);
-      try {
-        const returnQuantities = {};
-        group.items.forEach(sale => { returnQuantities[sale.productId] = (returnQuantities[sale.productId] || 0) + Number(sale.quantity); });
-        
-        const batch = writeBatch(db);
-        for (const [productId, qtyToReturn] of Object.entries(returnQuantities)) {
-           const productRef = doc(db, "products", productId);
-           const productSnap = await getDoc(productRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
-           if (productSnap.exists()) {
-               batch.update(productRef, { stock: increment(qtyToReturn) });
-           }
-        }
-        for (const sale of group.items) { batch.delete(doc(db, "sales", sale.id)); }
-
-        // หักยอดสรุปรายวันกลับทั้งออเดอร์ พร้อมลดจำนวนออเดอร์ลง 1
-        // (แยกตามวันของแต่ละรายการ เผื่อกรณีรายการในออเดอร์ถูกแก้วันที่ไว้ต่างกัน)
-        const revenueByDate = {}; const profitByDate = {};
-        group.items.forEach(sale => {
-          const d = getLocalISODate(sale.date);
-          revenueByDate[d] = (revenueByDate[d] || 0) + (Number(sale.total) || 0);
-          profitByDate[d] = (profitByDate[d] || 0) + getSaleProfit(sale);
-        });
-        const orderDateForCount = getLocalISODate(group.date);
-        Object.keys(revenueByDate).forEach(d => {
-          applySummaryDelta(batch, d, -revenueByDate[d], -profitByDate[d], d === orderDateForCount ? -1 : 0);
-        });
-        
-        await batch.commit();
-      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
-      setIsProcessing(false);
-    };
-
-    const handleSaveEdit = async (sale) => {
-      setIsProcessing(true);
-      try {
-        const oldQty = Number(sale.quantity) || 0;
-        const newQty = Math.max(1, Number(editForm.quantity) || 1);
-        const oldProductId = sale.productId; const newProductId = editForm.productId;
-        const newPData = getProduct(newProductId);
-        if (!newPData) throw new Error("ไม่พบข้อมูลสินค้า");
-
-        const oldPRef = doc(db, "products", oldProductId);
-        const oldPSnap = await getDoc(oldPRef); // เพิ่มการตรวจเอกสารป้องกัน batch fail
-        const newPRef = doc(db, "products", newProductId);
-        const batch = writeBatch(db);
-
-        if (oldProductId !== newProductId) {
-           // ตรวจว่าสินค้าปลายทางยังอยู่จริงก่อนตัดสต๊อก (กันกรณีถูกลบไปแล้ว แล้วทำให้ batch ทั้งชุดล้มเหลว)
-           const newPSnap = await getDoc(newPRef);
-           if (!newPSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าที่เลือก (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
-           if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(oldQty) });
-           batch.update(newPRef, { stock: increment(-newQty) });
-        } else if (oldQty !== newQty) {
-           const diff = newQty - oldQty;
-           if (oldPSnap.exists()) batch.update(oldPRef, { stock: increment(-diff) });
-        }
-
-        let newDateIso = sale.date;
-        try { const pd = new Date(editForm.date); if (!isNaN(pd.getTime())) newDateIso = pd.toISOString(); } catch (e) {}
-
-        const newTotal = Number(editForm.customPrice) * newQty;
-        const newUnitCost = Number(newPData.cost) || 0;
-        const newProfit = newTotal - (newUnitCost * newQty);
-        const oldDateStr = getLocalISODate(sale.date);
-        const newDateStr = getLocalISODate(newDateIso);
-        // ปรับยอดสรุปรายวันตามส่วนต่าง ถ้าย้ายวันด้วยให้ถอนยอดออกจากวันเดิมแล้วไปบวกที่วันใหม่
-        if (oldDateStr === newDateStr) {
-          applySummaryDelta(batch, newDateStr, newTotal - (Number(sale.total) || 0), newProfit - getSaleProfit(sale), 0);
-        } else {
-          applySummaryDelta(batch, oldDateStr, -(Number(sale.total) || 0), -getSaleProfit(sale), 0);
-          applySummaryDelta(batch, newDateStr, newTotal, newProfit, 0);
-        }
-
-        batch.update(doc(db, "sales", sale.id), {
-          productId: newProductId, quantity: newQty, total: newTotal, unitPrice: Number(editForm.customPrice), unitCost: newPData.cost, date: newDateIso, store: editForm.store, orderId: editForm.orderId
-        });
-        await batch.commit();
-        setIsEditing(null);
-      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
-      setIsProcessing(false);
-    };
-
-    const handleSaveGroupEdit = async (group) => {
-      setIsProcessing(true);
-      try {
-        // ตรวจสอบว่ามีการแก้ไขร้านค้าหรือไม่ (กรณีพนักงานลงร้านผิด)
-        const oldStore = group.store || group.items[0]?.store || '';
-        const newStore = groupEditStore || oldStore;
-        const storeChanged = newStore !== oldStore;
-
-        const newFinalTotal = Number(groupEditTotal); const oldTotal = group.totalOrderValue;
-        const totalChanged = newFinalTotal !== oldTotal;
-
-        if (!storeChanged && !totalChanged) { setIsEditingGroup(null); setIsProcessing(false); return; }
-
-        const ratio = oldTotal > 0 ? (newFinalTotal / oldTotal) : 1; let remainingTotal = newFinalTotal;
-
-        const batch = writeBatch(db);
-        for (let i = 0; i < group.items.length; i++) {
-          const sale = group.items[i];
-          const isLastItem = i === group.items.length - 1; const baseItemTotal = Number(sale.total);
-          const updateData = {};
-          if (totalChanged) {
-            let rowTotal = 0;
-            if (isLastItem) { rowTotal = remainingTotal; } else { rowTotal = Math.round((baseItemTotal * ratio) * 100) / 100; remainingTotal -= rowTotal; }
-            const unitPrice = Number(sale.quantity) > 0 ? (rowTotal / Number(sale.quantity)) : 0;
-            updateData.total = rowTotal; updateData.unitPrice = unitPrice;
-            // ปรับยอดสรุปรายวันตามส่วนต่างของแต่ละรายการ (กำไรขยับตามยอดขายที่เปลี่ยน ต้นทุนเท่าเดิม)
-            const revenueDelta = rowTotal - baseItemTotal;
-            applySummaryDelta(batch, getLocalISODate(sale.date), revenueDelta, revenueDelta, 0);
-          }
-          if (storeChanged) { updateData.store = newStore; }
-          batch.update(doc(db, "sales", sale.id), updateData);
-        }
-
-        if (storeChanged) {
-          batch.set(doc(collection(db, "audit_logs")), { action: "EDIT_ORDER_STORE", user: loggedInUser?.username || 'unknown', details: `แก้ไขร้านค้าออเดอร์ ${group.orderId || group.items[0]?.orderId || '-'} จาก ${oldStore || '-'} เป็น ${newStore}`, timestamp: new Date().toISOString() });
-        }
-
-        await batch.commit();
-        setIsEditingGroup(null);
-      } catch (error) { alert("เกิดข้อผิดพลาด: " + error.message); }
-      setIsProcessing(false);
-    };
-
-    return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center space-y-4 xl:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
-          <div className="flex items-center space-x-3 shrink-0">
-            <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600"><History size={20}/></div>
-            <div>
-               <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">ประวัติการขาย</h2>
-              <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">ค้นหา กรองข้อมูล หรือแก้ไขออเดอร์</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end mt-3 md:mt-0">
-             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
-               <span className="text-xs text-slate-500 font-bold">ดูแบบ</span>
-               <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
-                 <option value="daily">รายวัน</option>
-                 <option value="monthly">รายเดือน</option>
-                 <option value="yearly">รายปี</option>
-                 <option value="all">ทั้งหมด</option>
-               </select>
-             </div>
-
-             {timeframe !== 'all' && (
-               <div className="flex items-center space-x-2 bg-blue-50/80 px-3 py-2 rounded-xl border border-blue-100 shadow-inner">
-                 {timeframe === 'daily' && <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
-                 {timeframe === 'monthly' && <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black" />}
-                 {timeframe === 'yearly' && <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none text-blue-700 font-black">{yearOptions.map(y => <option key={y} value={y}>ปี {y}</option>)}</select>}
-               </div>
-             )}
-
-             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
-               <span className="text-xs text-slate-500 font-bold">ร้านค้า</span>
-               <select value={filterStore} onChange={e => setFilterStore(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none font-black text-blue-700">
-                 <option value="all">ทุกร้านค้า</option>
-                 {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-               </select>
-             </div>
-
-             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-inner">
-               <span className="text-xs text-slate-500 font-bold">สินค้า</span>
-               <select value={filterProductId} onChange={e => setFilterProductId(e.target.value)} className="border-none focus:ring-0 text-xs md:text-sm bg-transparent cursor-pointer outline-none max-w-[120px] md:max-w-[150px] font-black text-blue-700">
-                 <option value="all">ดูทั้งหมด</option>
-                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-               </select>
-             </div>
-
-             <div className="relative flex-1 sm:max-w-xs min-w-[150px]">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-               <input type="text" placeholder="ค้นหาออเดอร์, สินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs md:text-sm focus:border-blue-500 outline-none transition-all" />
-             </div>
-          </div>
-        </div>
-        
-        <div className="space-y-5">
-          {groupedHistorySales.length === 0 ? (
-            <div className="text-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
-              <Info size={40} className="text-slate-300 mb-3"/>
-              <p className="text-slate-500 font-medium text-sm">ไม่มีรายการขายในเงื่อนไขที่คุณเลือก</p>
-            </div>
-          ) : (
-            groupedHistorySales.map((group, groupIndex) => {
-               let timeString = '-'; 
-              try { const d = new Date(group.date); if(!isNaN(d.getTime())) timeString = d.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}); } catch(e) {}
-              
-              const mainStore = group.store || group.items[0]?.store || '-';
-              let gradientHeaderClass = "from-slate-50 to-white border-slate-200";
-               let badgeStoreClass = "bg-slate-100 text-slate-600 border-slate-200";
-              
-              if (mainStore.includes('Shopee')) {
-                gradientHeaderClass = "from-[#FFF0ED] to-white border-[#FFE4DF]";
-                badgeStoreClass = "bg-[#EE4D2D] text-white border-transparent";
-              } else if (mainStore.includes('Lazada')) {
-                gradientHeaderClass = "from-[#F2F3FF] to-white border-[#E6E8FF]";
-                badgeStoreClass = "bg-[#0F146D] text-white border-transparent";
-              } else if (mainStore === 'LINE') {
-                gradientHeaderClass = "from-[#E5F9E5] to-white border-[#CCF2CC]";
-                badgeStoreClass = "bg-[#00C300] text-white border-transparent";
-              }
-
-              return (
-                <div key={group.id} className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden transition-all hover:shadow-md relative">
-                  
-                  <div className={`bg-gradient-to-r ${gradientHeaderClass} px-4 py-3 flex flex-wrap gap-3 justify-between items-center border-b`}>
-                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                      <span className="bg-blue-600 text-white text-xs md:text-sm font-black px-3 py-1.5 rounded-lg shadow-sm">
-                        ออเดอร์ที่ {groupedHistorySales.length - groupIndex}
-                      </span>
-                      <span className="text-slate-600 text-xs md:text-sm font-bold flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 shadow-sm">
-                        <Clock size={14} className="mr-1.5 text-slate-400"/> {timeString} น.
-                      </span>
-                      {isEditingGroup === group.id ? (
-                        <select value={groupEditStore} onChange={e => setGroupEditStore(e.target.value)} className="text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border-2 border-blue-400 bg-white text-blue-700 outline-none focus:border-blue-600 cursor-pointer">
-                          {STORE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      ) : (
-                        <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg shadow-sm border ${badgeStoreClass}`}>
-                          <Store size={12} className="inline mr-1"/> {mainStore}
-                        </span>
-                      )}
-                      <span className="text-slate-500 text-[10px] md:text-xs font-medium bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center shadow-sm">
-                        <User size={12} className="mr-1"/> {group.soldBy || group.items[0]?.soldBy || '-'}
-                      </span>
-                    </div>
-
-                    {canEditTab('history') && (
-                      <div className="flex items-center space-x-2 ml-auto w-full sm:w-auto justify-end">
-                         {isEditingGroup === group.id ? (
-                          <>
-                            <button onClick={() => handleSaveGroupEdit(group)} disabled={isProcessing} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
-                                <Save size={14} className="mr-1"/> บันทึกการแก้ไข
-                            </button>
-                            <button onClick={() => setIsEditingGroup(null)} disabled={isProcessing} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm flex items-center">
-                               <X size={14} className="mr-1"/> ยกเลิก
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => { setIsEditingGroup(group.id); setGroupEditTotal(group.totalOrderValue); setGroupEditStore(STORE_OPTIONS.includes(mainStore) ? mainStore : STORE_OPTIONS[0]); setIsEditing(null); }} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-blue-200 flex items-center">
-                              <Edit2 size={12} className="mr-1"/> แก้ไขออเดอร์
-                            </button>
-                            <button onClick={() => handleDeleteGroup(group)} className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition text-xs font-bold border border-red-200 flex items-center">
-                              <Trash2 size={12} className="mr-1"/> ลบออเดอร์
-                            </button>
-                           </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                   <div className="p-0 overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
-                      <thead>
-                        <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase border-b border-slate-100">
-                          <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์ / เวลา</th>
-                          <th className="px-4 py-2 font-bold">สินค้า</th>
-                          <th className="px-4 py-2 font-bold text-center w-16">จำนวน</th>
-                          <th className="px-4 py-2 font-bold text-right w-[100px]">ราคา/ชิ้น</th>
-                          <th className="px-4 py-2 font-bold text-right w-[120px]">ยอดรวมย่อย</th>
-                          {canEditTab('history') && <th className="px-4 py-2 font-bold text-center w-[80px]">จัดการ</th>}
-                        </tr>
-                       </thead>
-                      <tbody className="text-[11px] md:text-xs text-slate-700">
-                        {group.items.map((sale) => {
-                          const isCurrentRowEditing = isEditing === sale.id;
-                          return (
-                            <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors align-top">
-                              <td className="px-4 py-2 font-bold">
-                                {isCurrentRowEditing ? (
-                                  <div className="flex flex-col space-y-1.5">
-                                    <input type="text" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner" placeholder="รหัสออเดอร์" value={editForm.orderId} onChange={e => setEditForm({...editForm, orderId: e.target.value})}/>
-                                     <input type="datetime-local" className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none shadow-inner text-[10px] md:text-xs text-blue-700" title="แก้ไขวันเวลาออเดอร์" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}/>
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col">
-                                    <span>{sale.orderId || '-'}</span>
-                                    {timeframe !== 'daily' && (
-                                       <span className="text-[10px] text-slate-400 font-medium mt-0.5">{new Date(sale.date).toLocaleDateString('th-TH')}</span>
-                                     )}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 font-medium">
-                                {isCurrentRowEditing ? (
-                                  <select value={editForm.productId} onChange={e => setEditForm({...editForm, productId: e.target.value, customPrice: getProduct(e.target.value)?.price||0})} className="w-full p-1.5 border border-blue-300 rounded focus:border-blue-600 outline-none bg-white shadow-inner">
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                  </select>
-                                ) : (
-                                  getProduct(sale.productId)?.name || 'ลบแล้ว'
-                                 )}
-                              </td>
-                              <td className="px-4 py-2 text-center">
-                                {isCurrentRowEditing ? (
-                                  <input type="number" className="w-12 mx-auto p-1.5 border border-blue-300 rounded text-center focus:border-blue-600 outline-none shadow-inner" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: Math.max(1, parseInt(e.target.value)||1)})} />
-                                ) : (
-                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-black">{sale.quantity}</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                {isCurrentRowEditing ? (
-                                  <input type="number" className="w-20 p-1.5 border border-blue-300 rounded text-right focus:border-blue-600 outline-none shadow-inner ml-auto" value={editForm.customPrice} onChange={e => setEditForm({...editForm, customPrice: e.target.value})} placeholder="ราคา/ชิ้น"/>
-                                ) : (
-                                  `฿${formatMoney(sale.unitPrice || (sale.total / sale.quantity))}`
-                                )}
-                              </td>
-                              <td className="px-4 py-2 text-right font-black text-slate-800">
-                                {isCurrentRowEditing ? (
-                                  <span className="text-blue-600">฿{formatMoney((Number(editForm.customPrice) || 0) * (Number(editForm.quantity) || 0))}</span>
-                                ) : (
-                                   `฿${formatMoney(sale.total)}`
-                                )}
-                              </td>
-                               {canEditTab('history') && (
-                                <td className="px-4 py-2 text-center">
-                                  {isCurrentRowEditing ? (
-                                    <div className="flex justify-center space-x-1.5">
-                                      <button onClick={() => handleSaveEdit(sale)} disabled={isProcessing} className="text-white bg-emerald-500 hover:bg-emerald-600 p-1.5 rounded-md shadow-sm transition"><Save size={14}/></button>
-                                       <button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-600 bg-slate-200 hover:bg-slate-300 p-1.5 rounded-md shadow-sm transition"><X size={14}/></button>
-                                    </div>
-                                  ) : (
-                                     <div className="flex justify-center space-x-1">
-                                      <button onClick={() => { setIsEditing(sale.id); setIsEditingGroup(null); setEditForm({productId: sale.productId, quantity: sale.quantity, date: formatForInput(sale.date), store: sale.store || STORE_OPTIONS[0], customPrice: sale.unitPrice || (sale.total/sale.quantity), orderId: sale.orderId || ''}); }} className="text-blue-600 hover:bg-blue-100 p-1.5 rounded transition" title="แก้ไขรายการย่อย"><Edit2 size={14}/></button>
-                                      <button onClick={() => handleDelete(sale)} className="text-red-500 hover:bg-red-100 p-1.5 rounded transition" title="ลบรายการย่อย"><Trash2 size={14}/></button>
-                                    </div>
-                                   )}
-                                </td>
-                              )}
-                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-slate-50/50 border-t border-slate-100 px-4 py-3 flex justify-between items-center text-xs md:text-sm">
-                    <div className="font-bold text-slate-500">
-                      รวมทั้งหมด <span className="text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md ml-1">{group.totalItems} ชิ้น</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                       <span className="font-bold text-slate-500 uppercase text-[10px] md:text-xs">ยอดรวมสุทธิ</span>
-                      {isEditingGroup === group.id ? (
-                        <input type="number" className="w-28 p-2 border-2 border-blue-400 rounded-lg text-right font-black focus:border-blue-600 outline-none text-blue-800 bg-white shadow-inner" value={groupEditTotal} onChange={e => setGroupEditTotal(e.target.value)} />
-                      ) : (
-                        <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 drop-shadow-sm">
-                           ฿{formatMoney(group.totalOrderValue)}
-                        </span>
-                      )}
-                    </div>
-                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const ProductsView = () => {
-    const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ name: '', cost: '', price: '' });
-    const [isAdding, setIsAdding] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('name_asc');
-    const filteredAndSortedProducts = useMemo(() => {
-      let result = [...products];
-      if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
-      result.sort((a, b) => {
-        if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
-        if (sortBy === 'name_desc') return String(b.name || '').localeCompare(String(a.name || ''), 'th');
-        if (sortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
-        if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
-        if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
-        return 0;
-      });
-      return result;
-    }, [products, searchTerm, sortBy]);
-    const exportProductsReport = () => {
-      if (products.length === 0) return;
-      const csvRows = [];
-      csvRows.push(['รายงานสรุปสต๊อกสินค้า - The Resilient Clinic']);
-      csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
-      csvRows.push([]);
-      csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'ราคาคลินิก (ต้นทุน)', 'ราคาขาย', 'กำไรต่อชิ้น', 'สต๊อกคงเหลือ', 'มูลค่าต้นทุนรวม', 'มูลค่าขายรวม', 'กำไรคาดหวัง']);
-      let sumStock = 0; let sumCostValue = 0; let sumSaleValue = 0; let sumExpectedProfit = 0;
-      filteredAndSortedProducts.forEach((p, index) => {
-        const stock = Number(p.stock) || 0; const costVal = stock * (Number(p.cost) || 0); const saleVal = stock * (Number(p.price) || 0); const profitVal = saleVal - costVal;
-        sumStock += stock; sumCostValue += costVal; sumSaleValue += saleVal; sumExpectedProfit += profitVal;
-        csvRows.push([index + 1, `"${p.name || ''}"`, p.cost || 0, p.price || 0, (Number(p.price) || 0) - (Number(p.cost) || 0), stock, costVal, saleVal, profitVal]);
-      });
-      csvRows.push([]); csvRows.push(['สรุปมูลค่าสต๊อกทั้งหมด', '', '', '', '', sumStock, sumCostValue, sumSaleValue, sumExpectedProfit]);
-      downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `สรุปข้อมูลสินค้าและมูลค่าสต๊อก_${getLocalISODate()}.csv`);
-    };
-    const handleSave = async (id) => {
-      setIsProcessing(true);
-      try {
-        await updateDoc(doc(db, "products", id), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0 });
-        await addDoc(collection(db, "audit_logs"), { action: "EDIT_PRODUCT", user: loggedInUser?.username || 'unknown', details: `แก้ไขข้อมูลสินค้า ${editForm.name}`, timestamp: new Date().toISOString() });
-        setIsEditing(null);
-      } catch (error) { alert("Error: " + error.message); }
-      setIsProcessing(false);
-    };
-    const handleAdd = async () => {
-      if (!editForm.name) return;
-      setIsProcessing(true);
-      try {
-        await addDoc(collection(db, "products"), { name: editForm.name, cost: Number(editForm.cost) || 0, price: Number(editForm.price) || 0, stock: 0 });
-        await addDoc(collection(db, "audit_logs"), { action: "ADD_PRODUCT", user: loggedInUser?.username || 'unknown', details: `เพิ่มสินค้าใหม่ ${editForm.name}`, timestamp: new Date().toISOString() });
-        setIsAdding(false);
-        setEditForm({ name: '', cost: '', price: '' });
-      } catch (error) { alert("Error: " + error.message);
-      }
-      setIsProcessing(false);
-    };
-
-    return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-        <div className="flex flex-col bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
-            <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการสินค้า</h2>
-            <div className="flex space-x-2 w-full sm:w-auto">
-               {canExportTab('products') && (<button onClick={exportProductsReport} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition text-xs font-bold"><Download size={14}/><span>ส่งออก Excel</span></button>)}
-              {!isAdding && canEditTab('products') && (<button onClick={() => { setIsAdding(true); setEditForm({name:'', cost:'', price:''}); setIsEditing(null); setSearchTerm(''); }} className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition shadow-sm text-xs font-bold"><Plus size={14}/><span>เพิ่มสินค้าใหม่</span></button>)}
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 pt-3 border-t border-slate-100">
-            <div className="relative flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-xs md:text-sm focus:border-blue-500 outline-none transition-all" /></div>
-            <div className="flex items-center space-x-2 w-full sm:w-auto"><div className="bg-slate-50 p-2 rounded-lg border border-slate-200"><ArrowUpDown size={16} className="text-slate-500"/></div><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full sm:w-auto border border-slate-200 rounded-lg text-xs md:text-sm py-2 px-3 focus:border-blue-500 outline-none bg-white transition-all"><option value="name_asc">ชื่อ (ก - ฮ)</option><option value="name_desc">ชื่อ (ฮ - ก)</option><option value="price_desc">ราคาขาย (มากไปน้อย)</option><option value="price_asc">ราคาขาย (น้อยไปมาก)</option></select></div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead>
-              <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs md:text-sm"><th className="p-3 md:p-4 font-bold text-center w-16">ลำดับ</th><th className="p-3 md:p-4 font-bold">ชื่อสินค้า</th><th className="p-3 md:p-4 font-bold">ราคาคลินิก</th><th className="p-3 md:p-4 font-bold">ราคาขาย</th>{canEditTab('products') && <th className="p-3 md:p-4 font-bold text-right">จัดการ</th>}</tr>
-            </thead>
-            <tbody className="text-xs md:text-sm">
-              {isAdding && (
-                <tr className="border-b border-blue-100 bg-blue-50/50">
-                  <td className="p-3 text-center text-blue-500 font-bold">*</td>
-                  <td className="p-2 md:p-3"><input className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ชื่อสินค้า..." value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></td>
-                  <td className="p-2 md:p-3"><input type="number" className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ราคาคลินิก..." value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /></td>
-                  <td className="p-2 md:p-3"><input type="number" className="w-full p-2 border border-blue-200 rounded-lg text-xs focus:border-blue-500 outline-none bg-white" placeholder="ราคาขาย..." value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /></td>
-                  <td className="p-2 md:p-3 text-right space-x-1.5 whitespace-nowrap"><button onClick={handleAdd} className="text-emerald-600 bg-emerald-50 p-2 rounded-lg hover:bg-emerald-100 transition"><Save size={16}/></button><button onClick={() => setIsAdding(false)} className="text-red-500 bg-red-50 p-2 rounded-lg hover:bg-red-100 transition"><X size={16}/></button></td>
-                </tr>
-              )}
-              {filteredAndSortedProducts.map((product, index) => (
-                <tr key={product.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="p-3 md:p-4 text-center font-bold text-slate-400">{index + 1}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : <span className="font-medium text-slate-800">{product.name}</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} /> : <span className="text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded border border-orange-100">฿{formatMoney(product.cost)}</span>}</td>
-                  <td className="p-3 md:p-4">{isEditing === product.id ? <input type="number" className="w-full p-1.5 border border-blue-200 rounded text-xs focus:border-blue-500 outline-none" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} /> : <span className="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">฿{formatMoney(product.price)}</span>}</td>
-                  {canEditTab('products') && (
-                    <td className="p-3 md:p-4 text-right space-x-1.5 whitespace-nowrap">
-                      {isEditing === product.id ? (<><button onClick={() => handleSave(product.id)} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded transition"><Save size={16}/></button><button onClick={() => setIsEditing(null)} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded transition"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(product.id); setEditForm({name: product.name, cost: product.cost, price: product.price}); }} className="text-blue-600 hover:bg-blue-50 border border-transparent p-1.5 rounded transition"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบสินค้านี้?')) { await deleteDoc(doc(db, "products", product.id));
-                      await addDoc(collection(db, "audit_logs"), { action: "DELETE_PRODUCT", user: loggedInUser?.username || 'unknown', details: `ลบสินค้า ${product.name}`, timestamp: new Date().toISOString() });
-                      } }} className="text-red-500 hover:bg-red-50 border border-transparent p-1.5 rounded transition"><Trash2 size={16}/></button></>)}
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {filteredAndSortedProducts.length === 0 && !isAdding && (<tr><td colSpan="5" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูลสินค้าที่ค้นหา</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const StockView = () => {
-    const [mode, setMode] = useState('view');
-    const [selectedProduct, setSelectedProduct] = useState('');
-    const [stockAmount, setStockAmount] = useState('');
-    const [originalStock, setOriginalStock] = useState(0); // เพิ่ม State สำหรับเก็บค่า stock เดิมก่อนแก้
-
-    // สำหรับค้นหาสินค้าแบบพิมพ์ค้นหา และ popup ยืนยันตอนนำเข้าสินค้า
-    const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
-    const [importProductSearchTerm, setImportProductSearchTerm] = useState('');
-    const importDropdownRef = useRef(null);
-    const [showImportConfirm, setShowImportConfirm] = useState(false);
-
-    const [returnOrderId, setReturnOrderId] = useState('');
-    const [returnItems, setReturnItems] = useState([]);
-
-    // สำหรับฟีเจอร์แกะกล่อง (แปลงหน่วยจากกล่องใหญ่ -> แผงย่อย)
-    const [selectedBoxProduct, setSelectedBoxProduct] = useState('');
-    const [selectedPanelProduct, setSelectedPanelProduct] = useState('');
-    const [unboxQty, setUnboxQty] = useState(1);
-    const [unboxRatio, setUnboxRatio] = useState('');
-
-    // สำหรับหน้าประวัติการทำรายการคลังสินค้า
-    const [historyActionFilter, setHistoryActionFilter] = useState('all');
-    const [historyFromDate, setHistoryFromDate] = useState('');
-    const [historyToDate, setHistoryToDate] = useState('');
-
-    // สำหรับระบบมอบหมายเช็คสต๊อก (Admin เลือกวันที่ + พนักงาน มอบหมายล่วงหน้าได้)
-    const [assignDate, setAssignDate] = useState(getLocalISODate());
-    const [assignEmployeeId, setAssignEmployeeId] = useState('');
-    const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
-
-    // สำหรับระบบเช็คสต๊อกประจำวัน (พนักงานที่ Admin มอบหมายเป็นผู้เช็ค)
-    const [checkResults, setCheckResults] = useState({}); // { [productId]: { status: 'match'|'mismatch', note } }
-
-    // สำหรับหน้าประวัติการเช็คสต๊อกย้อนหลัง (ดูได้ทุกคน)
-    const [expandedCheckDate, setExpandedCheckDate] = useState(null);
-    
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('name_asc');
-
-    useEffect(() => {
-      const handleClickOutside = (event) => { if (importDropdownRef.current && !importDropdownRef.current.contains(event.target)) setIsImportDropdownOpen(false); };
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const filteredImportProducts = useMemo(() => {
-      if (!importProductSearchTerm) return products;
-      return products.filter(p => String(p?.name || '').toLowerCase().includes(String(importProductSearchTerm || '').toLowerCase()));
-    }, [products, importProductSearchTerm]);
-
-    const filteredAndSortedProducts = useMemo(() => {
-      let result = [...products];
-      if (searchTerm) result = result.filter(p => String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
-      result.sort((a, b) => {
-        if (sortBy === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'th');
-        if (sortBy === 'stock_desc') return (Number(b.stock) || 0) - (Number(a.stock) || 0);
-        if (sortBy === 'stock_asc') return (Number(a.stock) || 0) - (Number(b.stock) || 0);
-        return 0;
-      });
-      return result;
-    }, [products, searchTerm, sortBy]);
-
-    const getStockActionMeta = (action) => {
-      switch (action) {
-        case 'ADD_STOCK': return { label: 'นำเข้าสินค้า', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-        case 'OVERRIDE_STOCK': return { label: 'แก้ไขสต๊อก', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' };
-        case 'RETURN_STOCK': return { label: 'ลูกค้าคืนของ', badgeClass: 'bg-orange-50 text-orange-700 border-orange-200' };
-        case 'UNBOX_STOCK': return { label: 'แกะกล่อง', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' };
-        case 'ASSIGN_STOCK_CHECK': return { label: 'มอบหมายเช็คสต๊อก', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' };
-        case 'COMPLETE_STOCK_CHECK': return { label: 'เช็คสต๊อกประจำวัน', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' };
-        default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
-      }
-    };
-
-    const stockHistoryLogs = useMemo(() => {
-      const stockActions = ['ADD_STOCK', 'OVERRIDE_STOCK', 'RETURN_STOCK', 'UNBOX_STOCK', 'ASSIGN_STOCK_CHECK', 'COMPLETE_STOCK_CHECK'];
-      return auditLogs
-        .filter(log => stockActions.includes(log.action))
-        .filter(log => historyActionFilter === 'all' || log.action === historyActionFilter)
-        .filter(log => {
-          if (!historyFromDate && !historyToDate) return true;
-          const d = getLocalISODate(log.timestamp);
-          if (historyFromDate && d < historyFromDate) return false;
-          if (historyToDate && d > historyToDate) return false;
-          return true;
-        });
-    }, [auditLogs, historyActionFilter, historyFromDate, historyToDate]);
-
-    // สถานะเช็คสต๊อกของวันนี้ (ใครถูกมอบหมาย / เช็คเสร็จหรือยัง)
-    const todayStrForCheck = getLocalISODate();
-    const todayStockCheck = stockChecks.find(c => c.id === todayStrForCheck) || null;
-    const isMyAssignedCheckToday = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
-    const isTodayCheckCurrentlyValid = !!todayStockCheck?.completed;
-    // นับเฉพาะสินค้าที่ "ยังมีอยู่จริงตอนนี้" และถูกติ๊กแล้ว กันกรณีสินค้าถูกลบ/เพิ่มระหว่างเช็คแล้วนับจำนวนคลาดเคลื่อน
-    const checkedProductCount = products.filter(p => checkResults[p.id]).length;
-
-    // ประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์แล้ว เรียงวันล่าสุดก่อน (สำหรับหน้าประวัติที่พนักงานทุกคนดูได้)
-    const completedStockCheckHistory = useMemo(() => {
-      return stockChecks.filter(c => c.completed).sort((a, b) => b.id.localeCompare(a.id));
-    }, [stockChecks]);
-
-    // เลื่อนวันที่ไปข้างหน้า N วัน (คำนวณจากตัวเลข ปี/เดือน/วัน ตรงๆ กันปัญหา timezone)
-    const addDaysToDateStr = (dateStr, days) => {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      const dt = new Date(y, m - 1, d);
-      dt.setDate(dt.getDate() + days);
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    };
-
-    // ตารางมอบหมายเช็คสต๊อก 14 วันข้างหน้า (สำหรับให้ Admin ดูภาพรวมและมอบหมายล่วงหน้า)
-    const upcomingScheduleDays = useMemo(() => {
-      const days = [];
-      for (let i = 0; i < 14; i++) {
-        const d = addDaysToDateStr(todayStrForCheck, i);
-        const check = stockChecks.find(c => c.id === d);
-        days.push({ date: d, assignedEmployeeName: check?.assignedEmployeeName || null, completed: !!check?.completed });
-      }
-      return days;
-    }, [stockChecks, todayStrForCheck]);
-
-    const handleAssignStockCheck = async () => {
-      if (!assignEmployeeId || !assignDate) return;
-      setIsProcessing(true);
-      try {
-        const emp = employees.find(e => e.id === assignEmployeeId);
-        if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
-        await setDoc(doc(db, "stock_checks", assignDate), {
-          date: assignDate,
-          assignedEmployeeId: emp.id,
-          assignedEmployeeName: emp.fullName,
-          assignedByUsername: loggedInUser?.username || 'unknown',
-          assignedAt: new Date().toISOString(),
-          completed: false
-        }, { merge: true });
-        await addDoc(collection(db, "audit_logs"), { action: "ASSIGN_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `มอบหมายให้ ${emp.fullName} เช็คสต๊อกวันที่ ${assignDate}`, timestamp: new Date().toISOString() });
-        setAssignSuccessMsg(`มอบหมาย ${emp.fullName} วันที่ ${assignDate} เรียบร้อย`);
-        setTimeout(() => setAssignSuccessMsg(''), 3000);
-        setAssignEmployeeId('');
-        setAssignDate(prev => addDaysToDateStr(prev, 1));
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsProcessing(false);
-    };
-
-    const handleSubmitStockCheck = async () => {
-      if (checkedProductCount < products.length) { alert('กรุณาเช็คสต๊อกให้ครบทุกรายการก่อนยืนยัน'); return; }
-      setIsProcessing(true);
-      try {
-        const items = products.map(p => ({
-          productId: p.id,
-          productName: p.name,
-          status: checkResults[p.id]?.status || 'match',
-          systemStock: Number(p.stock) || 0,
-          actualCount: (checkResults[p.id]?.status === 'mismatch' && checkResults[p.id]?.actualCount !== '' && checkResults[p.id]?.actualCount !== undefined) ? Number(checkResults[p.id].actualCount) : null,
-          note: checkResults[p.id]?.note || ''
-        }));
-        const mismatchCount = items.filter(i => i.status === 'mismatch').length;
-        await setDoc(doc(db, "stock_checks", todayStrForCheck), {
-          completed: true,
-          completedAt: new Date().toISOString(),
-          completedByUsername: loggedInUser?.username || 'unknown',
-          checkerEmployeeName: todayStockCheck?.assignedEmployeeName || loggedInUser?.employeeData?.fullName || '',
-          items, mismatchCount
-        }, { merge: true });
-        await addDoc(collection(db, "audit_logs"), { action: "COMPLETE_STOCK_CHECK", user: loggedInUser?.username || 'unknown', details: `เช็คสต๊อกประจำวัน ${todayStrForCheck} เสร็จสิ้น (ไม่ตรง ${mismatchCount} รายการ)`, timestamp: new Date().toISOString() });
-        alert(mismatchCount > 0 ? `บันทึกผลการเช็คสต๊อกสำเร็จ พบรายการไม่ตรง ${mismatchCount} รายการ` : 'บันทึกผลการเช็คสต๊อกสำเร็จ สต๊อกตรงทั้งหมด');
-        setMode('view'); setCheckResults({});
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsProcessing(false);
-    };
-    
-    const handleUpdateStock = async (isAbsoluteOverride = false) => {
-      if (!selectedProduct || !stockAmount || isNaN(stockAmount)) return;
-      setIsProcessing(true);
-      try {
-        const productRef = doc(db, "products", selectedProduct);
-        const amount = Number(stockAmount);
-        // ตรวจว่าสินค้ายังอยู่จริงก่อนอัปเดต (กันกรณีถูกลบไปแล้ว แล้ว batch ล้มเหลวโดยไม่รู้สาเหตุ)
-        const productSnap = await getDoc(productRef);
-        if (!productSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้านี้ (อาจถูกลบไปแล้ว) กรุณารีเฟรชหน้าจอ");
-        const batch = writeBatch(db);
-        if (isAbsoluteOverride) {
-            // คำนวณส่วนต่างจากค่าเดิมที่ผู้ดูแลระบบเห็นตอนกดแก้ไข ป้องกัน Race Condition
-            const diff = amount - Number(originalStock);
-            batch.update(productRef, { stock: increment(diff) });
-            batch.set(doc(collection(db, "audit_logs")), { action: "OVERRIDE_STOCK", user: loggedInUser?.username, details: `ปรับแก้สต๊อกเป็น ${amount} (ปรับ ${diff > 0 ? '+'+diff : diff})`, timestamp: new Date().toISOString() });
-        } else {
-            batch.update(productRef, { stock: increment(amount) });
-            batch.set(doc(collection(db, "audit_logs")), { action: "ADD_STOCK", user: loggedInUser?.username, details: `เพิ่มสต๊อกเข้า ${amount} ชิ้น`, timestamp: new Date().toISOString() });
-        }
-        await batch.commit();
-        setMode('view'); setStockAmount(''); setSelectedProduct(''); setOriginalStock(0); setShowImportConfirm(false);
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); setShowImportConfirm(false); }
-      setIsProcessing(false);
-    };
-
-    const handleSearchReturnOrder = () => {
-        const items = sales.filter(s => s.orderId === returnOrderId.trim());
-        if (items.length === 0) alert('ไม่พบออเดอร์นี้ในระบบ');
-        setReturnItems(items.map(item => ({...item, returnQty: item.quantity})));
-    };
-
-    const handleProcessReturn = async () => {
-        const itemsToReturn = returnItems.filter(item => Number(item.returnQty) > 0);
-        if(itemsToReturn.length === 0) return;
-        setIsProcessing(true);
-        try {
-            const batch = writeBatch(db);
-            for(let item of itemsToReturn) {
-                const qtyToReturn = Number(item.returnQty);
-                if(qtyToReturn > item.quantity) throw new Error("คืนเกินจำนวนที่ซื้อ");
-                
-                // ป้องกันกรณีสินค้าถูกลบไปแล้วด้วย getDoc ก่อน update
-                const productRef = doc(db, "products", item.productId);
-                const productSnap = await getDoc(productRef);
-                if (productSnap.exists()) {
-                    batch.update(productRef, { stock: increment(qtyToReturn) });
-                }
-                
-                const newQty = item.quantity - qtyToReturn;
-                const unitCostForReturn = item.unitCost !== undefined ? Number(item.unitCost) : Number(getProduct(item.productId)?.cost || 0);
-                const refundedRevenue = (Number(item.total) / Number(item.quantity)) * qtyToReturn;
-                const refundedProfit = refundedRevenue - (unitCostForReturn * qtyToReturn);
-                if(newQty === 0) {
-                    batch.delete(doc(db, "sales", item.id));
-                } else {
-                    const newTotal = (item.total / item.quantity) * newQty;
-                    batch.update(doc(db, "sales", item.id), { quantity: newQty, total: newTotal });
-                }
-                // หักยอดขาย/กำไรส่วนที่ลูกค้าคืนออกจากยอดสรุปรายวันของวันที่ขาย
-                applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
-                
-                batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน ${qtyToReturn} ชิ้น ออเดอร์ ${item.orderId}`, timestamp: new Date().toISOString() });
-            }
-            await batch.commit();
-            alert('ทำรายการคืนสินค้าสำเร็จ');
-            setMode('view'); setReturnOrderId(''); setReturnItems([]);
-        } catch (err) { alert("Error: " + err.message); }
-        setIsProcessing(false);
-    };
-
-    const handleUnbox = async () => {
-        if (!selectedBoxProduct || !selectedPanelProduct) { alert('กรุณาเลือกสินค้าต้นทางและปลายทางให้ครบ'); return; }
-        if (selectedBoxProduct === selectedPanelProduct) { alert('สินค้าต้นทางและปลายทางต้องไม่ใช่รายการเดียวกัน'); return; }
-        const boxQty = Number(unboxQty);
-        const ratio = Number(unboxRatio);
-        if (!boxQty || boxQty < 1) { alert('กรุณาระบุจำนวนกล่องที่จะแกะให้ถูกต้อง'); return; }
-        if (!ratio || ratio < 1) { alert('กรุณาระบุจำนวนแผงต่อกล่องให้ถูกต้อง'); return; }
-
-        setIsProcessing(true);
-        try {
-            const boxRef = doc(db, "products", selectedBoxProduct);
-            const panelRef = doc(db, "products", selectedPanelProduct);
-
-            // อ่านค่าล่าสุดจากฐานข้อมูลก่อนตัดสต๊อกจริง ป้องกันกรณีมีคนอื่นแก้สต๊อกพร้อมกัน (ไม่ใช้ค่า cache ฝั่ง client)
-            const boxSnap = await getDoc(boxRef);
-            if (!boxSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าต้นทาง (อาจถูกลบไปแล้ว)");
-            const panelSnap = await getDoc(panelRef);
-            if (!panelSnap.exists()) throw new Error("ไม่พบข้อมูลสินค้าปลายทาง (อาจถูกลบไปแล้ว)");
-
-            const boxProductData = boxSnap.data();
-            const panelProductData = panelSnap.data();
-            const currentBoxStock = Number(boxProductData?.stock) || 0;
-            if (currentBoxStock < boxQty) throw new Error(`สต๊อกกล่องไม่พอ (คงเหลือ ${currentBoxStock} กล่อง)`);
-
-            const panelQtyToAdd = boxQty * ratio;
-
-            const batch = writeBatch(db);
-            batch.update(boxRef, { stock: increment(-boxQty) });
-            batch.update(panelRef, { stock: increment(panelQtyToAdd) });
-            batch.set(doc(collection(db, "audit_logs")), { action: "UNBOX_STOCK", user: loggedInUser?.username, details: `แกะกล่อง "${boxProductData?.name || ''}" จำนวน ${boxQty} กล่อง แปลงเป็น "${panelProductData?.name || ''}" จำนวน ${panelQtyToAdd} แผง (อัตรา ${ratio} แผง/กล่อง)`, timestamp: new Date().toISOString() });
-            await batch.commit();
-
-            alert('แกะกล่องสำเร็จ');
-            setMode('view'); setSelectedBoxProduct(''); setSelectedPanelProduct(''); setUnboxQty(1); setUnboxRatio('');
-        } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-        setIsProcessing(false);
-    };
-
-    const exportStockReport = () => {
-        if (filteredAndSortedProducts.length === 0) { alert("ไม่มีข้อมูล"); return; }
-        const csvRows = [];
-        csvRows.push(['รายงานจำนวนสต๊อกสินค้าคงเหลือ - The Resilient Clinic']);
-        csvRows.push(['วันที่สั่งพิมพ์:', new Date().toLocaleString('th-TH')]);
-        csvRows.push([]);
-        csvRows.push(['ลำดับ', 'ชื่อสินค้า', 'สต๊อกคงเหลือ']);
-        filteredAndSortedProducts.forEach((p, index) => { csvRows.push([index + 1, `"${p.name || ''}"`, Number(p.stock) || 0]); });
-        downloadMobileSafeCSV(csvRows.map(row => row.join(',')).join('\n'), `รายงานจำนวนสต๊อกคงเหลือ_${getLocalISODate()}.csv`);
-    };
-
-    return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-        {showImportConfirm && (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex justify-between items-center">
-                        <h3 className="font-bold text-lg flex items-center"><ArrowDownToLine size={18} className="mr-2"/> ยืนยันการนำเข้าสินค้า</h3>
-                        <button onClick={() => setShowImportConfirm(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
-                    </div>
-                    <div className="p-5 space-y-4 bg-slate-50/50">
-                        <div>
-                            <span className="text-xs font-bold text-slate-500 block mb-1 uppercase tracking-wide">สินค้า</span>
-                            <span className="font-black text-slate-800 text-base">{getProduct(selectedProduct)?.name || '-'}</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 bg-white p-4 rounded-2xl border border-slate-200 items-center">
-                            <div className="text-center">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">คงเหลือเดิม</span>
-                                <span className="text-xl font-black text-slate-700">{Number(getProduct(selectedProduct)?.stock) || 0}</span>
-                            </div>
-                            <div className="text-center flex flex-col items-center justify-center text-emerald-600">
-                                <Plus size={18}/>
-                                <span className="text-lg font-black">{Number(stockAmount) || 0}</span>
-                            </div>
-                            <div className="text-center">
-                                <span className="text-[10px] font-bold text-emerald-600 uppercase block mb-1">คงเหลือใหม่</span>
-                                <span className="text-xl font-black text-emerald-700">{(Number(getProduct(selectedProduct)?.stock) || 0) + (Number(stockAmount) || 0)}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="p-4 bg-white border-t border-slate-100 flex space-x-3">
-                        <button type="button" onClick={() => setShowImportConfirm(false)} disabled={isProcessing} className="flex-1 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition">ยกเลิก</button>
-                        <button type="button" onClick={() => handleUpdateStock(false)} disabled={isProcessing} className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center">
-                            {isProcessing ? 'กำลังบันทึก...' : <><CheckCircle2 size={16} className="mr-1.5"/> ยืนยันนำเข้า</>}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
-            <div><h2 className="text-xl font-bold text-slate-800">ระบบจัดการคลังสินค้า (Stock)</h2></div>
-            <div className="flex flex-wrap gap-2">
-                {canEditTab('stock') && !isExecutiveView && (
-                   <>
-                        <button onClick={() => setMode('add')} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow hover:bg-emerald-700 flex items-center"><ArrowDownToLine size={16} className="mr-1"/> นำเข้าสินค้า</button>
-                        <button onClick={() => setMode('unbox')} className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg shadow hover:bg-purple-700 flex items-center"><Package size={16} className="mr-1"/> แกะกล่อง</button>
-                        <button onClick={() => setMode('return')} className="px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg shadow hover:bg-orange-600 flex items-center"><RefreshCcw size={16} className="mr-1"/> ลูกค้าคืนของ</button>
-                        <button onClick={() => setMode('history')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow hover:bg-indigo-700 flex items-center"><History size={16} className="mr-1"/> ประวัติการทำรายการ</button>
-                     </>
-                )}
-                {!isExecutiveView && (canEditTab('stock') || isMyAssignedCheckToday) && (
-                    <button onClick={() => { setCheckResults({}); setMode('check'); }} className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-lg shadow flex items-center ${isMyAssignedCheckToday ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}><CheckCircle2 size={16} className="mr-1"/> เช็คสต๊อกวันนี้{isMyAssignedCheckToday ? ' ⚠️' : ''}</button>
-                )}
-                {!isExecutiveView && loggedInUser?.role === 'admin' && (
-                    <button onClick={() => { setAssignDate(getLocalISODate()); setAssignEmployeeId(''); setMode('assign_check'); }} className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg shadow hover:bg-amber-700 flex items-center"><ShieldCheck size={16} className="mr-1"/> มอบหมายเช็คสต๊อก</button>
-                )}
-                {!isExecutiveView && (
-                    <button onClick={() => { setExpandedCheckDate(null); setMode('check_history'); }} className="px-4 py-2 bg-cyan-600 text-white text-sm font-bold rounded-lg shadow hover:bg-cyan-700 flex items-center"><CalendarDays size={16} className="mr-1"/> ประวัติการเช็คสต๊อก</button>
-                )}
-                {canExportTab('stock') && <button onClick={exportStockReport} className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 flex items-center"><Download size={16} className="mr-1"/> ส่งออก</button>}
-                {mode !== 'view' && <button onClick={() => setMode('view')} className="px-4 py-2 bg-slate-600 text-white text-sm font-bold rounded-lg hover:bg-slate-700">กลับหน้าหลัก</button>}
-             </div>
-        </div>
-
-        {mode === 'add' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-200">
-                <h3 className="font-bold text-emerald-800 mb-4">นำเข้าสินค้า (บวกเพิ่มจากสต๊อกเดิม)</h3>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="relative flex-1" ref={importDropdownRef}>
-                        <div onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)} className="w-full p-3 border border-slate-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all bg-white hover:border-emerald-300">
-                            <div className="flex items-center space-x-2.5 min-w-0">
-                               <Search size={16} className={`shrink-0 transition-colors ${isImportDropdownOpen ? 'text-emerald-500' : 'text-slate-400'}`}/>
-                               <span className={`truncate ${selectedProduct ? 'text-slate-800 font-medium' : 'text-slate-400 font-medium'}`}>
-                                  {selectedProduct ? `${getProduct(selectedProduct)?.name} (คงเหลือ: ${getProduct(selectedProduct)?.stock})` : '-- เลือกสินค้า / พิมพ์ค้นหา --'}
-                               </span>
-                            </div>
-                            <ChevronDown size={16} className={`shrink-0 transition-transform duration-300 ${isImportDropdownOpen ? 'rotate-180 text-emerald-500' : 'text-slate-400'}`}/>
-                        </div>
-                        {isImportDropdownOpen && (
-                            <div className="absolute w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-[280px] flex flex-col top-full left-0 z-[100] animate-in fade-in overflow-hidden">
-                                <div className="p-2 border-b border-slate-100 bg-slate-50/80 shrink-0">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                                        <input type="text" className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-400" placeholder="พิมพ์ชื่อสินค้า..." value={importProductSearchTerm} onChange={(e) => setImportProductSearchTerm(e.target.value)} autoFocus />
-                                    </div>
-                                </div>
-                                <ul className="overflow-y-auto flex-1 p-2 space-y-1.5 scrollbar-hide bg-white">
-                                    {filteredImportProducts.length === 0 ? (
-                                        <li className="px-3 py-4 text-center text-slate-400 text-sm">ไม่พบสินค้าที่ค้นหา</li>
-                                    ) : (
-                                        filteredImportProducts.map(p => (
-                                            <li key={p.id} onClick={() => { setSelectedProduct(p.id); setIsImportDropdownOpen(false); setImportProductSearchTerm(''); }} className="px-3 py-2 rounded-lg text-sm flex justify-between items-center cursor-pointer transition-all bg-white hover:bg-emerald-50 border border-transparent hover:border-emerald-100">
-                                                <span className="font-bold text-sm text-slate-800">{p.name}</span>
-                                                <span className="text-[10px] md:text-xs font-bold px-2 py-1 rounded-md shrink-0 border bg-emerald-50 text-emerald-700 border-emerald-200">คงเหลือ {p.stock}</span>
-                                            </li>
-                                        ))
-                                    )}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-                     <input type="number" placeholder="จำนวนที่นำเข้า..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-emerald-500"/>
-                    <button onClick={() => {
-                        if (!selectedProduct) { alert('กรุณาเลือกสินค้าที่จะนำเข้า'); return; }
-                        if (!stockAmount || isNaN(stockAmount) || Number(stockAmount) <= 0) { alert('กรุณาระบุจำนวนที่นำเข้าให้ถูกต้อง'); return; }
-                        setShowImportConfirm(true);
-                    }} disabled={isProcessing} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md">บันทึกนำเข้า</button>
-                </div>
-            </div>
-        )}
-
-        {mode === 'assign_check' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
-                <h3 className="font-bold text-amber-800 mb-1">มอบหมายผู้เช็คสต๊อก</h3>
-                <p className="text-xs text-slate-500 mb-4">เลือกวันที่และพนักงาน มอบหมายล่วงหน้าได้หลายวัน — ผู้ที่ได้รับมอบหมายจะต้องเช็คสต๊อกให้เสร็จก่อนจึงจะกด "ออกงาน" ได้ในวันนั้น</p>
-
-                {assignSuccessMsg && (
-                    <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-700 flex items-center">
-                        <CheckCircle2 size={16} className="mr-2 shrink-0"/> {assignSuccessMsg}
-                    </div>
-                )}
-
-                {(() => {
-                    const existingCheck = stockChecks.find(c => c.id === assignDate);
-                    return existingCheck?.assignedEmployeeId ? (
-                        <div className={`mb-4 p-3 rounded-xl border text-sm font-bold flex items-center ${existingCheck.completed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                            {existingCheck.completed ? <CheckCircle2 size={16} className="mr-2 shrink-0"/> : <AlertCircle size={16} className="mr-2 shrink-0"/>}
-                            วันที่ {assignDate} มอบหมายให้ {existingCheck.assignedEmployeeName} — {existingCheck.completed ? 'เช็คสต๊อกเสร็จแล้ว' : 'ยังไม่ได้เช็คสต๊อก'}
-                        </div>
-                    ) : null;
-                })()}
-
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <input type="date" value={assignDate} min={getLocalISODate()} onChange={e => setAssignDate(e.target.value)} className="p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white"/>
-                    <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-amber-500 text-sm font-medium bg-white">
-                        <option value="">-- เลือกพนักงาน --</option>
-                        {employees.filter(emp => users.some(u => u.id === emp.userId)).map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
-                    </select>
-                    <button onClick={handleAssignStockCheck} disabled={isProcessing || !assignEmployeeId || !assignDate} className="px-6 py-3 bg-amber-600 text-white font-bold rounded-xl shadow-md hover:bg-amber-700 transition disabled:opacity-40">บันทึกมอบหมาย</button>
-                </div>
-
-                <div className="mt-6 pt-5 border-t border-slate-100">
-                    <h4 className="text-sm font-bold text-slate-700 mb-3">ตารางเช็คสต๊อก 14 วันข้างหน้า (คลิกวันที่เพื่อแก้ไข)</h4>
-                    <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
-                        {upcomingScheduleDays.map(day => {
-                            const dObj = new Date(day.date + 'T12:00:00');
-                            const label = dObj.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
-                            const isToday = day.date === todayStrForCheck;
-                            return (
-                                <div key={day.date} onClick={() => { setAssignSuccessMsg(''); setAssignDate(day.date); }} className={`flex items-center justify-between px-4 py-2.5 rounded-xl border cursor-pointer transition ${assignDate === day.date ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                                    <span className={`text-sm font-bold ${isToday ? 'text-amber-700' : 'text-slate-600'}`}>{label}{isToday ? ' (วันนี้)' : ''}</span>
-                                    {day.assignedEmployeeName ? (
-                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${day.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                            {day.assignedEmployeeName}{day.completed ? ' ✓' : ''}
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs text-slate-400 font-medium">ยังไม่มอบหมาย</span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {mode === 'check' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden">
-                {isTodayCheckCurrentlyValid ? (
-                    <div className="p-8 text-center">
-                        <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3"/>
-                        <h3 className="font-bold text-slate-800 text-lg mb-1">เช็คสต๊อกวันนี้เสร็จแล้ว</h3>
-                        <p className="text-sm text-slate-500 mb-1">โดย {todayStockCheck.completedByUsername} เมื่อ {new Date(todayStockCheck.completedAt).toLocaleString('th-TH')}</p>
-                        <p className="text-sm font-bold">
-                            {todayStockCheck.mismatchCount > 0 ? <span className="text-red-600">พบรายการไม่ตรง {todayStockCheck.mismatchCount} รายการ</span> : <span className="text-emerald-600">สต๊อกตรงทั้งหมด</span>}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-4">หากต้องการเช็คใหม่ ให้ Admin มอบหมายซ้ำอีกครั้งที่เมนู "มอบหมายเช็คสต๊อก"</p>
-                    </div>
-                ) : (
-                    <>
-                        <div className="p-5 border-b border-slate-100 bg-teal-50/30">
-                            <h3 className="font-bold text-teal-800 mb-1">เช็คสต๊อกประจำวันที่ {new Date().toLocaleDateString('th-TH')}</h3>
-                            {todayStockCheck?.assignedEmployeeName ? (
-                                <p className="text-xs text-slate-500 font-medium">ผู้รับผิดชอบวันนี้: {todayStockCheck.assignedEmployeeName}</p>
-                            ) : (
-                                <p className="text-xs text-slate-400 font-medium">วันนี้ยังไม่มีการมอบหมายผู้เช็ค — เช็คล่วงหน้าได้ตามปกติ</p>
-                            )}
-                            <div className="mt-3 flex items-center gap-3">
-                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-teal-500 transition-all" style={{ width: `${(checkedProductCount / (products.length || 1)) * 100}%` }}></div>
-                                </div>
-                                <span className="text-xs font-bold text-teal-700 shrink-0">{checkedProductCount}/{products.length} รายการ</span>
-                            </div>
-                        </div>
-                        <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
-                            {products.map(p => {
-                                const r = checkResults[p.id];
-                                return (
-                                    <div key={p.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-bold text-slate-800 text-sm">{p.name}</p>
-                                            <p className="text-xs text-slate-400">ในระบบ: {p.stock} ชิ้น</p>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'match'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'match' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✓ ตรง</button>
-                                            <button onClick={() => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], status: 'mismatch'}}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition ${r?.status === 'mismatch' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>✕ ไม่ตรง</button>
-                                        </div>
-                                        {r?.status === 'mismatch' && (
-                                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                                <input type="number" placeholder="นับได้จริง..." value={r?.actualCount ?? ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], actualCount: e.target.value}}))} className="w-full sm:w-28 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500 text-center font-bold"/>
-                                                <input type="text" placeholder="หมายเหตุ (ถ้ามี)..." value={r?.note || ''} onChange={e => setCheckResults(prev => ({...prev, [p.id]: {...prev[p.id], note: e.target.value}}))} className="w-full sm:w-48 p-2 border border-red-200 rounded-lg text-xs outline-none focus:border-red-500"/>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-                            <button onClick={handleSubmitStockCheck} disabled={isProcessing || checkedProductCount < products.length} className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-700 transition">
-                                ยืนยันเช็คสต๊อก ({checkedProductCount}/{products.length})
-                            </button>
-                        </div>
-                    </>
-                )}
-            </div>
-        )}
-
-        {mode === 'check_history' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-cyan-200 overflow-hidden">
-                <div className="p-5 border-b border-slate-100 bg-cyan-50/30">
-                    <h3 className="font-bold text-cyan-800 mb-1">ประวัติการเช็คสต๊อกย้อนหลัง</h3>
-                    <p className="text-xs text-slate-500">ดูได้ว่าแต่ละวันใครเป็นคนเช็ค และผลเป็นอย่างไร (ทุกคนดูได้)</p>
-                </div>
-                <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
-                    {completedStockCheckHistory.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400">
-                            <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
-                            <p className="font-medium text-sm">ยังไม่มีประวัติการเช็คสต๊อกที่เสร็จสมบูรณ์</p>
-                        </div>
-                    ) : (
-                        completedStockCheckHistory.map(check => {
-                            const isExpanded = expandedCheckDate === check.id;
-                            let dateLabel = check.id;
-                            try { dateLabel = new Date(check.id + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
-                            return (
-                                <div key={check.id}>
-                                    <div onClick={() => setExpandedCheckDate(isExpanded ? null : check.id)} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/60 transition-colors">
-                                        <div>
-                                            <p className="font-bold text-slate-800 text-sm">{dateLabel}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center"><User size={11} className="mr-1"/> ผู้เช็ค: {check.checkerEmployeeName || check.completedByUsername || '-'}</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${check.mismatchCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                                                {check.mismatchCount > 0 ? `ไม่ตรง ${check.mismatchCount} รายการ` : 'ตรงทั้งหมด'}
-                                            </span>
-                                            <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}/>
-                                        </div>
-                                    </div>
-                                    {isExpanded && (
-                                        <div className="px-4 pb-4 bg-slate-50/50 animate-in fade-in duration-200">
-                                            <div className="bg-white rounded-xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
-                                                {(check.items || []).length === 0 ? (
-                                                    <p className="p-3 text-xs text-slate-400 text-center">ไม่มีรายละเอียดรายการ</p>
-                                                ) : (
-                                                    check.items.map((item, idx) => (
-                                                        <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
-                                                            <div className="flex-1 min-w-0">
-                                                                <span className="text-sm font-medium text-slate-700">{item.productName}</span>
-                                                                {item.note && <p className="text-xs text-slate-400 italic mt-0.5">{item.note}</p>}
-                                                            </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                {(item.systemStock !== undefined || (item.actualCount !== undefined && item.actualCount !== null)) && (
-                                                                    <span className="text-xs text-slate-500 whitespace-nowrap">
-                                                                        {item.systemStock !== undefined && <>{item.status === 'mismatch' ? 'ระบบ' : 'คงเหลือ'}: <b className="text-slate-700">{item.systemStock}</b></>}
-                                                                        {item.actualCount !== undefined && item.actualCount !== null && <> · นับได้จริง: <b className="text-red-600">{item.actualCount}</b></>}
-                                                                    </span>
-                                                                )}
-                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border shrink-0 ${item.status === 'mismatch' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-                                                                    {item.status === 'mismatch' ? '✕ ไม่ตรง' : '✓ ตรง'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
-        )}
-
-        {mode === 'unbox' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200">
-                <h3 className="font-bold text-purple-800 mb-4">แกะกล่อง (แปลงหน่วยจากกล่องใหญ่เป็นแผงย่อย)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าต้นทาง (หน่วยกล่อง)</label>
-                        <select value={selectedBoxProduct} onChange={(e) => {
-                            const boxId = e.target.value;
-                            setSelectedBoxProduct(boxId);
-                            const boxP = products.find(p => p.id === boxId);
-                            if (boxP && boxP.name && boxP.name.includes('ยกกล่อง')) {
-                                const guessName = boxP.name.replace('ยกกล่อง', 'แผง').trim();
-                                const guess = products.find(p => p.name && p.name.trim() === guessName);
-                                if (guess) setSelectedPanelProduct(guess.id);
-                            }
-                        }} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
-                            <option value="">-- เลือกสินค้า --</option>
-                            {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">สินค้าปลายทาง (หน่วยแผง)</label>
-                        <select value={selectedPanelProduct} onChange={(e) => setSelectedPanelProduct(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500 text-sm font-medium bg-white">
-                            <option value="">-- เลือกสินค้า --</option>
-                            {products.map(p => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.stock})</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนกล่องที่จะแกะ</label>
-                        <input type="number" min="1" value={unboxQty} onChange={(e) => setUnboxQty(Math.max(1, parseInt(e.target.value) || 1))} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">จำนวนแผงต่อ 1 กล่อง</label>
-                        <input type="number" min="1" placeholder="เช่น 50" value={unboxRatio} onChange={(e) => setUnboxRatio(e.target.value)} className="w-full p-3 border rounded-xl outline-none focus:border-purple-500"/>
-                    </div>
-                </div>
-                {selectedBoxProduct && selectedPanelProduct && unboxRatio && (
-                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-4 text-sm text-purple-800 font-bold">
-                        จะตัดสต๊อก "{getProduct(selectedBoxProduct)?.name}" ออก {unboxQty} กล่อง และเพิ่มสต๊อก "{getProduct(selectedPanelProduct)?.name}" อีก {Number(unboxQty) * Number(unboxRatio)} แผง
-                    </div>
-                )}
-                <button onClick={handleUnbox} disabled={isProcessing} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl shadow-md hover:bg-purple-700 transition-colors">ยืนยันแกะกล่อง</button>
-            </div>
-        )}
-
-        {mode === 'edit' && (
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-200">
-                <h3 className="font-bold text-blue-800 mb-4">แก้ไขสต๊อก (แทนที่ค่าเดิมเพื่อแก้บัคข้อมูล)</h3>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <input type="text" value={getProduct(selectedProduct)?.name || ''} disabled className="flex-1 p-3 bg-slate-100 border rounded-xl font-medium"/>
-                    <input type="number" placeholder="จำนวนที่ถูกต้อง..." value={stockAmount} onChange={e=>setStockAmount(e.target.value)} className="w-full sm:w-48 p-3 border rounded-xl outline-none focus:border-blue-500"/>
-                    <button onClick={() => handleUpdateStock(true)} disabled={isProcessing} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md">เซ็ตค่าใหม่</button>
-                </div>
-            </div>
-         )}
-
-        {mode === 'return' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
-                <h3 className="font-bold text-orange-800 mb-4">ระบบรับคืนสินค้าจากลูกค้า (ดึงของกลับสต๊อก)</h3>
-                <div className="flex gap-4 mb-6">
-                    <input type="text" placeholder="ระบุรหัสออเดอร์ (เช่น ORD-123)..." value={returnOrderId} onChange={e=>setReturnOrderId(e.target.value)} className="flex-1 p-3 border rounded-xl outline-none focus:border-orange-500"/>
-                    <button onClick={handleSearchReturnOrder} className="px-6 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-md flex items-center"><Search size={18} className="mr-1"/> ค้นหา</button>
-                </div>
-                {returnItems.length > 0 && (
-                    <div className="space-y-4">
-                         <table className="w-full text-left text-sm border-collapse">
-                            <thead><tr className="bg-slate-50"><th className="p-3">สินค้า</th><th className="p-3">จำนวนที่ซื้อ</th><th className="p-3">จำนวนที่จะคืน</th></tr></thead>
-                            <tbody>
-                                 {returnItems.map((item, idx) => (
-                                    <tr key={idx} className="border-b">
-                                        <td className="p-3 font-medium">{getProduct(item.productId)?.name || 'Unknown'}</td>
-                                        <td className="p-3 font-bold">{item.quantity}</td>
-                                        <td className="p-3"><input type="number" max={item.quantity} min="0" value={item.returnQty} onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }} className="w-24 p-2 border rounded outline-none text-center focus:border-orange-500"/></td>
-                                    </tr>
-                                ))}
-                             </tbody>
-                        </table>
-                        <button onClick={handleProcessReturn} disabled={isProcessing} className="w-full py-4 bg-orange-500 text-white font-bold rounded-xl shadow-md hover:bg-orange-600 transition-colors">ยืนยันการทำรายการคืน</button>
-                    </div>
-                 )}
-            </div>
-        )}
-
-        {mode === 'history' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
-                <div className="p-5 border-b border-slate-100 bg-indigo-50/30">
-                    <h3 className="font-bold text-indigo-800 mb-4">ประวัติการทำรายการคลังสินค้า</h3>
-                    <div className="flex flex-wrap gap-3">
-                        <select value={historyActionFilter} onChange={e => setHistoryActionFilter(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white font-medium">
-                            <option value="all">ทุกประเภทรายการ</option>
-                            <option value="ADD_STOCK">นำเข้าสินค้า</option>
-                            <option value="OVERRIDE_STOCK">แก้ไขสต๊อก</option>
-                            <option value="RETURN_STOCK">ลูกค้าคืนของ</option>
-                            <option value="UNBOX_STOCK">แกะกล่อง</option>
-                            <option value="ASSIGN_STOCK_CHECK">มอบหมายเช็คสต๊อก</option>
-                            <option value="COMPLETE_STOCK_CHECK">เช็คสต๊อกประจำวัน</option>
-                        </select>
-                        <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1">
-                            <input type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
-                            <span className="text-slate-400 text-xs font-bold">-</span>
-                            <input type="date" value={historyToDate} onChange={e => setHistoryToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-sm outline-none text-slate-700 font-medium"/>
-                        </div>
-                        {(historyActionFilter !== 'all' || historyFromDate || historyToDate) && (
-                            <button onClick={() => { setHistoryActionFilter('all'); setHistoryFromDate(''); setHistoryToDate(''); }} className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition">ล้างตัวกรอง</button>
-                        )}
-                    </div>
-                </div>
-                <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
-                    {stockHistoryLogs.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400">
-                            <FileQuestion size={40} className="mx-auto mb-3 text-slate-300"/>
-                            <p className="font-medium text-sm">ไม่พบประวัติการทำรายการตามเงื่อนไขที่เลือก</p>
-                        </div>
-                    ) : (
-                        stockHistoryLogs.map(log => {
-                            const meta = getStockActionMeta(log.action);
-                            let dateStr = '-';
-                            try { const d = new Date(log.timestamp); if (!isNaN(d.getTime())) dateStr = d.toLocaleString('th-TH'); } catch(e) {}
-                            return (
-                                <div key={log.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-50/60 transition-colors">
-                                    <span className={`shrink-0 w-fit text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg border ${meta.badgeClass}`}>{meta.label}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-slate-800 font-medium break-words">{log.details || '-'}</p>
-                                        <p className="text-[10px] md:text-xs text-slate-400 mt-1 flex items-center flex-wrap gap-x-3">
-                                            <span className="flex items-center"><Clock size={11} className="mr-1"/>{dateStr}</span>
-                                            <span className="flex items-center"><User size={11} className="mr-1"/>{log.user || '-'}</span>
-                                        </p>
-                                    </div>
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
-        )}
-
-        {mode === 'view' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-4 bg-slate-50 border-b flex gap-4">
-                    <input type="text" placeholder="ค้นหาสินค้า..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded-lg text-sm outline-none focus:border-blue-500"/>
-                    <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="p-2 border rounded-lg text-sm bg-white outline-none focus:border-blue-500"><option value="name_asc">ชื่อ (ก-ฮ)</option><option value="stock_asc">สต๊อกเหลือน้อย</option><option value="stock_desc">สต๊อกคงเหลือมาก</option></select>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                         <thead><tr className="bg-slate-50/80 text-slate-500 text-sm border-b"><th className="py-3 px-4 font-bold text-center w-16">ลำดับ</th><th className="py-3 px-4 font-bold">สินค้า</th><th className="py-3 px-4 text-center font-bold">คงเหลือ</th>{!isExecutiveView && canEditTab('stock') && <th className="py-3 px-4 text-right font-bold">ตั้งค่า</th>}</tr></thead>
-                        <tbody className="text-sm">
-                            {filteredAndSortedProducts.map((p, idx) => (
-                                 <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
-                                    <td className="py-3 px-4 text-center font-bold text-slate-400">{idx+1}</td>
-                                    <td className="py-3 px-4 font-medium text-slate-800">{p.name}</td>
-                                    <td className="py-3 px-4 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(p.stock) <= 5 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>{p.stock}</span></td>
-                                    {!isExecutiveView && canEditTab('stock') && (
-                                        <td className="py-3 px-4 text-right">
-                                             <button onClick={() => {
-                                                 setSelectedProduct(p.id); 
-                                                 setStockAmount(p.stock); 
-                                                 setOriginalStock(p.stock); // เก็บค่าก่อนแก้ เพื่อคำนวณ diff
-                                                 setMode('edit');
-                                             }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="แก้ไขแบบแทนที่ค่าเดิม"><Edit2 size={16}/></button>
-                                        </td>
-                                     )}
-                                </tr>
-                            ))}
-                             {filteredAndSortedProducts.length === 0 && (<tr><td colSpan="4" className="text-center p-8 text-slate-400 font-medium text-xs">ไม่พบข้อมูล</td></tr>)}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        )}
-       </div>
-    );
-  };
-
-  const UsersManagementView = () => {
-    const [isEditing, setIsEditing] = useState(null);
-    const [editForm, setEditForm] = useState({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
-    const [isAdding, setIsAdding] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-
-    const handlePermissionChange = (perm) => {
-      setEditForm(prev => {
-        const newPerms = { ...prev.permissions, [perm]: !prev.permissions[perm] };
-        if (perm === 'dashboard' && !newPerms.dashboard) newPerms.dashboardExport = false;
-        if (perm === 'products' && !newPerms.products) { newPerms.productsEdit = false; newPerms.productsExport = false; }
-        if (perm === 'stock' && !newPerms.stock) { newPerms.stockEdit = false; newPerms.stockExport = false; }
-        if (perm === 'history' && !newPerms.history) newPerms.historyEdit = false;
-        if (perm === 'attendance' && !newPerms.attendance) newPerms.attendanceEdit = false;
-        return { ...prev, permissions: newPerms };
-      });
-    };
-
-    const handleSave = async (id) => {
-      setIsProcessing(true);
-      try {
-        await updateDoc(doc(db, "users", id), { password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions });
-        setIsEditing(null);
-      } catch (error) { alert("Error: " + error.message); }
-      setIsProcessing(false);
-    };
-    const handleAdd = async () => {
-      if (!editForm.username || !editForm.password) { alert('กรุณากรอกข้อมูลให้ครบ'); return; }
-      if (users.find(u => u.username === editForm.username)) { alert('ชื่อนี้มีอยู่แล้ว'); return; }
-      setIsProcessing(true);
-      try {
-        await addDoc(collection(db, "users"), { username: editForm.username, password: editForm.password, role: editForm.role, permissions: editForm.permissions || defaultPermissions });
-        setIsAdding(false); setEditForm({ username: '', password: '', role: 'staff', permissions: defaultPermissions });
-      } catch(error) { alert("Error: " + error.message); }
-      setIsProcessing(false);
-    };
-
-    return (
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 relative z-10">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
-          <div>
-            <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight">การจัดการผู้ใช้</h2>
-            <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">ตั้งค่ารหัสผ่าน และกำหนดสิทธิ์การเข้าถึงของพนักงาน</p>
-          </div>
-           {!isAdding && <button onClick={() => { setIsAdding(true); setEditForm({username:'', password:'', role:'staff', permissions: defaultPermissions}); setIsEditing(null); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold w-full sm:w-auto justify-center transition-colors"><Plus size={14}/><span>เพิ่มผู้ใช้</span></button>}
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
-            <thead>
-              <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100 text-xs uppercase"><th className="p-3 md:p-4 font-bold">Username</th><th className="p-3 md:p-4 font-bold">รหัสผ่าน</th><th className="p-3 md:p-4 font-bold">ระดับสิทธิ์</th><th className="p-3 md:p-4 font-bold">ตั้งค่าความสามารถ (Permissions)</th><th className="p-3 md:p-4 font-bold text-right">จัดการ</th></tr>
-            </thead>
-            <tbody className="text-xs md:text-sm">
-              {isAdding && (
-                <tr className="bg-blue-50/60 align-top border-b border-blue-100">
-                   <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="ชื่อ..." value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} disabled={isProcessing} /></td>
-                  <td className="p-3"><input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" placeholder="รหัสผ่าน..." value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} /></td>
-                  <td className="p-3"><select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500 bg-white" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select></td>
-                  <td className="p-3">
-                    {editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px]">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
-                      <div className="flex flex-col space-y-2">
-                        <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
-                        <div className="bg-white p-2 rounded border border-slate-200">
-                          <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
-                          <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
-                        </div>
-
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap space-x-1"><button onClick={handleAdd} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16}/></button><button onClick={() => setIsAdding(false)} disabled={isProcessing} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><X size={16}/></button></td>
-                </tr>
-              )}
-              {users.map(u => (
-                <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 align-top transition-colors">
-                  <td className="p-3 md:p-4 font-bold text-slate-800 pt-5">{u.username}</td>
-                  <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<input className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} disabled={isProcessing} />) : (<span className="text-slate-400 tracking-widest">••••••</span>)}</td>
-                  <td className="p-3 md:p-4 pt-4">{isEditing === u.id ? (<select className="p-1.5 border border-blue-200 rounded w-full text-xs outline-none focus:border-blue-500" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} disabled={isProcessing}><option value="staff">พนักงาน (Staff)</option><option value="admin">ผู้ดูแล (Admin)</option></select>) : (<span className={`px-2 py-1 rounded text-[9px] font-bold border ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role.toUpperCase()}</span>)}</td>
-                  <td className="p-3 md:p-4">
-                    {isEditing === u.id ? (editForm.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-100 border border-purple-200 px-2 py-1 rounded text-[10px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
-                        <div className="flex flex-col space-y-2 mt-1">
-                          <span className="text-slate-600 font-bold flex items-center text-[10px]"><ShieldCheck size={12} className="mr-1 text-blue-500"/>เลือกเมนูที่อนุญาต:</span>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm">
-                            <label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendance || false} onChange={()=>handlePermissionChange('attendance')} className="rounded text-indigo-600 w-3 h-3"/> <span className="text-slate-800">ระบบลงเวลาด้วยใบหน้า</span></label>
-                            <div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.attendanceEdit || false} onChange={()=>handlePermissionChange('attendanceEdit')} disabled={!editForm.permissions.attendance} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/แก้ไขเวลาได้</span></label></div>
-                          </div>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboard || false} onChange={()=>handlePermissionChange('dashboard')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">Dashboard</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.dashboardExport || false} onChange={()=>handlePermissionChange('dashboardExport')} disabled={!editForm.permissions.dashboard} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.products || false} onChange={()=>handlePermissionChange('products')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">การจัดการสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsEdit || false} onChange={()=>handlePermissionChange('productsEdit')} disabled={!editForm.permissions.products} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>เพิ่ม/ลบ/แก้ไข ได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.productsExport || false} onChange={()=>handlePermissionChange('productsExport')} disabled={!editForm.permissions.products} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.stock || false} onChange={()=>handlePermissionChange('stock')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">สต๊อกสินค้า</span></label><div className="ml-5 flex flex-wrap gap-2"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockEdit || false} onChange={()=>handlePermissionChange('stockEdit')} disabled={!editForm.permissions.stock} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>อัปเดตตัวเลขได้</span></label><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.stockExport || false} onChange={()=>handlePermissionChange('stockExport')} disabled={!editForm.permissions.stock} className="rounded text-emerald-500 w-2.5 h-2.5"/> <span>ส่งออก Excel ได้</span></label></div></div>
-                          <div className="bg-white p-2 rounded border border-slate-200 shadow-sm"><label className="flex items-center space-x-1.5 font-bold mb-1 text-[11px] cursor-pointer"><input type="checkbox" checked={editForm.permissions.history || false} onChange={()=>handlePermissionChange('history')} className="rounded text-blue-600 w-3 h-3"/> <span className="text-slate-800">ประวัติการขาย</span></label><div className="ml-5"><label className="flex items-center space-x-1.5 text-[10px] text-slate-500 cursor-pointer"><input type="checkbox" checked={editForm.permissions.historyEdit || false} onChange={()=>handlePermissionChange('historyEdit')} disabled={!editForm.permissions.history} className="rounded text-orange-500 w-2.5 h-2.5"/> <span>แก้ไข/ลบออเดอร์ ได้</span></label></div></div>
-                        </div>
-                      )
-                    ) : (u.role === 'admin' ? (<span className="text-purple-700 font-bold bg-purple-50 border border-purple-100 px-2 py-1 rounded text-[9px] mt-1 inline-block">เข้าถึงได้ทุกเมนู (Admin)</span>) : (
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                          <span className="bg-blue-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded">ขาย (POS)</span>
-                          {u.permissions?.attendance && <span className="bg-indigo-50 text-indigo-600 border border-indigo-200 font-bold text-[9px] px-1.5 py-0.5 rounded">ลงเวลา</span>}
-                           {u.permissions?.dashboard && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">Dashboard</span>}
-                          {u.permissions?.products && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">การจัดการสินค้า</span>}
-                          {u.permissions?.stock && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">สต๊อกสินค้า</span>}
-                          {u.permissions?.history && <span className="bg-slate-50 text-slate-600 border border-slate-200 font-medium text-[9px] px-1.5 py-0.5 rounded">ประวัติการขาย</span>}
-                        </div>
-                      )
-                     )}
-                  </td>
-                  <td className="p-3 md:p-4 text-right space-x-1 whitespace-nowrap pt-4">
-                    {isEditing === u.id ? (<><button onClick={() => handleSave(u.id)} disabled={isProcessing} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded"><Save size={16}/></button><button onClick={() => setIsEditing(null)} disabled={isProcessing} className="text-slate-500 hover:bg-slate-100 p-1.5 rounded"><X size={16}/></button></>) : (<><button onClick={() => { setIsEditing(u.id); setEditForm({username: u.username, password: u.password, role: u.role, permissions: u.permissions || defaultPermissions}); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16}/></button><button onClick={async () => { if(confirm('ลบผู้ใช้นี้ออกจากระบบ?')) await deleteDoc(doc(db, "users", u.id)); }} className={`text-red-500 hover:bg-red-50 p-1.5 rounded ${u.id === loggedInUser.id ? 'opacity-0 pointer-events-none' : ''}`}><Trash2 size={16}/></button></>)}
-                  </td>
-                </tr>
-               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
 
   if (!isUsersLoaded || isLoading) {
     return (
@@ -3968,7 +3988,13 @@ export default function App() {
           <div className="max-w-5xl mx-auto space-y-6 relative">
             <div className="flex items-center mb-2"><div className="bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-full text-xs font-bold flex items-center shadow-sm tracking-wide"><span className="text-amber-500 mr-1.5 text-base leading-none">👑</span> Executive View</div></div>
             {activeTab === 'dashboard' && <DashboardView/>}
-            {activeTab === 'stock' && <StockView/>}
+            {activeTab === 'stock' && <StockView
+              products={products} sales={sales} users={users} employees={employees}
+              auditLogs={auditLogs} stockChecks={stockChecks} loggedInUser={loggedInUser}
+              isExecutiveView={isExecutiveView} getProduct={getProduct} getLocalISODate={getLocalISODate}
+              downloadMobileSafeCSV={downloadMobileSafeCSV} canEditTab={canEditTab} canExportTab={canExportTab}
+              isStockCheckPendingFor={isStockCheckPendingFor} applySummaryDelta={applySummaryDelta}
+            />}
           </div>
         </div>
       </div>
@@ -4051,10 +4077,25 @@ export default function App() {
             />}
             {activeTab === 'employees' && canAccess('employees') && <EmployeeManagementView/>}
              {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView/>}
-            {activeTab === 'products' && canAccess('products') && <ProductsView/>}
-            {activeTab === 'stock' && canAccess('stock') && <StockView/>}
-            {activeTab === 'users' && canAccess('users') && <UsersManagementView/>}
-            {activeTab === 'history' && canAccess('history') && <SalesHistoryView/>}
+            {activeTab === 'products' && canAccess('products') && <ProductsView
+              products={products} loggedInUser={loggedInUser} formatMoney={formatMoney}
+              getLocalISODate={getLocalISODate} downloadMobileSafeCSV={downloadMobileSafeCSV}
+              canEditTab={canEditTab} canExportTab={canExportTab}
+            />}
+            {activeTab === 'stock' && canAccess('stock') && <StockView
+              products={products} sales={sales} users={users} employees={employees}
+              auditLogs={auditLogs} stockChecks={stockChecks} loggedInUser={loggedInUser}
+              isExecutiveView={isExecutiveView} getProduct={getProduct} getLocalISODate={getLocalISODate}
+              downloadMobileSafeCSV={downloadMobileSafeCSV} canEditTab={canEditTab} canExportTab={canExportTab}
+              isStockCheckPendingFor={isStockCheckPendingFor} applySummaryDelta={applySummaryDelta}
+            />}
+            {activeTab === 'users' && canAccess('users') && <UsersManagementView users={users} loggedInUser={loggedInUser} />}
+            {activeTab === 'history' && canAccess('history') && <SalesHistoryView
+              products={products} sales={sales} productMap={productMap} loggedInUser={loggedInUser}
+              getProduct={getProduct} formatMoney={formatMoney} getLocalISODate={getLocalISODate}
+              groupSalesByTransaction={groupSalesByTransaction} canEditTab={canEditTab}
+              applySummaryDelta={applySummaryDelta} getSaleProfit={getSaleProfit}
+            />}
             {activeTab === 'sales' && canAccess('sales') && <SalesView products={products} sales={sales} attendanceLogs={attendanceLogs} loggedInUser={loggedInUser} setActiveTab={setActiveTab} getProduct={getProduct} formatMoney={formatMoney} getLocalISODate={getLocalISODate} groupSalesByTransaction={groupSalesByTransaction} />}
           </div>
         </main>
