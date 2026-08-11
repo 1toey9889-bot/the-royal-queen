@@ -3796,19 +3796,39 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
     <div className="min-h-screen flex items-center justify-center p-4 font-sans relative">
       <AppBackground/>
       <AppCredit/>
-      <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border border-white/50 p-8 md:p-10 space-y-8">
-        <div className="text-center space-y-4">
-          <ResilientLogo className="mx-auto h-24 md:h-32 rounded-3xl shadow-xl w-full max-w-[320px]"/>
-          <p className="text-sm md:text-base text-slate-500 font-semibold tracking-wide">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
-        </div>
-        <form onSubmit={handleLogin} className="space-y-6">
-          {error && <div className="bg-red-50/80 text-red-600 p-3.5 rounded-2xl text-sm text-center font-bold border border-red-100 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">{error}</div>}
-          <div className="space-y-5">
-            <div><label className="block text-sm font-bold text-slate-700 mb-2 ml-1">ชื่อผู้ใช้งาน</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={20} className="text-slate-400"/></div><input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-slate-50/50 hover:bg-white font-medium" placeholder="admin หรือ user" required /></div></div>
-            <div><label className="block text-sm font-bold text-slate-700 mb-2 ml-1">รหัสผ่าน</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={20} className="text-slate-400"/></div><input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm md:text-base outline-none bg-slate-50/50 hover:bg-white font-medium" placeholder="••••••" required /></div></div>
+      {/* กรอบไล่เฉดสีทอง: ใช้ชั้นนอกเป็น gradient แล้วเว้นขอบ 2px ให้เห็นเป็นเส้นขอบทอง */}
+      <div className="max-w-md w-full rounded-[2.6rem] p-[2px] bg-gradient-to-br from-[#F3D999] via-[#CEA85E] to-[#9A7434] shadow-[0_20px_60px_-15px_rgba(154,116,52,0.45)]">
+        <div className="rounded-[2.5rem] bg-gradient-to-b from-white via-white to-[#FFFBF2] backdrop-blur-xl p-8 md:p-10 space-y-8">
+          <div className="text-center space-y-4">
+            <ResilientLogo className="mx-auto h-24 md:h-32 rounded-3xl shadow-xl w-full max-w-[320px]"/>
+            <div className="flex items-center justify-center gap-3">
+              <span className="h-px w-10 bg-gradient-to-r from-transparent to-[#CEA85E]"></span>
+              <p className="text-sm md:text-base font-semibold tracking-wide text-[#9A7434]">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
+              <span className="h-px w-10 bg-gradient-to-l from-transparent to-[#CEA85E]"></span>
+            </div>
           </div>
-          <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-4 rounded-2xl text-base font-bold transition-all shadow-[0_8px_30px_rgb(37,99,235,0.2)] transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
-        </form>
+          <form onSubmit={handleLogin} className="space-y-6">
+            {error && <div className="bg-red-50/80 text-red-600 p-3.5 rounded-2xl text-sm text-center font-bold border border-red-100 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">{error}</div>}
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#9A7434]">ชื่อผู้ใช้งาน</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={20} className="text-[#CEA85E]"/></div>
+                  <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-[#EADBBB] rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-[#FFFCF6] hover:bg-white font-medium text-slate-800" placeholder="admin หรือ user" required />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#9A7434]">รหัสผ่าน</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={20} className="text-[#CEA85E]"/></div>
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-[#EADBBB] rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-[#FFFCF6] hover:bg-white font-medium text-slate-800" placeholder="••••••" required />
+                </div>
+              </div>
+            </div>
+            <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
+          </form>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.33</p>
+        </div>
       </div>
     </div>
   );
