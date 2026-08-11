@@ -705,6 +705,1266 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
     </div>
   );
 };
+// ==========================================
+//  ระบบลงเวลาทำงาน + ตารางกะ - ประกาศไว้นอก App() เพื่อไม่ให้ React unmount/remount ทุกครั้งที่ App re-render
+//  (ถ้าประกาศไว้ข้างใน App กล้องสแกนใบหน้าจะถูกปิด-เปิดใหม่เอง และฟอร์ม/โมดัลที่เปิดค้างไว้จะรีเซ็ตทุก snapshot จาก Firestore)
+// ==========================================
+const AttendanceView = ({ attendanceLogs, employees, loggedInUser, isFaceModelsLoaded, setActiveTab, canEditTab, getLocalISODate, isStockCheckPendingFor, shiftSchedule, shiftSwapRequests, dayTypes, companyHolidays, attendanceLocalTab, setAttendanceLocalTab, scheduleMonth, setScheduleMonth, selectedScheduleDate, setSelectedScheduleDate, scheduleShiftPick, setScheduleShiftPick, isRequestingChange, setIsRequestingChange, changeRequestShiftType, setChangeRequestShiftType, showApprovalPanel, setShowApprovalPanel, isEditingDayType, setIsEditingDayType, adminSelectedEmployeeId, setAdminSelectedEmployeeId, showHolidayPanel, setShowHolidayPanel, editingHolidayId, setEditingHolidayId, holidayYearFilter, setHolidayYearFilter }) => {
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [message, setMessage] = useState({ text: '', type: '' });
+  // ใช้ state จากระดับ App() แทน useState local เพื่อไม่ให้ค่ารีเซ็ตเวลา component นี้ถูก remount (ดูคอมเมนต์ที่ประกาศ attendanceLocalTab ด้านบน)
+  const activeTab = attendanceLocalTab;
+  const setLocalActiveTab = setAttendanceLocalTab;
+  const videoRef = useRef(null);
+
+  // Filter states
+  const [historyViewMode, setHistoryViewMode] = useState('list');
+  const [filterDate, setFilterDate] = useState(getLocalISODate());
+  const [filterFromDate, setFilterFromDate] = useState(getLocalISODate());
+  const [filterToDate, setFilterToDate] = useState(getLocalISODate());
+  const [calendarMonth, setCalendarMonth] = useState(getLocalISODate().substring(0, 7));
+  const [filterEmployeeId, setFilterEmployeeId] = useState('all');
+
+  // Add/Edit Manual Modal States
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
+
+  // ตารางกะการทำงาน (Shift Scheduling) + วันหยุดประจำปี: state ที่เป็นการเลือก/คลิกยกไปไว้ระดับ App() แล้ว (ดูด้านบน)
+  // ส่วนช่องพิมพ์ข้อความเก็บไว้ local ที่นี่ เพื่อไม่ให้เสีย focus ทุกตัวอักษรที่พิมพ์ (ดูคอมเมนต์อธิบายที่ระดับ App())
+  const [changeRequestReason, setChangeRequestReason] = useState('');
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [editingHolidayName, setEditingHolidayName] = useState('');
+  const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
+
+  const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
+
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      setMessage({ text: 'ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตให้เบราว์เซอร์เข้าถึงกล้อง', type: 'error' });
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'checkin' && loggedInUser?.employeeData) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return () => stopCamera();
+  }, [activeTab, loggedInUser, startCamera, stopCamera]);
+
+  const handleVerifyAndRecord = async (type) => {
+    if (!loggedInUser?.employeeData) {
+      setMessage({ text: 'ไม่พบข้อมูลโปรไฟล์พนักงาน กรุณาติดต่อ Admin', type: 'error' });
+      return;
+    }
+
+    const todayStr = getLocalISODate();
+    const myTodayLogs = attendanceLogs.filter(log =>
+        log.employeeId === loggedInUser.employeeData.id &&
+        getLocalISODate(log.timestamp) === todayStr
+    );
+
+    const hasCheckedIn = myTodayLogs.some(l => l.type === 'checkin');
+    const hasStartedLive = myTodayLogs.some(l => l.type === 'start_live');
+    const hasCheckedOut = myTodayLogs.some(l => l.type === 'checkout');
+
+    if (type === 'checkin') {
+        if (hasCheckedIn) {
+            setMessage({ text: 'คุณได้ลงเวลาเข้างานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+            setTimeout(() => setMessage({text:'', type:''}), 5000);
+            return;
+        }
+    } 
+    else if (type === 'start_live') {
+        if (!hasCheckedIn) {
+             setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนเริ่มไลฟ์สด', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 5000);
+             return;
+        }
+        if (hasStartedLive) {
+             setMessage({ text: 'คุณได้เริ่มไลฟ์สดของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 5000);
+             return;
+        }
+    } 
+    else if (type === 'checkout') {
+        if (!hasCheckedIn) {
+             setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนออกงาน', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 5000);
+             return;
+        }
+        if (!hasStartedLive) {
+             setMessage({ text: '⚠️ กรุณาเริ่มไลฟ์สดก่อนออกงาน', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 5000);
+             return;
+        }
+        if (hasCheckedOut) {
+             setMessage({ text: 'คุณได้ลงเวลาออกงานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 5000);
+             return;
+        }
+        if (isStockCheckPendingFor(loggedInUser.employeeData.id)) {
+             setMessage({ text: '⚠️ วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก กรุณาไปที่เมนู "สต๊อกสินค้า" เพื่อเช็คให้เสร็จก่อนออกงาน', type: 'error' });
+             setTimeout(() => setMessage({text:'', type:''}), 6000);
+             return;
+        }
+    }
+
+    if (!isFaceModelsLoaded) {
+      setMessage({ text: 'AI Model ยังไม่พร้อมทำงาน กรุณารอสักครู่หรือรีเฟรชหน้าจอ', type: 'error' });
+      return;
+    }
+
+    setIsVerifying(true);
+    setMessage({ text: 'กำลังตรวจสอบใบหน้า...', type: 'info' });
+
+    try {
+      const video = videoRef.current;
+      const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+
+      if (!detections) throw new Error('ไม่พบใบหน้า กรุณามองตรงไปที่กล้องและให้อยู่ในแสงที่สว่างเพียงพอ');
+
+      const refImage = await faceapi.fetchImage(loggedInUser.employeeData.imageUrl);
+      const refDetections = await faceapi.detectSingleFace(refImage, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+
+      if (!refDetections) throw new Error('รูปภาพอ้างอิงในฐานข้อมูลไม่ชัดเจน กรุณาให้ Admin เปลี่ยนรูปใหม่');
+
+      const distance = faceapi.euclideanDistance(detections.descriptor, refDetections.descriptor);
+      const threshold = 0.55;
+
+      if (distance >= threshold) throw new Error('ใบหน้าไม่ตรงกับฐานข้อมูล กรุณาลองอีกครั้ง');
+
+      await addDoc(collection(db, "attendance"), {
+        userId: loggedInUser.id,
+        employeeId: loggedInUser.employeeData.id,
+        employeeName: loggedInUser.employeeData.fullName,
+        type: type, 
+        timestamp: new Date().toISOString()
+      });
+
+      setMessage({ text: 'บันทึกเวลาสำเร็จ', type: 'success' });
+      setTimeout(() => setMessage({text:'', type:''}), 5000);
+
+    } catch (err) {
+      console.error(err);
+      setMessage({ text: err.message || 'เกิดข้อผิดพลาดในการตรวจสอบใบหน้า', type: 'error' });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const filteredLogsForList = useMemo(() => {
+    let logs = attendanceLogs;
+    if (!canManageAllAttendance) {
+      logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+    } else if (filterEmployeeId !== 'all') {
+      logs = logs.filter(log => log.employeeId === filterEmployeeId);
+    }
+    return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
+  }, [attendanceLogs, filterDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
+
+  const tableData = useMemo(() => {
+    let logs = attendanceLogs;
+    if (!canManageAllAttendance) {
+      logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+    } else if (filterEmployeeId !== 'all') {
+      logs = logs.filter(log => log.employeeId === filterEmployeeId);
+    }
+    
+    const filtered = logs.filter(log => {
+      const d = getLocalISODate(log.timestamp);
+      return d >= filterFromDate && d <= filterToDate;
+    });
+
+    const grouped = {};
+    filtered.forEach(log => {
+      const d = getLocalISODate(log.timestamp);
+      if (!grouped[d]) grouped[d] = [];
+      grouped[d].push(log);
+    });
+    
+    Object.keys(grouped).forEach(date => {
+      grouped[date].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    });
+
+    return Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a)).map(date => ({
+      date,
+      logs: grouped[date].slice(0, 8) 
+    }));
+
+  }, [attendanceLogs, filterFromDate, filterToDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
+
+  const calendarLogs = useMemo(() => {
+    let logs = attendanceLogs;
+    if (!canManageAllAttendance) {
+      logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
+    } else if (filterEmployeeId !== 'all') {
+      logs = logs.filter(log => log.employeeId === filterEmployeeId);
+    }
+    return logs.filter(log => getLocalISODate(log.timestamp).startsWith(calendarMonth));
+  }, [attendanceLogs, calendarMonth, canManageAllAttendance, loggedInUser, filterEmployeeId]);
+
+  const getStatusBadge = (type) => {
+    if (type === 'checkin') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100 whitespace-nowrap shadow-sm"><CheckCircle2 size={14} className="mr-1"/>เข้างาน</span>;
+    if (type === 'start_live') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap shadow-sm"><Video size={14} className="mr-1"/>เริ่มไลฟ์สด</span>;
+    return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100 whitespace-nowrap shadow-sm"><LogOut size={14} className="mr-1"/>ออกงาน</span>;
+  };
+
+  const getTypeLabel = (type) => {
+    if (type === 'checkin') return 'เข้างาน';
+    if (type === 'start_live') return 'เริ่มไลฟ์สด';
+    return 'ออกงาน';
+  };
+
+  const openAddManualModal = () => {
+    const empId = canManageAllAttendance 
+                  ? (filterEmployeeId !== 'all' ? filterEmployeeId : employees[0]?.id || '') 
+                  : (loggedInUser.employeeData?.id || '');
+    const now = new Date();
+    setManualForm({ 
+      id: '', 
+      employeeId: empId, 
+      date: getLocalISODate(), 
+      time: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }), 
+      type: 'checkin' 
+    });
+    setIsEditingMode(false);
+    setShowManualModal(true);
+  };
+
+  const openEditManualModal = (log) => {
+    const d = new Date(log.timestamp);
+    setManualForm({
+      id: log.id,
+      employeeId: log.employeeId,
+      date: getLocalISODate(log.timestamp),
+      time: d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      type: log.type
+    });
+    setIsEditingMode(true);
+    setShowManualModal(true);
+  };
+
+  const handleSaveManual = async (e) => {
+    e.preventDefault();
+    try {
+      const emp = employees.find(e => e.id === manualForm.employeeId);
+      if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
+      
+      const timestamp = new Date(`${manualForm.date}T${manualForm.time}:00`).toISOString();
+      
+      if (isEditingMode && manualForm.id) {
+        await updateDoc(doc(db, "attendance", manualForm.id), {
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          type: manualForm.type,
+          timestamp: timestamp
+        });
+        await addDoc(collection(db, "audit_logs"), { action: "EDIT_ATTENDANCE", user: loggedInUser.username, details: `แก้ไขเวลา ${emp.fullName} เป็น ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
+      } else {
+        await addDoc(collection(db, "attendance"), {
+          userId: emp.userId || '',
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          type: manualForm.type,
+          timestamp: timestamp
+        });
+        await addDoc(collection(db, "audit_logs"), { action: "ADD_ATTENDANCE", user: loggedInUser.username, details: `เพิ่มเวลา ${emp.fullName} ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
+      }
+      setShowManualModal(false);
+    } catch (err) {
+      alert("เกิดข้อผิดพลาด: " + err.message);
+    }
+  };
+
+  const handleDeleteManual = async (id) => {
+    if(!window.confirm("ยืนยันการลบประวัติเวลานี้?")) return;
+    try {
+      await deleteDoc(doc(db, "attendance", id));
+    } catch(e) { alert("Error: " + e.message); }
+  };
+
+  // ==========================================
+  // ระบบลงกะการทำงาน (Shift Scheduling)
+  // ==========================================
+  const handleSetDayType = async (dateStr, dayTypeId) => {
+    const existing = dayTypes.find(d => d.id === dateStr);
+    if (existing && existing.dayTypeId !== dayTypeId) {
+      if (!window.confirm('วันนี้เคยตั้งรูปแบบวันไว้แล้ว การเปลี่ยนรูปแบบจะไม่ไปแก้ไขกะที่คนอื่นจองไว้แล้ว (กะเดิมจะยังคงเวลาเดิมไว้ตามที่จองไว้) ยืนยันเปลี่ยนรูปแบบวันหรือไม่?')) return;
+    }
+    setIsScheduleProcessing(true);
+    try {
+      await setDoc(doc(db, "day_types", dateStr), {
+        date: dateStr,
+        dayTypeId,
+        setByUsername: loggedInUser?.username || 'unknown',
+        setAt: new Date().toISOString()
+      });
+      if (existing && existing.dayTypeId !== dayTypeId) {
+        await addDoc(collection(db, "audit_logs"), { action: "EDIT_DAY_TYPE", user: loggedInUser?.username || 'unknown', details: `แก้ไขรูปแบบวันที่ ${dateStr} จาก "${getDayTypeMeta(existing.dayTypeId)?.label || existing.dayTypeId}" เป็น "${getDayTypeMeta(dayTypeId)?.label}"`, timestamp: new Date().toISOString() });
+      }
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleBookShift = async (dateStr, dayTypeId, slot, opts = {}) => {
+    const targetEmployeeId = opts.employeeId || loggedInUser?.employeeData?.id;
+    const targetEmployeeName = opts.employeeName || loggedInUser?.employeeData?.fullName;
+    if (!targetEmployeeId) return;
+    if (!slot) { alert('กรุณาเลือกกะที่ต้องการจอง'); return; }
+    const docId = `${targetEmployeeId}_${dateStr}`;
+    const existing = shiftSchedule.find(s => s.id === docId);
+    if (existing && !opts.allowOverwrite) { alert('มีกะที่จองไว้ในวันนี้แล้ว กรุณาใช้ปุ่ม "ขอเปลี่ยนกะ" แทน'); return; }
+    if (existing && opts.allowOverwrite) {
+      if (!window.confirm(`ยืนยันเปลี่ยนกะของ ${targetEmployeeName} เป็น "${slot.label}" หรือไม่?`)) return;
+    }
+    setIsScheduleProcessing(true);
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "shift_schedule", docId), {
+        employeeId: targetEmployeeId,
+        employeeName: targetEmployeeName,
+        date: dateStr,
+        dayTypeId,
+        shiftSlotId: slot.id, shiftLabel: slot.label, shiftTime: slot.time, badgeClass: slot.badgeClass, dotClass: slot.dotClass,
+        bookedByUsername: loggedInUser?.username || 'unknown',
+        bookedAt: new Date().toISOString()
+      });
+      if (opts.allowOverwrite) {
+        // ถ้ามีคำขอเปลี่ยนกะค้างอยู่ของพนักงานคนนี้วันนี้ ให้ถือว่าจบไปแล้วเพราะ Admin แก้ไขตรงแทน
+        const pending = shiftSwapRequests.find(r => r.employeeId === targetEmployeeId && r.date === dateStr && r.status === 'pending');
+        if (pending) {
+          batch.update(doc(db, "shift_swap_requests", pending.id), { status: 'approved', reviewedByUsername: loggedInUser?.username || 'unknown', reviewedAt: new Date().toISOString() });
+        }
+        batch.set(doc(collection(db, "audit_logs")), { action: "ADMIN_EDIT_SHIFT", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'จอง'}กะของ ${targetEmployeeName} วันที่ ${dateStr} เป็น "${slot.label}"`, timestamp: new Date().toISOString() });
+      }
+      await batch.commit();
+      setScheduleShiftPick('');
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleRequestShiftChange = async (dateStr, dayTypeId, currentBooking, requestedSlot, reason) => {
+    if (!loggedInUser?.employeeData) return;
+    if (!requestedSlot) { alert('กรุณาเลือกกะที่ต้องการเปลี่ยนไป'); return; }
+    if (requestedSlot.id === currentBooking.shiftSlotId) { alert('กะที่เลือกเหมือนกับกะปัจจุบัน กรุณาเลือกกะอื่น'); return; }
+    setIsScheduleProcessing(true);
+    try {
+      await addDoc(collection(db, "shift_swap_requests"), {
+        employeeId: loggedInUser.employeeData.id,
+        employeeName: loggedInUser.employeeData.fullName,
+        date: dateStr,
+        dayTypeId,
+        currentShiftSlotId: currentBooking.shiftSlotId, currentShiftLabel: currentBooking.shiftLabel, currentShiftTime: currentBooking.shiftTime,
+        requestedShiftSlotId: requestedSlot.id, requestedShiftLabel: requestedSlot.label, requestedShiftTime: requestedSlot.time, requestedBadgeClass: requestedSlot.badgeClass, requestedDotClass: requestedSlot.dotClass,
+        reason: reason || '',
+        status: 'pending',
+        requestedAt: new Date().toISOString(),
+        requestedByUsername: loggedInUser.username
+      });
+      setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); setSelectedScheduleDate(null);
+      alert('ส่งคำขอเปลี่ยนกะเรียบร้อย รอ Admin อนุมัติ');
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleReviewSwapRequest = async (request, approve) => {
+    setIsScheduleProcessing(true);
+    try {
+      const batch = writeBatch(db);
+      const reqRef = doc(db, "shift_swap_requests", request.id);
+      batch.update(reqRef, {
+        status: approve ? 'approved' : 'rejected',
+        reviewedByUsername: loggedInUser?.username || 'unknown',
+        reviewedAt: new Date().toISOString()
+      });
+      if (approve) {
+        const scheduleDocId = `${request.employeeId}_${request.date}`;
+        batch.set(doc(db, "shift_schedule", scheduleDocId), {
+          employeeId: request.employeeId,
+          employeeName: request.employeeName,
+          date: request.date,
+          dayTypeId: request.dayTypeId,
+          shiftSlotId: request.requestedShiftSlotId, shiftLabel: request.requestedShiftLabel, shiftTime: request.requestedShiftTime,
+          badgeClass: request.requestedBadgeClass, dotClass: request.requestedDotClass,
+          bookedByUsername: loggedInUser?.username || 'unknown',
+          bookedAt: new Date().toISOString()
+        });
+      }
+      batch.set(doc(collection(db, "audit_logs")), {
+        action: approve ? "APPROVE_SHIFT_CHANGE" : "REJECT_SHIFT_CHANGE",
+        user: loggedInUser?.username || 'unknown',
+        details: `${approve ? 'อนุมัติ' : 'ปฏิเสธ'}คำขอเปลี่ยนกะของ ${request.employeeName} วันที่ ${request.date} (${request.currentShiftLabel || '-'} → ${request.requestedShiftLabel || '-'})`,
+        timestamp: new Date().toISOString()
+      });
+      await batch.commit();
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleDeleteShiftBooking = async (booking) => {
+    if (!window.confirm(`ยืนยันลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'}) หรือไม่?`)) return;
+    setIsScheduleProcessing(true);
+    try {
+      await deleteDoc(doc(db, "shift_schedule", booking.id));
+      await addDoc(collection(db, "audit_logs"), { action: "DELETE_SHIFT", user: loggedInUser?.username || 'unknown', details: `ลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'})`, timestamp: new Date().toISOString() });
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const pendingSwapRequests = useMemo(() => {
+    return shiftSwapRequests.filter(r => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
+  }, [shiftSwapRequests]);
+
+  // ==========================================
+  // วันหยุดประจำปี (Company Holidays)
+  // ==========================================
+  const getHolidayForDate = (dateStr) => companyHolidays.find(h => h.id === dateStr) || null;
+
+  const holidaysForYearFilter = useMemo(() => {
+    return companyHolidays.filter(h => h.date.startsWith(holidayYearFilter)).sort((a, b) => a.date.localeCompare(b.date));
+  }, [companyHolidays, holidayYearFilter]);
+
+  const handleAddHoliday = async () => {
+    if (!newHolidayDate) { alert('กรุณาเลือกวันที่'); return; }
+    if (!newHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
+    setIsScheduleProcessing(true);
+    try {
+      const existing = getHolidayForDate(newHolidayDate);
+      await setDoc(doc(db, "company_holidays", newHolidayDate), {
+        date: newHolidayDate,
+        name: newHolidayName.trim(),
+        setByUsername: loggedInUser?.username || 'unknown',
+        setAt: new Date().toISOString()
+      });
+      await addDoc(collection(db, "audit_logs"), { action: existing ? "EDIT_HOLIDAY" : "ADD_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'เพิ่ม'}วันหยุดประจำปี ${newHolidayDate}: ${newHolidayName.trim()}`, timestamp: new Date().toISOString() });
+      setNewHolidayDate(''); setNewHolidayName('');
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleSaveHolidayName = async (holiday) => {
+    if (!editingHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
+    setIsScheduleProcessing(true);
+    try {
+      await updateDoc(doc(db, "company_holidays", holiday.id), { name: editingHolidayName.trim() });
+      await addDoc(collection(db, "audit_logs"), { action: "EDIT_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `แก้ไขวันหยุดประจำปี ${holiday.date} จาก "${holiday.name}" เป็น "${editingHolidayName.trim()}"`, timestamp: new Date().toISOString() });
+      setEditingHolidayId(null); setEditingHolidayName('');
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const handleDeleteHoliday = async (holiday) => {
+    if (!window.confirm(`ยืนยันลบวันหยุด "${holiday.name}" (${holiday.date}) หรือไม่?`)) return;
+    setIsScheduleProcessing(true);
+    try {
+      await deleteDoc(doc(db, "company_holidays", holiday.id));
+      await addDoc(collection(db, "audit_logs"), { action: "DELETE_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `ลบวันหยุดประจำปี ${holiday.date}: ${holiday.name}`, timestamp: new Date().toISOString() });
+    } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+    setIsScheduleProcessing(false);
+  };
+
+  const renderCalendar = () => {
+    const year = parseInt(calendarMonth.split('-')[0]);
+    const month = parseInt(calendarMonth.split('-')[1]) - 1;
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+          <button onClick={() => {
+            const d = new Date(year, month - 1, 1);
+            setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
+          <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month]} {year + 543}</h3>
+          <button onClick={() => {
+            const d = new Date(year, month + 1, 1);
+            setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
+        </div>
+ 
+        <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-blue-50">
+          {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
+            <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-blue-800'}`}>{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 auto-rows-fr">
+          {days.map((date, idx) => {
+            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] p-2"></div>;
+            
+            const dateStr = getLocalISODate(date.toISOString());
+            const dayLogs = calendarLogs.filter(l => getLocalISODate(l.timestamp) === dateStr).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+            const holiday = getHolidayForDate(dateStr);
+            const isToday = dateStr === getLocalISODate();
+            const isSunday = date.getDay() === 0;
+
+            return (
+              <div key={idx} className={`border-b border-r border-slate-100 min-h-[120px] p-1.5 flex flex-col ${isToday ? 'bg-blue-50/30' : holiday ? 'bg-rose-50/40' : ''}`}>
+                <div className={`text-right text-sm font-bold mb-1 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center ml-auto shadow-sm' : ''}`}>
+                  {date.getDate()}
+                </div>
+                {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
+   
+                <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
+                  {dayLogs.map((log, lIdx) => (
+                    <div key={lIdx} onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`text-[9px] md:text-[10px] font-bold p-1 rounded-md flex justify-between items-center ${canEditTab('attendance') ? 'cursor-pointer hover:opacity-80' : ''} ${log.type === 'checkin' ? 'bg-emerald-100 text-emerald-800' : log.type === 'start_live' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
+                      <span>{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
+                      <span className="hidden lg:inline">{getTypeLabel(log.type)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderScheduleCalendar = () => {
+    const [year, month] = scheduleMonth.split('-').map(Number);
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month - 1, i));
+    const todayStrForSchedule = getLocalISODate();
+
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+          <button onClick={() => { const d = new Date(year, month - 2, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
+          <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month-1]} {year + 543}</h3>
+          <button onClick={() => { const d = new Date(year, month, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
+        </div>
+        <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-indigo-50">
+          {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
+            <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-indigo-800'}`}>{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 auto-rows-fr">
+          {days.map((date, idx) => {
+            if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] md:min-h-[110px] p-1.5"></div>;
+            const dateStr = getLocalISODate(date.toISOString());
+            const dayShifts = shiftSchedule.filter(s => s.date === dateStr);
+            const dayType = dayTypes.find(d => d.id === dateStr);
+            const holiday = getHolidayForDate(dateStr);
+            const myShift = dayShifts.find(s => s.employeeId === loggedInUser?.employeeData?.id);
+            const myPendingRequest = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === dateStr && r.status === 'pending');
+            const isToday = dateStr === todayStrForSchedule;
+            const isSunday = date.getDay() === 0;
+
+            return (
+              <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); setAdminSelectedEmployeeId(loggedInUser?.employeeData?.id || ''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : holiday ? 'bg-rose-50/40' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
+                <div className="flex items-center justify-between mb-1">
+                  {dayType ? (
+                    <span className="text-[8px] font-bold text-slate-400 truncate pr-1" title={getDayTypeMeta(dayType.dayTypeId)?.label}>{getDayTypeMeta(dayType.dayTypeId)?.label}</span>
+                  ) : <span></span>}
+                  <div className={`text-right text-sm font-bold shrink-0 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm' : ''}`}>
+                    {date.getDate()}
+                  </div>
+                </div>
+                {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
+                <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
+                  {dayShifts.slice(0, 3).map((s, i) => (
+                    <div key={i} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
+                      {(s.employeeName || '-').split(' ')[0]} {s.shiftLabel || '-'}
+                    </div>
+                  ))}
+                  {dayShifts.length > 3 && <div className="text-[9px] text-slate-400 font-bold px-1">+{dayShifts.length - 3} เพิ่มเติม</div>}
+                  {myPendingRequest && <div className="text-[9px] font-bold px-1 py-0.5 rounded truncate bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center"><Bell size={8} className="mr-0.5 shrink-0"/>รออนุมัติ</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const todayStrUI = getLocalISODate();
+  const uiLogs = attendanceLogs.filter(log => 
+    log.employeeId === loggedInUser?.employeeData?.id && 
+    getLocalISODate(log.timestamp) === todayStrUI
+  );
+  const isChkin = uiLogs.some(l => l.type === 'checkin');
+  const isStrt = uiLogs.some(l => l.type === 'start_live');
+  const isChkout = uiLogs.some(l => l.type === 'checkout');
+
+  const isMyStockCheckPending = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
+        <div className="flex items-center space-x-3">
+          <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">ระบบลงเวลาทำงาน</h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">ยืนยันตัวตนด้วยใบหน้า (Face Verification)</p>
+          </div>
+        </div>
+        <div className="flex bg-slate-100 p-1.5 rounded-xl w-full md:w-auto">
+          <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
+          <button onClick={() => setLocalActiveTab('schedule')} className={`relative flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            ตารางกะ
+            {canManageAllAttendance && pendingSwapRequests.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{pendingSwapRequests.length}</span>
+            )}
+          </button>
+          <button onClick={() => setLocalActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ประวัติ</button>
+        </div>
+      </div>
+
+      {activeTab === 'checkin' && (
+        loggedInUser?.employeeData ? (
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+            {isMyStockCheckPending && (
+              <div className="w-full max-w-lg mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+                <AlertCircle size={24} className="text-amber-500 shrink-0"/>
+                <p className="text-sm text-amber-800 font-bold flex-1">วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก ต้องเช็คให้เสร็จก่อนจึงจะออกงานได้</p>
+                <button onClick={() => setActiveTab('stock')} className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition">ไปเช็คสต๊อก</button>
+              </div>
+            )}
+            {getHolidayForDate(getLocalISODate()) && (
+              <div className="w-full max-w-lg mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-center sm:text-left justify-center sm:justify-start">
+                <span className="text-2xl shrink-0">🎌</span>
+                <p className="text-sm text-rose-700 font-bold">วันนี้เป็นวันหยุดประจำปี: {getHolidayForDate(getLocalISODate()).name}</p>
+              </div>
+            )}
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
+              <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
+            </div>
+
+            <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
+              <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
+              {isVerifying && (
+                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                  <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                  <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
+                </div>
+              )}
+            </div>
+
+            {message.text && (
+              <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
+                {message.text}
+              </div>
+            )}
+
+            <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
+              <button 
+                onClick={() => handleVerifyAndRecord('checkin')} 
+                disabled={isVerifying || !isFaceModelsLoaded} 
+                className={`flex-1 ${isChkin ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+              >
+                <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">{isChkin ? 'เข้างานแล้ว' : 'เข้างาน'}</span>
+              </button>
+              <button 
+                onClick={() => handleVerifyAndRecord('start_live')} 
+                disabled={isVerifying || !isFaceModelsLoaded} 
+                className={`flex-1 ${isStrt ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+              >
+                <Video size={20} className="mr-1.5"/> <span className="text-sm">{isStrt ? 'เริ่มไลฟ์สดแล้ว' : 'เริ่มไลฟ์สด'}</span>
+              </button>
+              <button 
+                onClick={() => handleVerifyAndRecord('checkout')} 
+                disabled={isVerifying || !isFaceModelsLoaded} 
+                className={`flex-1 ${isChkout ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-red-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
+              >
+                <LogOut size={20} className="mr-1.5"/> <span className="text-sm">{isChkout ? 'ออกงานแล้ว' : 'ออกงาน'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
+            <UserCircle size={64} className="text-slate-300 mb-4"/>
+            <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
+            <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+              บัญชีผู้ใช้นี้ยังไม่ได้ผูกกับโปรไฟล์พนักงานสำหรับการสแกนใบหน้า<br/>
+              กรุณาไปที่เมนู <strong className="text-indigo-600">"การจัดการพนักงาน"</strong> เพื่อเพิ่มข้อมูลและผูกบัญชีให้เรียบร้อย
+            </p>
+          </div>
+        )
+      )}
+
+      {activeTab === 'schedule' && (
+        <div className="space-y-4">
+          {selectedScheduleDate && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setAdminSelectedEmployeeId(''); }}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                {(() => {
+                  const dayShiftsForModal = shiftSchedule.filter(s => s.date === selectedScheduleDate);
+                  const myShiftForModal = dayShiftsForModal.find(s => s.employeeId === loggedInUser?.employeeData?.id);
+                  const myPendingRequestForModal = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === selectedScheduleDate && r.status === 'pending');
+                  const isPastSelected = selectedScheduleDate < getLocalISODate();
+                  const dayTypeForModal = dayTypes.find(d => d.id === selectedScheduleDate);
+                  const availableSlots = dayTypeForModal ? getShiftSlotsForDayType(dayTypeForModal.dayTypeId) : [];
+                  const showDayTypePicker = !isPastSelected && (!dayTypeForModal || isEditingDayType);
+                  let dateLabel = selectedScheduleDate;
+                  try { dateLabel = new Date(selectedScheduleDate + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
+                  return (
+                    <>
+                      <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
+                        <h3 className="font-bold text-base">{dateLabel}</h3>
+                        <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); setAdminSelectedEmployeeId(''); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                      </div>
+                      <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+
+                        {isPastSelected ? (
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
+                            {dayTypeForModal && <p className="text-xs text-slate-400 mb-2">รูปแบบวัน: {getDayTypeMeta(dayTypeForModal.dayTypeId)?.label || dayTypeForModal.dayTypeId}</p>}
+                            {dayShiftsForModal.length === 0 ? (
+                              <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ไม่มีข้อมูลกะวันนี้</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {dayShiftsForModal.map(s => (
+                                  <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+                                    <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                      {canManageAllAttendance && (
+                                        <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-xs text-slate-400 text-center pt-3">วันที่ผ่านมาแล้ว ไม่สามารถจอง/ขอเปลี่ยนกะได้</p>
+                          </div>
+                        ) : showDayTypePicker ? (
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 tracking-wide">
+                              {dayTypeForModal ? 'เลือกรูปแบบวันใหม่ (Admin แก้ไข)' : 'วันนี้ทำงานแบบไหน? เลือกก่อนเริ่มลงกะ'}
+                            </h4>
+                            <div className="space-y-2">
+                              {DAY_TYPES.map(dt => (
+                                <button key={dt.id} onClick={() => { handleSetDayType(selectedScheduleDate, dt.id); setIsEditingDayType(false); }} disabled={isScheduleProcessing} className="w-full text-left p-3 rounded-xl border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition">
+                                  <p className="text-sm font-bold text-slate-800">{dt.label}</p>
+                                  <p className="text-[11px] text-slate-500 mt-0.5">{dt.description}</p>
+                                </button>
+                              ))}
+                            </div>
+                            {dayTypeForModal && (
+                              <button onClick={() => setIsEditingDayType(false)} className="w-full mt-2 py-2 text-xs font-bold text-slate-500 hover:text-slate-700">ยกเลิก</button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200">
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">รูปแบบวันนี้</p>
+                                <p className="text-sm font-bold text-slate-700">{getDayTypeMeta(dayTypeForModal.dayTypeId)?.label}</p>
+                              </div>
+                              {canManageAllAttendance && (
+                                <button onClick={() => setIsEditingDayType(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0">แก้ไขรูปแบบวัน</button>
+                              )}
+                            </div>
+
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
+                              {dayShiftsForModal.length === 0 ? (
+                                <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ยังไม่มีใครจองกะวันนี้</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {dayShiftsForModal.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+                                      <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                        {canManageAllAttendance && (
+                                          <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {loggedInUser?.employeeData && (
+                              <div className="pt-4 border-t border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะของฉัน</h4>
+                                {myShiftForModal && canManageAllAttendance ? (
+                                  <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b> <span className="text-indigo-500 font-medium">(Admin/ผู้มีสิทธิ์ แก้ได้ทันที ไม่ต้องขออนุมัติ)</span></p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
+                                        <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
+                                      ))}
+                                    </div>
+                                    <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: loggedInUser.employeeData.id, employeeName: loggedInUser.employeeData.fullName, allowOverwrite: true })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">เปลี่ยนกะของฉัน</button>
+                                  </div>
+                                ) : myPendingRequestForModal ? (
+                                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 flex items-center">
+                                    <Bell size={15} className="mr-2 shrink-0"/> รอ Admin อนุมัติ: {myPendingRequestForModal.currentShiftLabel || '-'} → {myPendingRequestForModal.requestedShiftLabel || '-'}
+                                  </div>
+                                ) : myShiftForModal ? (
+                                  isRequestingChange ? (
+                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b></p>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
+                                          <button key={s.id} onClick={() => setChangeRequestShiftType(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${changeRequestShiftType === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
+                                        ))}
+                                      </div>
+                                      <input type="text" placeholder="เหตุผล (ถ้ามี)..." value={changeRequestReason} onChange={e => setChangeRequestReason(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => { setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); }} disabled={isScheduleProcessing} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">ยกเลิก</button>
+                                        <button onClick={() => handleRequestShiftChange(selectedScheduleDate, dayTypeForModal.dayTypeId, myShiftForModal, availableSlots.find(s => s.id === changeRequestShiftType), changeRequestReason)} disabled={isScheduleProcessing || !changeRequestShiftType} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">ส่งคำขอ</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+                                      <span className="text-sm font-bold text-indigo-700">{myShiftForModal.shiftLabel} <span className="font-normal text-indigo-400">({myShiftForModal.shiftTime})</span></span>
+                                      <button onClick={() => { setIsRequestingChange(true); setChangeRequestShiftType(''); setChangeRequestReason(''); }} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0 ml-2">ขอเปลี่ยนกะ</button>
+                                    </div>
+                                  )
+                                ) : (
+                                  <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {availableSlots.map(s => (
+                                        <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                          {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick))} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">จองกะนี้</button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {canManageAllAttendance && (
+                              <div className="pt-4 border-t border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">จองกะให้พนักงาน (Admin)</h4>
+                                <select value={adminSelectedEmployeeId} onChange={e => { setAdminSelectedEmployeeId(e.target.value); setScheduleShiftPick(''); }} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white mb-3 font-medium">
+                                  <option value="">-- เลือกพนักงาน --</option>
+                                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}{emp.id === loggedInUser?.employeeData?.id ? ' (ฉัน)' : ''}</option>)}
+                                </select>
+                                {adminSelectedEmployeeId && (() => {
+                                  const targetShift = dayShiftsForModal.find(s => s.employeeId === adminSelectedEmployeeId);
+                                  const targetEmpName = employees.find(e => e.id === adminSelectedEmployeeId)?.fullName || '';
+                                  return (
+                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
+                                      {targetShift && <p className="text-xs text-slate-500">กะปัจจุบันของ {targetEmpName}: <b className="text-slate-700">{targetShift.shiftLabel}</b></p>}
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {availableSlots.filter(s => !targetShift || s.id !== targetShift.shiftSlotId).map(s => (
+                                          <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                            {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: adminSelectedEmployeeId, employeeName: targetEmpName, allowOverwrite: !!targetShift })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">
+                                        {targetShift ? `เปลี่ยนกะของ ${targetEmpName}` : `จองกะให้ ${targetEmpName}`}
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {showApprovalPanel && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setShowApprovalPanel(false)}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
+                  <h3 className="font-bold text-lg flex items-center"><Bell size={18} className="mr-2"/> คำขอเปลี่ยนกะที่รออนุมัติ</h3>
+                  <button onClick={() => setShowApprovalPanel(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                </div>
+                <div className="p-5 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
+                  {pendingSwapRequests.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-8">ไม่มีคำขอที่รออนุมัติ</p>
+                  ) : (
+                    pendingSwapRequests.map(req => {
+                      let reqDateLabel = req.date;
+                      try { reqDateLabel = new Date(req.date + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }); } catch(e) {}
+                      const othersThatDay = shiftSchedule.filter(s => s.date === req.date && s.employeeId !== req.employeeId);
+                      return (
+                        <div key={req.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                          <div className="flex justify-between items-start mb-2 gap-2">
+                            <div>
+                              <p className="font-bold text-slate-800 text-sm">{req.employeeName}</p>
+                              <p className="text-xs text-slate-500">{reqDateLabel}</p>
+                            </div>
+                            <span className="text-xs font-bold text-slate-600 text-right shrink-0">{req.currentShiftLabel || '-'} → {req.requestedShiftLabel || '-'}</span>
+                          </div>
+                          {req.reason && <p className="text-xs text-slate-500 italic mb-3 bg-slate-50 p-2 rounded-lg">"{req.reason}"</p>}
+                          {othersThatDay.length > 0 && (
+                            <div className="mb-3 bg-slate-50 rounded-xl p-2.5">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wide">พนักงานคนอื่นที่ทำงานวันนี้</p>
+                              <div className="space-y-1">
+                                {othersThatDay.map(s => (
+                                  <div key={s.id} className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-600 font-medium">{s.employeeName}</span>
+                                    <span className={`font-bold px-1.5 py-0.5 rounded border text-[10px] shrink-0 ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <button onClick={() => handleReviewSwapRequest(req, false)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition">ปฏิเสธ</button>
+                            <button onClick={() => handleReviewSwapRequest(req, true)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition">อนุมัติ</button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showHolidayPanel && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="bg-gradient-to-r from-rose-500 to-red-500 p-4 text-white flex justify-between items-center shrink-0">
+                  <h3 className="font-bold text-lg flex items-center"><CalendarDays size={18} className="mr-2"/> วันหยุดประจำปี</h3>
+                  <button onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+                </div>
+                <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+                  {canManageAllAttendance && (
+                    <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">เพิ่มวันหยุดใหม่</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
+                        <input type="text" placeholder="ชื่อวันหยุด เช่น วันขึ้นปีใหม่..." value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
+                        <button onClick={handleAddHoliday} disabled={isScheduleProcessing || !newHolidayDate || !newHolidayName.trim()} className="px-4 py-2.5 bg-rose-500 text-white text-sm font-bold rounded-xl hover:bg-rose-600 transition disabled:opacity-40 shrink-0">บันทึก</button>
+                      </div>
+                      {getHolidayForDate(newHolidayDate) && <p className="text-[11px] text-amber-600 font-bold">* วันที่นี้มีวันหยุดอยู่แล้ว ("{getHolidayForDate(newHolidayDate).name}") บันทึกซ้ำจะเป็นการแก้ไขชื่อแทน</p>}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">ตารางวันหยุดประจำปี</p>
+                    <select value={holidayYearFilter} onChange={e => setHolidayYearFilter(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-rose-500 bg-white">
+                      {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={String(y)}>{y + 543}</option>)}
+                    </select>
+                  </div>
+
+                  {holidaysForYearFilter.length === 0 ? (
+                    <p className="text-sm text-slate-400 bg-white p-4 rounded-xl border border-slate-100 text-center">ยังไม่มีวันหยุดในปีนี้</p>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                      {holidaysForYearFilter.map(h => {
+                        let hDateLabel = h.date;
+                        try { hDateLabel = new Date(h.date + 'T12:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) {}
+                        return (
+                          <div key={h.id} className="p-3 flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-bold text-rose-500">{hDateLabel}</p>
+                              {editingHolidayId === h.id ? (
+                                <input type="text" value={editingHolidayName} onChange={e => setEditingHolidayName(e.target.value)} className="w-full mt-1 p-1.5 border border-rose-300 rounded-lg text-sm outline-none focus:border-rose-500" autoFocus/>
+                              ) : (
+                                <p className="text-sm font-bold text-slate-700 truncate">{h.name}</p>
+                              )}
+                            </div>
+                            {canManageAllAttendance && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                {editingHolidayId === h.id ? (
+                                  <>
+                                    <button onClick={() => handleSaveHolidayName(h)} disabled={isScheduleProcessing} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded-lg transition"><Save size={14}/></button>
+                                    <button onClick={() => { setEditingHolidayId(null); setEditingHolidayName(''); }} disabled={isScheduleProcessing} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition"><X size={14}/></button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => { setEditingHolidayId(h.id); setEditingHolidayName(h.name); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition"><Edit2 size={14}/></button>
+                                    <button onClick={() => handleDeleteHoliday(h)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition"><Trash2 size={14}/></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
+              <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {canManageAllAttendance && (
+                <button onClick={() => setShowApprovalPanel(true)} className="relative px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
+                  <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
+                  {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
+                </button>
+              )}
+              <button onClick={() => { setShowHolidayPanel(true); setNewHolidayDate(''); setNewHolidayName(''); setEditingHolidayId(null); }} className="px-4 py-2.5 bg-white border border-rose-200 text-rose-700 text-sm font-bold rounded-xl hover:bg-rose-50 transition flex items-center shadow-sm">
+                <CalendarDays size={16} className="mr-1.5"/> วันหยุดประจำปี
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+            <p className="text-[11px] font-bold text-slate-400 uppercase mb-2 tracking-wide">รูปแบบวันทำงาน 3 แบบ</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+              {DAY_TYPES.map(dt => (
+                <div key={dt.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-700">{dt.label}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{dt.description}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-amber-100 text-amber-700 border-amber-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-amber-400"></span>กะที่ 1</span>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-orange-100 text-orange-700 border-orange-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-orange-400"></span>กะที่ 2</span>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100 text-indigo-700 border-indigo-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-indigo-400"></span>กะที่ 3 / กะสุดท้าย</span>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-600 border-slate-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400"></span>วันหยุด</span>
+            </div>
+          </div>
+
+          {renderScheduleCalendar()}
+        </div>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-50/50 gap-4">
+            <div className="flex items-center space-x-3 w-full lg:w-auto">
+              <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-full sm:w-auto">
+                <button onClick={() => setHistoryViewMode('list')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'list' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><List size={16} className="mr-1.5"/> รายวัน</button>
+                <button onClick={() => setHistoryViewMode('table')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'table' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid size={16} className="mr-1.5"/> ตารางสรุป</button>
+                <button onClick={() => setHistoryViewMode('calendar')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'calendar' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><CalendarIcon size={16} className="mr-1.5"/> ปฏิทิน</button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              {historyViewMode === 'list' && (
+                <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
+              )}
+              {historyViewMode === 'table' && (
+                <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-sm flex-1 sm:flex-none">
+                  <input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
+                  <span className="text-slate-400 font-bold text-xs">-</span>
+                  <input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
+                </div>
+              )}
+              {historyViewMode === 'calendar' && (
+                <input type="month" value={calendarMonth} onChange={(e) => setCalendarMonth(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
+              )}
+
+              {canManageAllAttendance && (
+                <select value={filterEmployeeId} onChange={(e) => setFilterEmployeeId(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm cursor-pointer">
+                  <option value="all">ทุกคน</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                </select>
+              )}
+
+              {canEditTab('attendance') && (
+                <button onClick={openAddManualModal} className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-xl transition shadow-sm text-xs md:text-sm font-bold flex-1 sm:flex-none">
+                  <Plus size={16}/><span>เพิ่มเวลา (ลืมลง)</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 md:p-6 bg-slate-50/30">
+            {historyViewMode === 'list' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <table className="w-full text-left border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-[10px] md:text-xs uppercase border-b border-slate-200">
+                      <th className="p-4 font-extrabold text-center w-24">เวลา</th>
+                      <th className="p-4 font-extrabold">พนักงาน</th>
+                      <th className="p-4 font-extrabold text-center w-32">สถานะ</th>
+                      {canEditTab('attendance') && <th className="p-4 font-extrabold text-right w-28">จัดการ</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs md:text-sm">
+                    {filteredLogsForList.length === 0 ? (
+                      <tr>
+                        <td colSpan={canEditTab('attendance') ? 4 : 3} className="p-12 text-center text-slate-500">
+                          <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
+                             <FileQuestion size={48} className="text-slate-300"/>
+                             <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในวันที่เลือก</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredLogsForList.map(log => {
+                        const logDate = new Date(log.timestamp);
+                        const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
+                        return (
+                          <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
+                            <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
+                            <td className="p-4">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0 border-2 border-white shadow-sm group-hover:border-indigo-100 transition-colors">
+                                  {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
+                                    <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : <User size={16}/>}
+                                </div>
+                                <span className="font-bold text-slate-800">{log.employeeName}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 text-center">
+                              {getStatusBadge(log.type)}
+                            </td>
+                            {canEditTab('attendance') && (
+                              <td className="p-4 text-right space-x-1.5">
+                                <button onClick={() => openEditManualModal(log)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition active:scale-95" title="แก้ไขเวลา"><Edit2 size={16}/></button>
+                                <button onClick={() => handleDeleteManual(log.id)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition active:scale-95" title="ลบข้อมูล"><Trash2 size={16}/></button>
+                              </td>
+                            )}
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {historyViewMode === 'table' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                 <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse min-w-[800px]">
+                     <thead>
+                       <tr className="bg-gradient-to-b from-slate-50 to-white text-slate-600 text-[10px] md:text-xs border-b border-slate-200 shadow-sm">
+                         <th className="px-4 py-3 font-black text-center whitespace-nowrap bg-slate-100/50">วันที่</th>
+                         {Array.from({length: 8}).map((_, i) => (
+                           <th key={i} className="px-2 py-3 font-bold text-center whitespace-nowrap border-l border-slate-100">ครั้งที่ {i+1}</th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody className="text-xs md:text-sm">
+                       {tableData.length === 0 ? (
+                         <tr>
+                            <td colSpan="9" className="p-12 text-center text-slate-500">
+                               <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
+                                  <FileQuestion size={48} className="text-slate-300"/>
+                                  <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในช่วงเวลาที่เลือก</span>
+                               </div>
+                            </td>
+                         </tr>
+                       ) : (
+                         tableData.map((row, idx) => {
+                           const thDate = new Date(row.date).toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                           return (
+                             <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                               <td className="px-4 py-4 font-black text-slate-700 text-center bg-slate-50/30">{thDate}</td>
+                               {Array.from({length: 8}).map((_, i) => {
+                                 const log = row.logs[i];
+                                 return (
+                                   <td key={i} className="px-2 py-3 text-center border-l border-slate-50 align-top">
+                                     {log ? (
+                                       <div onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`flex flex-col items-center justify-center p-2 rounded-xl shadow-sm border transition ${canEditTab('attendance') ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''} ${log.type === 'checkin' ? 'bg-emerald-50 border-emerald-100' : log.type === 'start_live' ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
+                                          <span className="font-black text-slate-800 text-[11px] md:text-xs">{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
+                                          <span className={`text-[9px] md:text-[10px] font-bold mt-1 ${log.type === 'checkin' ? 'text-emerald-600' : log.type === 'start_live' ? 'text-blue-600' : 'text-red-600'}`}>{getTypeLabel(log.type)}</span>
+                                       </div>
+                                     ) : (
+                                       <div className="h-full flex items-center justify-center text-slate-300">-</div>
+                                     )}
+                                     </td>
+                                 )
+                               })}
+                             </tr>
+                           )
+                         })
+                       )}
+                     </tbody>
+                   </table>
+                 </div>
+              </div>
+            )}
+
+            {historyViewMode === 'calendar' && renderCalendar()}
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal Manual Add/Edit */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shadow-md relative z-10">
+                <h3 className="font-bold text-lg flex items-center tracking-wide"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
+                <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+              </div>
+              <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50/50">
+                 <div>
+                   <label className="block text-xs font-bold text-slate-600 mb-1.5">พนักงาน</label>
+                   <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800" disabled={!canManageAllAttendance}>
+                      {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+                   </select>
+                 </div>
+                 <div className="grid grid-cols-2 gap-3">
+                   <div>
+                     <label className="block text-xs font-bold text-slate-600 mb-1.5">วันที่</label>
+                     <input type="date" required value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
+                   </div>
+                   <div>
+                     <label className="block text-xs font-bold text-slate-600 mb-1.5">เวลา</label>
+                     <input type="time" required value={manualForm.time} onChange={e => setManualForm({...manualForm, time: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
+                   </div>
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-600 mb-1.5">ประเภทการลงเวลา</label>
+                   <div className="grid grid-cols-3 gap-2">
+                     <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkin'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkin' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เข้างาน</button>
+                     <button type="button" onClick={() => setManualForm({...manualForm, type: 'start_live'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'start_live' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เริ่มไลฟ์สด</button>
+                     <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkout'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkout' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>ออกงาน</button>
+                   </div>
+                 </div>
+                 
+                 <div className="pt-5 flex flex-col sm:flex-row gap-3 border-t border-slate-200 mt-4">
+                   {isEditingMode && (
+                      <button type="button" onClick={() => handleDeleteManual(manualForm.id).then(() => setShowManualModal(false))} className="w-full sm:w-auto py-2.5 px-4 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition shadow-sm border border-red-100 flex items-center justify-center active:scale-95">
+                        <Trash2 size={16} className="mr-1.5"/> ลบข้อมูล
+                      </button>
+                   )}
+                   <div className="flex w-full gap-3">
+                     <button type="button" onClick={() => setShowManualModal(false)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition shadow-sm active:scale-95">ยกเลิก</button>
+                     <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-500/30 flex items-center justify-center active:scale-95"><Save size={16} className="mr-1.5"/> บันทึก</button>
+                   </div>
+                 </div>
+              </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 
 // ==========================================
@@ -984,1261 +2244,6 @@ export default function App() {
     );
   };
 
-  const AttendanceView = () => {
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [message, setMessage] = useState({ text: '', type: '' });
-    // ใช้ state จากระดับ App() แทน useState local เพื่อไม่ให้ค่ารีเซ็ตเวลา component นี้ถูก remount (ดูคอมเมนต์ที่ประกาศ attendanceLocalTab ด้านบน)
-    const activeTab = attendanceLocalTab;
-    const setLocalActiveTab = setAttendanceLocalTab;
-    const videoRef = useRef(null);
-
-    // Filter states
-    const [historyViewMode, setHistoryViewMode] = useState('list');
-    const [filterDate, setFilterDate] = useState(getLocalISODate());
-    const [filterFromDate, setFilterFromDate] = useState(getLocalISODate());
-    const [filterToDate, setFilterToDate] = useState(getLocalISODate());
-    const [calendarMonth, setCalendarMonth] = useState(getLocalISODate().substring(0, 7));
-    const [filterEmployeeId, setFilterEmployeeId] = useState('all');
-
-    // Add/Edit Manual Modal States
-    const [showManualModal, setShowManualModal] = useState(false);
-    const [isEditingMode, setIsEditingMode] = useState(false);
-    const [manualForm, setManualForm] = useState({ id: '', employeeId: '', date: '', time: '', type: 'checkin' });
-
-    // ตารางกะการทำงาน (Shift Scheduling) + วันหยุดประจำปี: state ที่เป็นการเลือก/คลิกยกไปไว้ระดับ App() แล้ว (ดูด้านบน)
-    // ส่วนช่องพิมพ์ข้อความเก็บไว้ local ที่นี่ เพื่อไม่ให้เสีย focus ทุกตัวอักษรที่พิมพ์ (ดูคอมเมนต์อธิบายที่ระดับ App())
-    const [changeRequestReason, setChangeRequestReason] = useState('');
-    const [newHolidayDate, setNewHolidayDate] = useState('');
-    const [newHolidayName, setNewHolidayName] = useState('');
-    const [editingHolidayName, setEditingHolidayName] = useState('');
-    const [isScheduleProcessing, setIsScheduleProcessing] = useState(false);
-
-    const canManageAllAttendance = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.attendanceEdit;
-
-    const startCamera = useCallback(async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        setMessage({ text: 'ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตให้เบราว์เซอร์เข้าถึงกล้อง', type: 'error' });
-      }
-    }, []);
-
-    const stopCamera = useCallback(() => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-      }
-    }, []);
-
-    useEffect(() => {
-      if (activeTab === 'checkin' && loggedInUser?.employeeData) {
-        startCamera();
-      } else {
-        stopCamera();
-      }
-      return () => stopCamera();
-    }, [activeTab, loggedInUser, startCamera, stopCamera]);
-
-    const handleVerifyAndRecord = async (type) => {
-      if (!loggedInUser?.employeeData) {
-        setMessage({ text: 'ไม่พบข้อมูลโปรไฟล์พนักงาน กรุณาติดต่อ Admin', type: 'error' });
-        return;
-      }
-
-      const todayStr = getLocalISODate();
-      const myTodayLogs = attendanceLogs.filter(log =>
-          log.employeeId === loggedInUser.employeeData.id &&
-          getLocalISODate(log.timestamp) === todayStr
-      );
-
-      const hasCheckedIn = myTodayLogs.some(l => l.type === 'checkin');
-      const hasStartedLive = myTodayLogs.some(l => l.type === 'start_live');
-      const hasCheckedOut = myTodayLogs.some(l => l.type === 'checkout');
-
-      if (type === 'checkin') {
-          if (hasCheckedIn) {
-              setMessage({ text: 'คุณได้ลงเวลาเข้างานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
-              setTimeout(() => setMessage({text:'', type:''}), 5000);
-              return;
-          }
-      } 
-      else if (type === 'start_live') {
-          if (!hasCheckedIn) {
-               setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนเริ่มไลฟ์สด', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 5000);
-               return;
-          }
-          if (hasStartedLive) {
-               setMessage({ text: 'คุณได้เริ่มไลฟ์สดของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 5000);
-               return;
-          }
-      } 
-      else if (type === 'checkout') {
-          if (!hasCheckedIn) {
-               setMessage({ text: '⚠️ กรุณาลงเวลาเข้างานก่อนออกงาน', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 5000);
-               return;
-          }
-          if (!hasStartedLive) {
-               setMessage({ text: '⚠️ กรุณาเริ่มไลฟ์สดก่อนออกงาน', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 5000);
-               return;
-          }
-          if (hasCheckedOut) {
-               setMessage({ text: 'คุณได้ลงเวลาออกงานของวันนี้ไปแล้ว (ห้ามลงซ้ำ)', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 5000);
-               return;
-          }
-          if (isStockCheckPendingFor(loggedInUser.employeeData.id)) {
-               setMessage({ text: '⚠️ วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก กรุณาไปที่เมนู "สต๊อกสินค้า" เพื่อเช็คให้เสร็จก่อนออกงาน', type: 'error' });
-               setTimeout(() => setMessage({text:'', type:''}), 6000);
-               return;
-          }
-      }
-
-      if (!isFaceModelsLoaded) {
-        setMessage({ text: 'AI Model ยังไม่พร้อมทำงาน กรุณารอสักครู่หรือรีเฟรชหน้าจอ', type: 'error' });
-        return;
-      }
-
-      setIsVerifying(true);
-      setMessage({ text: 'กำลังตรวจสอบใบหน้า...', type: 'info' });
-
-      try {
-        const video = videoRef.current;
-        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-
-        if (!detections) throw new Error('ไม่พบใบหน้า กรุณามองตรงไปที่กล้องและให้อยู่ในแสงที่สว่างเพียงพอ');
-
-        const refImage = await faceapi.fetchImage(loggedInUser.employeeData.imageUrl);
-        const refDetections = await faceapi.detectSingleFace(refImage, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-
-        if (!refDetections) throw new Error('รูปภาพอ้างอิงในฐานข้อมูลไม่ชัดเจน กรุณาให้ Admin เปลี่ยนรูปใหม่');
-
-        const distance = faceapi.euclideanDistance(detections.descriptor, refDetections.descriptor);
-        const threshold = 0.55;
-
-        if (distance >= threshold) throw new Error('ใบหน้าไม่ตรงกับฐานข้อมูล กรุณาลองอีกครั้ง');
-
-        await addDoc(collection(db, "attendance"), {
-          userId: loggedInUser.id,
-          employeeId: loggedInUser.employeeData.id,
-          employeeName: loggedInUser.employeeData.fullName,
-          type: type, 
-          timestamp: new Date().toISOString()
-        });
-
-        setMessage({ text: 'บันทึกเวลาสำเร็จ', type: 'success' });
-        setTimeout(() => setMessage({text:'', type:''}), 5000);
-
-      } catch (err) {
-        console.error(err);
-        setMessage({ text: err.message || 'เกิดข้อผิดพลาดในการตรวจสอบใบหน้า', type: 'error' });
-      } finally {
-        setIsVerifying(false);
-      }
-    };
-
-    const filteredLogsForList = useMemo(() => {
-      let logs = attendanceLogs;
-      if (!canManageAllAttendance) {
-        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
-      } else if (filterEmployeeId !== 'all') {
-        logs = logs.filter(log => log.employeeId === filterEmployeeId);
-      }
-      return logs.filter(log => getLocalISODate(log.timestamp) === filterDate);
-    }, [attendanceLogs, filterDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
-
-    const tableData = useMemo(() => {
-      let logs = attendanceLogs;
-      if (!canManageAllAttendance) {
-        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
-      } else if (filterEmployeeId !== 'all') {
-        logs = logs.filter(log => log.employeeId === filterEmployeeId);
-      }
-      
-      const filtered = logs.filter(log => {
-        const d = getLocalISODate(log.timestamp);
-        return d >= filterFromDate && d <= filterToDate;
-      });
-
-      const grouped = {};
-      filtered.forEach(log => {
-        const d = getLocalISODate(log.timestamp);
-        if (!grouped[d]) grouped[d] = [];
-        grouped[d].push(log);
-      });
-      
-      Object.keys(grouped).forEach(date => {
-        grouped[date].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-      });
-
-      return Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a)).map(date => ({
-        date,
-        logs: grouped[date].slice(0, 8) 
-      }));
-
-    }, [attendanceLogs, filterFromDate, filterToDate, canManageAllAttendance, loggedInUser, filterEmployeeId]);
-
-    const calendarLogs = useMemo(() => {
-      let logs = attendanceLogs;
-      if (!canManageAllAttendance) {
-        logs = logs.filter(log => log.employeeId === loggedInUser.employeeData?.id);
-      } else if (filterEmployeeId !== 'all') {
-        logs = logs.filter(log => log.employeeId === filterEmployeeId);
-      }
-      return logs.filter(log => getLocalISODate(log.timestamp).startsWith(calendarMonth));
-    }, [attendanceLogs, calendarMonth, canManageAllAttendance, loggedInUser, filterEmployeeId]);
-
-    const getStatusBadge = (type) => {
-      if (type === 'checkin') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100 whitespace-nowrap shadow-sm"><CheckCircle2 size={14} className="mr-1"/>เข้างาน</span>;
-      if (type === 'start_live') return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap shadow-sm"><Video size={14} className="mr-1"/>เริ่มไลฟ์สด</span>;
-      return <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold border bg-red-50 text-red-600 border-red-100 whitespace-nowrap shadow-sm"><LogOut size={14} className="mr-1"/>ออกงาน</span>;
-    };
-
-    const getTypeLabel = (type) => {
-      if (type === 'checkin') return 'เข้างาน';
-      if (type === 'start_live') return 'เริ่มไลฟ์สด';
-      return 'ออกงาน';
-    };
-
-    const openAddManualModal = () => {
-      const empId = canManageAllAttendance 
-                    ? (filterEmployeeId !== 'all' ? filterEmployeeId : employees[0]?.id || '') 
-                    : (loggedInUser.employeeData?.id || '');
-      const now = new Date();
-      setManualForm({ 
-        id: '', 
-        employeeId: empId, 
-        date: getLocalISODate(), 
-        time: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }), 
-        type: 'checkin' 
-      });
-      setIsEditingMode(false);
-      setShowManualModal(true);
-    };
-
-    const openEditManualModal = (log) => {
-      const d = new Date(log.timestamp);
-      setManualForm({
-        id: log.id,
-        employeeId: log.employeeId,
-        date: getLocalISODate(log.timestamp),
-        time: d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-        type: log.type
-      });
-      setIsEditingMode(true);
-      setShowManualModal(true);
-    };
-
-    const handleSaveManual = async (e) => {
-      e.preventDefault();
-      try {
-        const emp = employees.find(e => e.id === manualForm.employeeId);
-        if (!emp) throw new Error("ไม่พบข้อมูลพนักงานที่เลือก");
-        
-        const timestamp = new Date(`${manualForm.date}T${manualForm.time}:00`).toISOString();
-        
-        if (isEditingMode && manualForm.id) {
-          await updateDoc(doc(db, "attendance", manualForm.id), {
-            employeeId: emp.id,
-            employeeName: emp.fullName,
-            type: manualForm.type,
-            timestamp: timestamp
-          });
-          await addDoc(collection(db, "audit_logs"), { action: "EDIT_ATTENDANCE", user: loggedInUser.username, details: `แก้ไขเวลา ${emp.fullName} เป็น ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
-        } else {
-          await addDoc(collection(db, "attendance"), {
-            userId: emp.userId || '',
-            employeeId: emp.id,
-            employeeName: emp.fullName,
-            type: manualForm.type,
-            timestamp: timestamp
-          });
-          await addDoc(collection(db, "audit_logs"), { action: "ADD_ATTENDANCE", user: loggedInUser.username, details: `เพิ่มเวลา ${emp.fullName} ${manualForm.date} ${manualForm.time}`, timestamp: new Date().toISOString() });
-        }
-        setShowManualModal(false);
-      } catch (err) {
-        alert("เกิดข้อผิดพลาด: " + err.message);
-      }
-    };
-
-    const handleDeleteManual = async (id) => {
-      if(!window.confirm("ยืนยันการลบประวัติเวลานี้?")) return;
-      try {
-        await deleteDoc(doc(db, "attendance", id));
-      } catch(e) { alert("Error: " + e.message); }
-    };
-
-    // ==========================================
-    // ระบบลงกะการทำงาน (Shift Scheduling)
-    // ==========================================
-    const handleSetDayType = async (dateStr, dayTypeId) => {
-      const existing = dayTypes.find(d => d.id === dateStr);
-      if (existing && existing.dayTypeId !== dayTypeId) {
-        if (!window.confirm('วันนี้เคยตั้งรูปแบบวันไว้แล้ว การเปลี่ยนรูปแบบจะไม่ไปแก้ไขกะที่คนอื่นจองไว้แล้ว (กะเดิมจะยังคงเวลาเดิมไว้ตามที่จองไว้) ยืนยันเปลี่ยนรูปแบบวันหรือไม่?')) return;
-      }
-      setIsScheduleProcessing(true);
-      try {
-        await setDoc(doc(db, "day_types", dateStr), {
-          date: dateStr,
-          dayTypeId,
-          setByUsername: loggedInUser?.username || 'unknown',
-          setAt: new Date().toISOString()
-        });
-        if (existing && existing.dayTypeId !== dayTypeId) {
-          await addDoc(collection(db, "audit_logs"), { action: "EDIT_DAY_TYPE", user: loggedInUser?.username || 'unknown', details: `แก้ไขรูปแบบวันที่ ${dateStr} จาก "${getDayTypeMeta(existing.dayTypeId)?.label || existing.dayTypeId}" เป็น "${getDayTypeMeta(dayTypeId)?.label}"`, timestamp: new Date().toISOString() });
-        }
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleBookShift = async (dateStr, dayTypeId, slot, opts = {}) => {
-      const targetEmployeeId = opts.employeeId || loggedInUser?.employeeData?.id;
-      const targetEmployeeName = opts.employeeName || loggedInUser?.employeeData?.fullName;
-      if (!targetEmployeeId) return;
-      if (!slot) { alert('กรุณาเลือกกะที่ต้องการจอง'); return; }
-      const docId = `${targetEmployeeId}_${dateStr}`;
-      const existing = shiftSchedule.find(s => s.id === docId);
-      if (existing && !opts.allowOverwrite) { alert('มีกะที่จองไว้ในวันนี้แล้ว กรุณาใช้ปุ่ม "ขอเปลี่ยนกะ" แทน'); return; }
-      if (existing && opts.allowOverwrite) {
-        if (!window.confirm(`ยืนยันเปลี่ยนกะของ ${targetEmployeeName} เป็น "${slot.label}" หรือไม่?`)) return;
-      }
-      setIsScheduleProcessing(true);
-      try {
-        const batch = writeBatch(db);
-        batch.set(doc(db, "shift_schedule", docId), {
-          employeeId: targetEmployeeId,
-          employeeName: targetEmployeeName,
-          date: dateStr,
-          dayTypeId,
-          shiftSlotId: slot.id, shiftLabel: slot.label, shiftTime: slot.time, badgeClass: slot.badgeClass, dotClass: slot.dotClass,
-          bookedByUsername: loggedInUser?.username || 'unknown',
-          bookedAt: new Date().toISOString()
-        });
-        if (opts.allowOverwrite) {
-          // ถ้ามีคำขอเปลี่ยนกะค้างอยู่ของพนักงานคนนี้วันนี้ ให้ถือว่าจบไปแล้วเพราะ Admin แก้ไขตรงแทน
-          const pending = shiftSwapRequests.find(r => r.employeeId === targetEmployeeId && r.date === dateStr && r.status === 'pending');
-          if (pending) {
-            batch.update(doc(db, "shift_swap_requests", pending.id), { status: 'approved', reviewedByUsername: loggedInUser?.username || 'unknown', reviewedAt: new Date().toISOString() });
-          }
-          batch.set(doc(collection(db, "audit_logs")), { action: "ADMIN_EDIT_SHIFT", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'จอง'}กะของ ${targetEmployeeName} วันที่ ${dateStr} เป็น "${slot.label}"`, timestamp: new Date().toISOString() });
-        }
-        await batch.commit();
-        setScheduleShiftPick('');
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleRequestShiftChange = async (dateStr, dayTypeId, currentBooking, requestedSlot, reason) => {
-      if (!loggedInUser?.employeeData) return;
-      if (!requestedSlot) { alert('กรุณาเลือกกะที่ต้องการเปลี่ยนไป'); return; }
-      if (requestedSlot.id === currentBooking.shiftSlotId) { alert('กะที่เลือกเหมือนกับกะปัจจุบัน กรุณาเลือกกะอื่น'); return; }
-      setIsScheduleProcessing(true);
-      try {
-        await addDoc(collection(db, "shift_swap_requests"), {
-          employeeId: loggedInUser.employeeData.id,
-          employeeName: loggedInUser.employeeData.fullName,
-          date: dateStr,
-          dayTypeId,
-          currentShiftSlotId: currentBooking.shiftSlotId, currentShiftLabel: currentBooking.shiftLabel, currentShiftTime: currentBooking.shiftTime,
-          requestedShiftSlotId: requestedSlot.id, requestedShiftLabel: requestedSlot.label, requestedShiftTime: requestedSlot.time, requestedBadgeClass: requestedSlot.badgeClass, requestedDotClass: requestedSlot.dotClass,
-          reason: reason || '',
-          status: 'pending',
-          requestedAt: new Date().toISOString(),
-          requestedByUsername: loggedInUser.username
-        });
-        setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); setSelectedScheduleDate(null);
-        alert('ส่งคำขอเปลี่ยนกะเรียบร้อย รอ Admin อนุมัติ');
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleReviewSwapRequest = async (request, approve) => {
-      setIsScheduleProcessing(true);
-      try {
-        const batch = writeBatch(db);
-        const reqRef = doc(db, "shift_swap_requests", request.id);
-        batch.update(reqRef, {
-          status: approve ? 'approved' : 'rejected',
-          reviewedByUsername: loggedInUser?.username || 'unknown',
-          reviewedAt: new Date().toISOString()
-        });
-        if (approve) {
-          const scheduleDocId = `${request.employeeId}_${request.date}`;
-          batch.set(doc(db, "shift_schedule", scheduleDocId), {
-            employeeId: request.employeeId,
-            employeeName: request.employeeName,
-            date: request.date,
-            dayTypeId: request.dayTypeId,
-            shiftSlotId: request.requestedShiftSlotId, shiftLabel: request.requestedShiftLabel, shiftTime: request.requestedShiftTime,
-            badgeClass: request.requestedBadgeClass, dotClass: request.requestedDotClass,
-            bookedByUsername: loggedInUser?.username || 'unknown',
-            bookedAt: new Date().toISOString()
-          });
-        }
-        batch.set(doc(collection(db, "audit_logs")), {
-          action: approve ? "APPROVE_SHIFT_CHANGE" : "REJECT_SHIFT_CHANGE",
-          user: loggedInUser?.username || 'unknown',
-          details: `${approve ? 'อนุมัติ' : 'ปฏิเสธ'}คำขอเปลี่ยนกะของ ${request.employeeName} วันที่ ${request.date} (${request.currentShiftLabel || '-'} → ${request.requestedShiftLabel || '-'})`,
-          timestamp: new Date().toISOString()
-        });
-        await batch.commit();
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleDeleteShiftBooking = async (booking) => {
-      if (!window.confirm(`ยืนยันลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'}) หรือไม่?`)) return;
-      setIsScheduleProcessing(true);
-      try {
-        await deleteDoc(doc(db, "shift_schedule", booking.id));
-        await addDoc(collection(db, "audit_logs"), { action: "DELETE_SHIFT", user: loggedInUser?.username || 'unknown', details: `ลบกะของ ${booking.employeeName} วันที่ ${booking.date} (${booking.shiftLabel || '-'})`, timestamp: new Date().toISOString() });
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const pendingSwapRequests = useMemo(() => {
-      return shiftSwapRequests.filter(r => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
-    }, [shiftSwapRequests]);
-
-    // ==========================================
-    // วันหยุดประจำปี (Company Holidays)
-    // ==========================================
-    const getHolidayForDate = (dateStr) => companyHolidays.find(h => h.id === dateStr) || null;
-
-    const holidaysForYearFilter = useMemo(() => {
-      return companyHolidays.filter(h => h.date.startsWith(holidayYearFilter)).sort((a, b) => a.date.localeCompare(b.date));
-    }, [companyHolidays, holidayYearFilter]);
-
-    const handleAddHoliday = async () => {
-      if (!newHolidayDate) { alert('กรุณาเลือกวันที่'); return; }
-      if (!newHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
-      setIsScheduleProcessing(true);
-      try {
-        const existing = getHolidayForDate(newHolidayDate);
-        await setDoc(doc(db, "company_holidays", newHolidayDate), {
-          date: newHolidayDate,
-          name: newHolidayName.trim(),
-          setByUsername: loggedInUser?.username || 'unknown',
-          setAt: new Date().toISOString()
-        });
-        await addDoc(collection(db, "audit_logs"), { action: existing ? "EDIT_HOLIDAY" : "ADD_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `${existing ? 'แก้ไข' : 'เพิ่ม'}วันหยุดประจำปี ${newHolidayDate}: ${newHolidayName.trim()}`, timestamp: new Date().toISOString() });
-        setNewHolidayDate(''); setNewHolidayName('');
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleSaveHolidayName = async (holiday) => {
-      if (!editingHolidayName.trim()) { alert('กรุณาระบุชื่อวันหยุด'); return; }
-      setIsScheduleProcessing(true);
-      try {
-        await updateDoc(doc(db, "company_holidays", holiday.id), { name: editingHolidayName.trim() });
-        await addDoc(collection(db, "audit_logs"), { action: "EDIT_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `แก้ไขวันหยุดประจำปี ${holiday.date} จาก "${holiday.name}" เป็น "${editingHolidayName.trim()}"`, timestamp: new Date().toISOString() });
-        setEditingHolidayId(null); setEditingHolidayName('');
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const handleDeleteHoliday = async (holiday) => {
-      if (!window.confirm(`ยืนยันลบวันหยุด "${holiday.name}" (${holiday.date}) หรือไม่?`)) return;
-      setIsScheduleProcessing(true);
-      try {
-        await deleteDoc(doc(db, "company_holidays", holiday.id));
-        await addDoc(collection(db, "audit_logs"), { action: "DELETE_HOLIDAY", user: loggedInUser?.username || 'unknown', details: `ลบวันหยุดประจำปี ${holiday.date}: ${holiday.name}`, timestamp: new Date().toISOString() });
-      } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-      setIsScheduleProcessing(false);
-    };
-
-    const renderCalendar = () => {
-      const year = parseInt(calendarMonth.split('-')[0]);
-      const month = parseInt(calendarMonth.split('-')[1]) - 1;
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-      const days = [];
-      for (let i = 0; i < firstDay; i++) days.push(null);
-      for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
-
-      return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4">
-          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
-            <button onClick={() => {
-              const d = new Date(year, month - 1, 1);
-              setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-            }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
-            <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month]} {year + 543}</h3>
-            <button onClick={() => {
-              const d = new Date(year, month + 1, 1);
-              setCalendarMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-            }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
-          </div>
- 
-          <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-blue-50">
-            {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
-              <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-blue-800'}`}>{d}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 auto-rows-fr">
-            {days.map((date, idx) => {
-              if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] p-2"></div>;
-              
-              const dateStr = getLocalISODate(date.toISOString());
-              const dayLogs = calendarLogs.filter(l => getLocalISODate(l.timestamp) === dateStr).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-              const holiday = getHolidayForDate(dateStr);
-              const isToday = dateStr === getLocalISODate();
-              const isSunday = date.getDay() === 0;
-
-              return (
-                <div key={idx} className={`border-b border-r border-slate-100 min-h-[120px] p-1.5 flex flex-col ${isToday ? 'bg-blue-50/30' : holiday ? 'bg-rose-50/40' : ''}`}>
-                  <div className={`text-right text-sm font-bold mb-1 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center ml-auto shadow-sm' : ''}`}>
-                    {date.getDate()}
-                  </div>
-                  {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
-     
-                  <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
-                    {dayLogs.map((log, lIdx) => (
-                      <div key={lIdx} onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`text-[9px] md:text-[10px] font-bold p-1 rounded-md flex justify-between items-center ${canEditTab('attendance') ? 'cursor-pointer hover:opacity-80' : ''} ${log.type === 'checkin' ? 'bg-emerald-100 text-emerald-800' : log.type === 'start_live' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
-                        <span>{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
-                        <span className="hidden lg:inline">{getTypeLabel(log.type)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
-
-    const renderScheduleCalendar = () => {
-      const [year, month] = scheduleMonth.split('-').map(Number);
-      const firstDay = new Date(year, month - 1, 1).getDay();
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const days = [];
-      for (let i = 0; i < firstDay; i++) days.push(null);
-      for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month - 1, i));
-      const todayStrForSchedule = getLocalISODate();
-
-      return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
-            <button onClick={() => { const d = new Date(year, month - 2, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronLeft size={20} className="text-slate-600"/></button>
-            <h3 className="font-bold text-slate-800 text-lg">{THAI_MONTHS[month-1]} {year + 543}</h3>
-            <button onClick={() => { const d = new Date(year, month, 1); setScheduleMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-2 hover:bg-slate-200 rounded-lg transition"><ChevronRight size={20} className="text-slate-600"/></button>
-          </div>
-          <div className="grid grid-cols-7 text-center border-b border-slate-100 bg-indigo-50">
-            {['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].map(d => (
-              <div key={d} className={`py-2 text-sm font-bold ${d === 'อา.' ? 'text-red-500' : 'text-indigo-800'}`}>{d}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 auto-rows-fr">
-            {days.map((date, idx) => {
-              if (!date) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px] md:min-h-[110px] p-1.5"></div>;
-              const dateStr = getLocalISODate(date.toISOString());
-              const dayShifts = shiftSchedule.filter(s => s.date === dateStr);
-              const dayType = dayTypes.find(d => d.id === dateStr);
-              const holiday = getHolidayForDate(dateStr);
-              const myShift = dayShifts.find(s => s.employeeId === loggedInUser?.employeeData?.id);
-              const myPendingRequest = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === dateStr && r.status === 'pending');
-              const isToday = dateStr === todayStrForSchedule;
-              const isSunday = date.getDay() === 0;
-
-              return (
-                <div key={idx} onClick={() => { setSelectedScheduleDate(dateStr); setIsEditingDayType(false); setIsRequestingChange(false); setScheduleShiftPick(''); setAdminSelectedEmployeeId(loggedInUser?.employeeData?.id || ''); }} className={`border-b border-r border-slate-100 min-h-[100px] md:min-h-[110px] p-1.5 flex flex-col cursor-pointer hover:bg-indigo-50/40 transition-colors ${isToday ? 'bg-indigo-50/30' : holiday ? 'bg-rose-50/40' : ''} ${myShift ? 'ring-1 ring-inset ring-indigo-300' : ''}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    {dayType ? (
-                      <span className="text-[8px] font-bold text-slate-400 truncate pr-1" title={getDayTypeMeta(dayType.dayTypeId)?.label}>{getDayTypeMeta(dayType.dayTypeId)?.label}</span>
-                    ) : <span></span>}
-                    <div className={`text-right text-sm font-bold shrink-0 ${isSunday || holiday ? 'text-red-400' : 'text-slate-500'} ${isToday ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm' : ''}`}>
-                      {date.getDate()}
-                    </div>
-                  </div>
-                  {holiday && <div className="text-[8px] font-bold px-1 py-0.5 rounded truncate bg-rose-100 text-rose-700 border border-rose-200 mb-1" title={holiday.name}>🎌 {holiday.name}</div>}
-                  <div className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
-                    {dayShifts.slice(0, 3).map((s, i) => (
-                      <div key={i} className={`text-[9px] font-bold px-1 py-0.5 rounded truncate border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`} title={`${s.employeeName} - ${s.shiftLabel || '-'}`}>
-                        {(s.employeeName || '-').split(' ')[0]} {s.shiftLabel || '-'}
-                      </div>
-                    ))}
-                    {dayShifts.length > 3 && <div className="text-[9px] text-slate-400 font-bold px-1">+{dayShifts.length - 3} เพิ่มเติม</div>}
-                    {myPendingRequest && <div className="text-[9px] font-bold px-1 py-0.5 rounded truncate bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center"><Bell size={8} className="mr-0.5 shrink-0"/>รออนุมัติ</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
-
-    const todayStrUI = getLocalISODate();
-    const uiLogs = attendanceLogs.filter(log => 
-      log.employeeId === loggedInUser?.employeeData?.id && 
-      getLocalISODate(log.timestamp) === todayStrUI
-    );
-    const isChkin = uiLogs.some(l => l.type === 'checkin');
-    const isStrt = uiLogs.some(l => l.type === 'start_live');
-    const isChkout = uiLogs.some(l => l.type === 'checkout');
-
-    const isMyStockCheckPending = isStockCheckPendingFor(loggedInUser?.employeeData?.id);
-
-    return (
-      <div className="space-y-6 animate-in fade-in duration-300 relative z-10 max-w-5xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 md:space-y-0">
-          <div className="flex items-center space-x-3">
-            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Clock size={24}/></div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">ระบบลงเวลาทำงาน</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">ยืนยันตัวตนด้วยใบหน้า (Face Verification)</p>
-            </div>
-          </div>
-          <div className="flex bg-slate-100 p-1.5 rounded-xl w-full md:w-auto">
-            <button onClick={() => setLocalActiveTab('checkin')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'checkin' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ลงเวลา</button>
-            <button onClick={() => setLocalActiveTab('schedule')} className={`relative flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              ตารางกะ
-              {canManageAllAttendance && pendingSwapRequests.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{pendingSwapRequests.length}</span>
-              )}
-            </button>
-            <button onClick={() => setLocalActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>ประวัติ</button>
-          </div>
-        </div>
-
-        {activeTab === 'checkin' && (
-          loggedInUser?.employeeData ? (
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
-              {isMyStockCheckPending && (
-                <div className="w-full max-w-lg mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-                  <AlertCircle size={24} className="text-amber-500 shrink-0"/>
-                  <p className="text-sm text-amber-800 font-bold flex-1">วันนี้คุณได้รับมอบหมายให้เช็คสต๊อก ต้องเช็คให้เสร็จก่อนจึงจะออกงานได้</p>
-                  <button onClick={() => setActiveTab('stock')} className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition">ไปเช็คสต๊อก</button>
-                </div>
-              )}
-              {getHolidayForDate(getLocalISODate()) && (
-                <div className="w-full max-w-lg mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-center sm:text-left justify-center sm:justify-start">
-                  <span className="text-2xl shrink-0">🎌</span>
-                  <p className="text-sm text-rose-700 font-bold">วันนี้เป็นวันหยุดประจำปี: {getHolidayForDate(getLocalISODate()).name}</p>
-                </div>
-              )}
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">สวัสดี, {loggedInUser.employeeData.fullName}</h3>
-                <p className="text-slate-500 text-sm mt-1">กรุณามองกล้องเพื่อยืนยันตัวตน</p>
-              </div>
-
-              <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-xl border-4 border-slate-100 mb-6">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]"></video>
-                <div className="absolute inset-0 border-[3px] border-indigo-500/50 rounded-[2.5rem] m-6 border-dashed pointer-events-none"></div>
-                {isVerifying && (
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                    <span className="font-bold text-sm tracking-wide animate-pulse">กำลังประมวลผล AI...</span>
-                  </div>
-                )}
-              </div>
-
-              {message.text && (
-                <div className={`w-full max-w-sm mb-6 p-4 rounded-2xl text-center text-sm font-bold animate-in fade-in slide-in-from-bottom-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
-                  {message.text}
-                </div>
-              )}
-
-              <div className="flex w-full max-w-lg gap-3 md:gap-4 flex-col sm:flex-row">
-                <button 
-                  onClick={() => handleVerifyAndRecord('checkin')} 
-                  disabled={isVerifying || !isFaceModelsLoaded} 
-                  className={`flex-1 ${isChkin ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
-                >
-                  <CheckCircle2 size={20} className="mr-1.5"/> <span className="text-sm">{isChkin ? 'เข้างานแล้ว' : 'เข้างาน'}</span>
-                </button>
-                <button 
-                  onClick={() => handleVerifyAndRecord('start_live')} 
-                  disabled={isVerifying || !isFaceModelsLoaded} 
-                  className={`flex-1 ${isStrt ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
-                >
-                  <Video size={20} className="mr-1.5"/> <span className="text-sm">{isStrt ? 'เริ่มไลฟ์สดแล้ว' : 'เริ่มไลฟ์สด'}</span>
-                </button>
-                <button 
-                  onClick={() => handleVerifyAndRecord('checkout')} 
-                  disabled={isVerifying || !isFaceModelsLoaded} 
-                  className={`flex-1 ${isChkout ? 'bg-slate-400 text-white shadow-none' : 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-red-500/25'} py-4 rounded-2xl font-bold transform hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-80 flex items-center justify-center`}
-                >
-                  <LogOut size={20} className="mr-1.5"/> <span className="text-sm">{isChkout ? 'ออกงานแล้ว' : 'ออกงาน'}</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-sm border border-slate-100 text-center animate-in zoom-in duration-300">
-              <UserCircle size={64} className="text-slate-300 mb-4"/>
-              <h2 className="text-xl font-bold text-slate-800">ไม่มีข้อมูลโปรไฟล์พนักงาน</h2>
-              <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                บัญชีผู้ใช้นี้ยังไม่ได้ผูกกับโปรไฟล์พนักงานสำหรับการสแกนใบหน้า<br/>
-                กรุณาไปที่เมนู <strong className="text-indigo-600">"การจัดการพนักงาน"</strong> เพื่อเพิ่มข้อมูลและผูกบัญชีให้เรียบร้อย
-              </p>
-            </div>
-          )
-        )}
-
-        {activeTab === 'schedule' && (
-          <div className="space-y-4">
-            {selectedScheduleDate && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setAdminSelectedEmployeeId(''); }}>
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                  {(() => {
-                    const dayShiftsForModal = shiftSchedule.filter(s => s.date === selectedScheduleDate);
-                    const myShiftForModal = dayShiftsForModal.find(s => s.employeeId === loggedInUser?.employeeData?.id);
-                    const myPendingRequestForModal = shiftSwapRequests.find(r => r.employeeId === loggedInUser?.employeeData?.id && r.date === selectedScheduleDate && r.status === 'pending');
-                    const isPastSelected = selectedScheduleDate < getLocalISODate();
-                    const dayTypeForModal = dayTypes.find(d => d.id === selectedScheduleDate);
-                    const availableSlots = dayTypeForModal ? getShiftSlotsForDayType(dayTypeForModal.dayTypeId) : [];
-                    const showDayTypePicker = !isPastSelected && (!dayTypeForModal || isEditingDayType);
-                    let dateLabel = selectedScheduleDate;
-                    try { dateLabel = new Date(selectedScheduleDate + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) {}
-                    return (
-                      <>
-                        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
-                          <h3 className="font-bold text-base">{dateLabel}</h3>
-                          <button onClick={() => { setSelectedScheduleDate(null); setIsRequestingChange(false); setIsEditingDayType(false); setAdminSelectedEmployeeId(''); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
-                        </div>
-                        <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
-
-                          {isPastSelected ? (
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
-                              {dayTypeForModal && <p className="text-xs text-slate-400 mb-2">รูปแบบวัน: {getDayTypeMeta(dayTypeForModal.dayTypeId)?.label || dayTypeForModal.dayTypeId}</p>}
-                              {dayShiftsForModal.length === 0 ? (
-                                <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ไม่มีข้อมูลกะวันนี้</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {dayShiftsForModal.map(s => (
-                                    <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
-                                      <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
-                                        {canManageAllAttendance && (
-                                          <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <p className="text-xs text-slate-400 text-center pt-3">วันที่ผ่านมาแล้ว ไม่สามารถจอง/ขอเปลี่ยนกะได้</p>
-                            </div>
-                          ) : showDayTypePicker ? (
-                            <div className="bg-white p-4 rounded-2xl border border-indigo-100">
-                              <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 tracking-wide">
-                                {dayTypeForModal ? 'เลือกรูปแบบวันใหม่ (Admin แก้ไข)' : 'วันนี้ทำงานแบบไหน? เลือกก่อนเริ่มลงกะ'}
-                              </h4>
-                              <div className="space-y-2">
-                                {DAY_TYPES.map(dt => (
-                                  <button key={dt.id} onClick={() => { handleSetDayType(selectedScheduleDate, dt.id); setIsEditingDayType(false); }} disabled={isScheduleProcessing} className="w-full text-left p-3 rounded-xl border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition">
-                                    <p className="text-sm font-bold text-slate-800">{dt.label}</p>
-                                    <p className="text-[11px] text-slate-500 mt-0.5">{dt.description}</p>
-                                  </button>
-                                ))}
-                              </div>
-                              {dayTypeForModal && (
-                                <button onClick={() => setIsEditingDayType(false)} className="w-full mt-2 py-2 text-xs font-bold text-slate-500 hover:text-slate-700">ยกเลิก</button>
-                              )}
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200">
-                                <div>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase">รูปแบบวันนี้</p>
-                                  <p className="text-sm font-bold text-slate-700">{getDayTypeMeta(dayTypeForModal.dayTypeId)?.label}</p>
-                                </div>
-                                {canManageAllAttendance && (
-                                  <button onClick={() => setIsEditingDayType(true)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0">แก้ไขรูปแบบวัน</button>
-                                )}
-                              </div>
-
-                              <div>
-                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะทั้งหมดวันนี้</h4>
-                                {dayShiftsForModal.length === 0 ? (
-                                  <p className="text-sm text-slate-400 bg-white p-3 rounded-xl border border-slate-100">ยังไม่มีใครจองกะวันนี้</p>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    {dayShiftsForModal.map(s => (
-                                      <div key={s.id} className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
-                                        <span className="text-sm font-bold text-slate-700 flex items-center"><User size={13} className="mr-1.5 text-slate-400"/>{s.employeeName}</span>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
-                                          {canManageAllAttendance && (
-                                            <button onClick={() => handleDeleteShiftBooking(s)} disabled={isScheduleProcessing} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-1.5 rounded-lg transition" title="ลบกะนี้"><Trash2 size={14}/></button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {loggedInUser?.employeeData && (
-                                <div className="pt-4 border-t border-slate-200">
-                                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">กะของฉัน</h4>
-                                  {myShiftForModal && canManageAllAttendance ? (
-                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
-                                      <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b> <span className="text-indigo-500 font-medium">(Admin/ผู้มีสิทธิ์ แก้ได้ทันที ไม่ต้องขออนุมัติ)</span></p>
-                                      <div className="grid grid-cols-3 gap-2">
-                                        {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
-                                          <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
-                                        ))}
-                                      </div>
-                                      <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: loggedInUser.employeeData.id, employeeName: loggedInUser.employeeData.fullName, allowOverwrite: true })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">เปลี่ยนกะของฉัน</button>
-                                    </div>
-                                  ) : myPendingRequestForModal ? (
-                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 flex items-center">
-                                      <Bell size={15} className="mr-2 shrink-0"/> รอ Admin อนุมัติ: {myPendingRequestForModal.currentShiftLabel || '-'} → {myPendingRequestForModal.requestedShiftLabel || '-'}
-                                    </div>
-                                  ) : myShiftForModal ? (
-                                    isRequestingChange ? (
-                                      <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
-                                        <p className="text-xs text-slate-500">กะปัจจุบัน: <b className="text-slate-700">{myShiftForModal.shiftLabel}</b></p>
-                                        <div className="grid grid-cols-3 gap-2">
-                                          {availableSlots.filter(s => s.id !== myShiftForModal.shiftSlotId).map(s => (
-                                            <button key={s.id} onClick={() => setChangeRequestShiftType(s.id)} className={`p-2 rounded-xl border-2 text-[11px] font-bold transition ${changeRequestShiftType === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>{s.label}</button>
-                                          ))}
-                                        </div>
-                                        <input type="text" placeholder="เหตุผล (ถ้ามี)..." value={changeRequestReason} onChange={e => setChangeRequestReason(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
-                                        <div className="flex gap-2">
-                                          <button onClick={() => { setIsRequestingChange(false); setChangeRequestShiftType(''); setChangeRequestReason(''); }} disabled={isScheduleProcessing} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">ยกเลิก</button>
-                                          <button onClick={() => handleRequestShiftChange(selectedScheduleDate, dayTypeForModal.dayTypeId, myShiftForModal, availableSlots.find(s => s.id === changeRequestShiftType), changeRequestReason)} disabled={isScheduleProcessing || !changeRequestShiftType} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">ส่งคำขอ</button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
-                                        <span className="text-sm font-bold text-indigo-700">{myShiftForModal.shiftLabel} <span className="font-normal text-indigo-400">({myShiftForModal.shiftTime})</span></span>
-                                        <button onClick={() => { setIsRequestingChange(true); setChangeRequestShiftType(''); setChangeRequestReason(''); }} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0 ml-2">ขอเปลี่ยนกะ</button>
-                                      </div>
-                                    )
-                                  ) : (
-                                    <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {availableSlots.map(s => (
-                                          <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                                            {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                      <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick))} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">จองกะนี้</button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {canManageAllAttendance && (
-                                <div className="pt-4 border-t border-slate-200">
-                                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 tracking-wide">จองกะให้พนักงาน (Admin)</h4>
-                                  <select value={adminSelectedEmployeeId} onChange={e => { setAdminSelectedEmployeeId(e.target.value); setScheduleShiftPick(''); }} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 bg-white mb-3 font-medium">
-                                    <option value="">-- เลือกพนักงาน --</option>
-                                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}{emp.id === loggedInUser?.employeeData?.id ? ' (ฉัน)' : ''}</option>)}
-                                  </select>
-                                  {adminSelectedEmployeeId && (() => {
-                                    const targetShift = dayShiftsForModal.find(s => s.employeeId === adminSelectedEmployeeId);
-                                    const targetEmpName = employees.find(e => e.id === adminSelectedEmployeeId)?.fullName || '';
-                                    return (
-                                      <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100">
-                                        {targetShift && <p className="text-xs text-slate-500">กะปัจจุบันของ {targetEmpName}: <b className="text-slate-700">{targetShift.shiftLabel}</b></p>}
-                                        <div className="grid grid-cols-2 gap-2">
-                                          {availableSlots.filter(s => !targetShift || s.id !== targetShift.shiftSlotId).map(s => (
-                                            <button key={s.id} onClick={() => setScheduleShiftPick(s.id)} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition text-left ${scheduleShiftPick === s.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                                              {s.label}<br/><span className="font-normal text-[10px] opacity-70">{s.time}</span>
-                                            </button>
-                                          ))}
-                                        </div>
-                                        <button onClick={() => handleBookShift(selectedScheduleDate, dayTypeForModal.dayTypeId, availableSlots.find(s => s.id === scheduleShiftPick), { employeeId: adminSelectedEmployeeId, employeeName: targetEmpName, allowOverwrite: !!targetShift })} disabled={isScheduleProcessing || !scheduleShiftPick} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-40">
-                                          {targetShift ? `เปลี่ยนกะของ ${targetEmpName}` : `จองกะให้ ${targetEmpName}`}
-                                        </button>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {showApprovalPanel && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setShowApprovalPanel(false)}>
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shrink-0">
-                    <h3 className="font-bold text-lg flex items-center"><Bell size={18} className="mr-2"/> คำขอเปลี่ยนกะที่รออนุมัติ</h3>
-                    <button onClick={() => setShowApprovalPanel(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
-                  </div>
-                  <div className="p-5 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
-                    {pendingSwapRequests.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-8">ไม่มีคำขอที่รออนุมัติ</p>
-                    ) : (
-                      pendingSwapRequests.map(req => {
-                        let reqDateLabel = req.date;
-                        try { reqDateLabel = new Date(req.date + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }); } catch(e) {}
-                        const othersThatDay = shiftSchedule.filter(s => s.date === req.date && s.employeeId !== req.employeeId);
-                        return (
-                          <div key={req.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                            <div className="flex justify-between items-start mb-2 gap-2">
-                              <div>
-                                <p className="font-bold text-slate-800 text-sm">{req.employeeName}</p>
-                                <p className="text-xs text-slate-500">{reqDateLabel}</p>
-                              </div>
-                              <span className="text-xs font-bold text-slate-600 text-right shrink-0">{req.currentShiftLabel || '-'} → {req.requestedShiftLabel || '-'}</span>
-                            </div>
-                            {req.reason && <p className="text-xs text-slate-500 italic mb-3 bg-slate-50 p-2 rounded-lg">"{req.reason}"</p>}
-                            {othersThatDay.length > 0 && (
-                              <div className="mb-3 bg-slate-50 rounded-xl p-2.5">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wide">พนักงานคนอื่นที่ทำงานวันนี้</p>
-                                <div className="space-y-1">
-                                  {othersThatDay.map(s => (
-                                    <div key={s.id} className="flex items-center justify-between text-xs">
-                                      <span className="text-slate-600 font-medium">{s.employeeName}</span>
-                                      <span className={`font-bold px-1.5 py-0.5 rounded border text-[10px] shrink-0 ${s.badgeClass || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{s.shiftLabel || '-'}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div className="flex gap-2">
-                              <button onClick={() => handleReviewSwapRequest(req, false)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition">ปฏิเสธ</button>
-                              <button onClick={() => handleReviewSwapRequest(req, true)} disabled={isScheduleProcessing} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition">อนุมัติ</button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {showHolidayPanel && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }}>
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="bg-gradient-to-r from-rose-500 to-red-500 p-4 text-white flex justify-between items-center shrink-0">
-                    <h3 className="font-bold text-lg flex items-center"><CalendarDays size={18} className="mr-2"/> วันหยุดประจำปี</h3>
-                    <button onClick={() => { setShowHolidayPanel(false); setEditingHolidayId(null); }} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
-                  </div>
-                  <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
-                    {canManageAllAttendance && (
-                      <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-2">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">เพิ่มวันหยุดใหม่</p>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
-                          <input type="text" placeholder="ชื่อวันหยุด เช่น วันขึ้นปีใหม่..." value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-rose-500 bg-white"/>
-                          <button onClick={handleAddHoliday} disabled={isScheduleProcessing || !newHolidayDate || !newHolidayName.trim()} className="px-4 py-2.5 bg-rose-500 text-white text-sm font-bold rounded-xl hover:bg-rose-600 transition disabled:opacity-40 shrink-0">บันทึก</button>
-                        </div>
-                        {getHolidayForDate(newHolidayDate) && <p className="text-[11px] text-amber-600 font-bold">* วันที่นี้มีวันหยุดอยู่แล้ว ("{getHolidayForDate(newHolidayDate).name}") บันทึกซ้ำจะเป็นการแก้ไขชื่อแทน</p>}
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">ตารางวันหยุดประจำปี</p>
-                      <select value={holidayYearFilter} onChange={e => setHolidayYearFilter(e.target.value)} className="p-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-rose-500 bg-white">
-                        {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={String(y)}>{y + 543}</option>)}
-                      </select>
-                    </div>
-
-                    {holidaysForYearFilter.length === 0 ? (
-                      <p className="text-sm text-slate-400 bg-white p-4 rounded-xl border border-slate-100 text-center">ยังไม่มีวันหยุดในปีนี้</p>
-                    ) : (
-                      <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
-                        {holidaysForYearFilter.map(h => {
-                          let hDateLabel = h.date;
-                          try { hDateLabel = new Date(h.date + 'T12:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) {}
-                          return (
-                            <div key={h.id} className="p-3 flex items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[10px] font-bold text-rose-500">{hDateLabel}</p>
-                                {editingHolidayId === h.id ? (
-                                  <input type="text" value={editingHolidayName} onChange={e => setEditingHolidayName(e.target.value)} className="w-full mt-1 p-1.5 border border-rose-300 rounded-lg text-sm outline-none focus:border-rose-500" autoFocus/>
-                                ) : (
-                                  <p className="text-sm font-bold text-slate-700 truncate">{h.name}</p>
-                                )}
-                              </div>
-                              {canManageAllAttendance && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {editingHolidayId === h.id ? (
-                                    <>
-                                      <button onClick={() => handleSaveHolidayName(h)} disabled={isScheduleProcessing} className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded-lg transition"><Save size={14}/></button>
-                                      <button onClick={() => { setEditingHolidayId(null); setEditingHolidayName(''); }} disabled={isScheduleProcessing} className="text-slate-500 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition"><X size={14}/></button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button onClick={() => { setEditingHolidayId(h.id); setEditingHolidayName(h.name); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition"><Edit2 size={14}/></button>
-                                      <button onClick={() => handleDeleteHoliday(h)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition"><Trash2 size={14}/></button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div>
-                <h3 className="font-bold text-slate-800 flex items-center"><CalendarIcon size={18} className="mr-2 text-indigo-500"/>ตารางกะการทำงาน</h3>
-                <p className="text-xs text-slate-500 mt-0.5">คลิกวันที่เพื่อจองกะของตัวเอง หรือขอเปลี่ยนกะที่จองไว้แล้ว</p>
-              </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
-                {canManageAllAttendance && (
-                  <button onClick={() => setShowApprovalPanel(true)} className="relative px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition flex items-center shadow-sm">
-                    <Bell size={16} className="mr-1.5"/> คำขอเปลี่ยนกะ
-                    {pendingSwapRequests.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center">{pendingSwapRequests.length}</span>}
-                  </button>
-                )}
-                <button onClick={() => { setShowHolidayPanel(true); setNewHolidayDate(''); setNewHolidayName(''); setEditingHolidayId(null); }} className="px-4 py-2.5 bg-white border border-rose-200 text-rose-700 text-sm font-bold rounded-xl hover:bg-rose-50 transition flex items-center shadow-sm">
-                  <CalendarDays size={16} className="mr-1.5"/> วันหยุดประจำปี
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-              <p className="text-[11px] font-bold text-slate-400 uppercase mb-2 tracking-wide">รูปแบบวันทำงาน 3 แบบ</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                {DAY_TYPES.map(dt => (
-                  <div key={dt.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <p className="text-xs font-bold text-slate-700">{dt.label}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{dt.description}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-amber-100 text-amber-700 border-amber-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-amber-400"></span>กะที่ 1</span>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-orange-100 text-orange-700 border-orange-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-orange-400"></span>กะที่ 2</span>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-indigo-100 text-indigo-700 border-indigo-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-indigo-400"></span>กะที่ 3 / กะสุดท้าย</span>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-600 border-slate-200 flex items-center"><span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400"></span>วันหยุด</span>
-              </div>
-            </div>
-
-            {renderScheduleCalendar()}
-          </div>
-        )}
-
-        {activeTab === 'history' && (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-50/50 gap-4">
-              <div className="flex items-center space-x-3 w-full lg:w-auto">
-                <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-full sm:w-auto">
-                  <button onClick={() => setHistoryViewMode('list')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'list' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><List size={16} className="mr-1.5"/> รายวัน</button>
-                  <button onClick={() => setHistoryViewMode('table')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'table' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid size={16} className="mr-1.5"/> ตารางสรุป</button>
-                  <button onClick={() => setHistoryViewMode('calendar')} className={`flex-1 sm:flex-none px-4 py-2 flex items-center justify-center rounded-lg text-xs md:text-sm font-bold transition-all ${historyViewMode === 'calendar' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><CalendarIcon size={16} className="mr-1.5"/> ปฏิทิน</button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                {historyViewMode === 'list' && (
-                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
-                )}
-                {historyViewMode === 'table' && (
-                  <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-sm flex-1 sm:flex-none">
-                    <input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
-                    <span className="text-slate-400 font-bold text-xs">-</span>
-                    <input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="p-1.5 border-none bg-transparent text-xs md:text-sm outline-none text-slate-700 font-bold w-full" />
-                  </div>
-                )}
-                {historyViewMode === 'calendar' && (
-                  <input type="month" value={calendarMonth} onChange={(e) => setCalendarMonth(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm" />
-                )}
-
-                {canManageAllAttendance && (
-                  <select value={filterEmployeeId} onChange={(e) => setFilterEmployeeId(e.target.value)} className="p-2 md:py-2.5 md:px-3 border border-slate-200 rounded-xl text-xs md:text-sm outline-none focus:border-indigo-500 text-slate-700 font-bold bg-white flex-1 sm:flex-none shadow-sm cursor-pointer">
-                    <option value="all">ทุกคน</option>
-                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
-                  </select>
-                )}
-
-                {canEditTab('attendance') && (
-                  <button onClick={openAddManualModal} className="flex items-center justify-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2.5 rounded-xl transition shadow-sm text-xs md:text-sm font-bold flex-1 sm:flex-none">
-                    <Plus size={16}/><span>เพิ่มเวลา (ลืมลง)</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 md:p-6 bg-slate-50/30">
-              {historyViewMode === 'list' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                  <table className="w-full text-left border-collapse min-w-[500px]">
-                    <thead>
-                      <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-[10px] md:text-xs uppercase border-b border-slate-200">
-                        <th className="p-4 font-extrabold text-center w-24">เวลา</th>
-                        <th className="p-4 font-extrabold">พนักงาน</th>
-                        <th className="p-4 font-extrabold text-center w-32">สถานะ</th>
-                        {canEditTab('attendance') && <th className="p-4 font-extrabold text-right w-28">จัดการ</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="text-xs md:text-sm">
-                      {filteredLogsForList.length === 0 ? (
-                        <tr>
-                          <td colSpan={canEditTab('attendance') ? 4 : 3} className="p-12 text-center text-slate-500">
-                            <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
-                               <FileQuestion size={48} className="text-slate-300"/>
-                               <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในวันที่เลือก</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredLogsForList.map(log => {
-                          const logDate = new Date(log.timestamp);
-                          const timeStr = !isNaN(logDate.getTime()) ? logDate.toLocaleTimeString('th-TH') : '-';
-                          return (
-                            <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
-                              <td className="p-4 text-center font-bold text-slate-700">{timeStr}</td>
-                              <td className="p-4">
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 overflow-hidden shrink-0 border-2 border-white shadow-sm group-hover:border-indigo-100 transition-colors">
-                                    {employees.find(e => e.id === log.employeeId)?.imageUrl ? (
-                                      <img src={employees.find(e => e.id === log.employeeId)?.imageUrl} alt="" className="w-full h-full object-cover" />
-                                    ) : <User size={16}/>}
-                                  </div>
-                                  <span className="font-bold text-slate-800">{log.employeeName}</span>
-                                </div>
-                              </td>
-                              <td className="p-4 text-center">
-                                {getStatusBadge(log.type)}
-                              </td>
-                              {canEditTab('attendance') && (
-                                <td className="p-4 text-right space-x-1.5">
-                                  <button onClick={() => openEditManualModal(log)} className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition active:scale-95" title="แก้ไขเวลา"><Edit2 size={16}/></button>
-                                  <button onClick={() => handleDeleteManual(log.id)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition active:scale-95" title="ลบข้อมูล"><Trash2 size={16}/></button>
-                                </td>
-                              )}
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {historyViewMode === 'table' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                   <div className="overflow-x-auto">
-                     <table className="w-full text-left border-collapse min-w-[800px]">
-                       <thead>
-                         <tr className="bg-gradient-to-b from-slate-50 to-white text-slate-600 text-[10px] md:text-xs border-b border-slate-200 shadow-sm">
-                           <th className="px-4 py-3 font-black text-center whitespace-nowrap bg-slate-100/50">วันที่</th>
-                           {Array.from({length: 8}).map((_, i) => (
-                             <th key={i} className="px-2 py-3 font-bold text-center whitespace-nowrap border-l border-slate-100">ครั้งที่ {i+1}</th>
-                           ))}
-                         </tr>
-                       </thead>
-                       <tbody className="text-xs md:text-sm">
-                         {tableData.length === 0 ? (
-                           <tr>
-                              <td colSpan="9" className="p-12 text-center text-slate-500">
-                                 <div className="flex flex-col items-center justify-center space-y-3 opacity-60">
-                                    <FileQuestion size={48} className="text-slate-300"/>
-                                    <span className="font-bold text-sm">ไม่พบประวัติการลงเวลาในช่วงเวลาที่เลือก</span>
-                                 </div>
-                              </td>
-                           </tr>
-                         ) : (
-                           tableData.map((row, idx) => {
-                             const thDate = new Date(row.date).toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
-                             return (
-                               <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                 <td className="px-4 py-4 font-black text-slate-700 text-center bg-slate-50/30">{thDate}</td>
-                                 {Array.from({length: 8}).map((_, i) => {
-                                   const log = row.logs[i];
-                                   return (
-                                     <td key={i} className="px-2 py-3 text-center border-l border-slate-50 align-top">
-                                       {log ? (
-                                         <div onClick={() => canEditTab('attendance') && openEditManualModal(log)} className={`flex flex-col items-center justify-center p-2 rounded-xl shadow-sm border transition ${canEditTab('attendance') ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''} ${log.type === 'checkin' ? 'bg-emerald-50 border-emerald-100' : log.type === 'start_live' ? 'bg-blue-50 border-blue-100' : 'bg-red-50 border-red-100'}`}>
-                                            <span className="font-black text-slate-800 text-[11px] md:text-xs">{new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
-                                            <span className={`text-[9px] md:text-[10px] font-bold mt-1 ${log.type === 'checkin' ? 'text-emerald-600' : log.type === 'start_live' ? 'text-blue-600' : 'text-red-600'}`}>{getTypeLabel(log.type)}</span>
-                                         </div>
-                                       ) : (
-                                         <div className="h-full flex items-center justify-center text-slate-300">-</div>
-                                       )}
-                                       </td>
-                                   )
-                                 })}
-                               </tr>
-                             )
-                           })
-                         )}
-                       </tbody>
-                     </table>
-                   </div>
-                </div>
-              )}
-
-              {historyViewMode === 'calendar' && renderCalendar()}
-
-            </div>
-          </div>
-        )}
-
-        {/* Modal Manual Add/Edit */}
-        {showManualModal && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 text-white flex justify-between items-center shadow-md relative z-10">
-                  <h3 className="font-bold text-lg flex items-center tracking-wide"><Edit2 size={18} className="mr-2"/> {isEditingMode ? 'แก้ไขเวลา' : 'เพิ่มเวลาย้อนหลัง'}</h3>
-                  <button onClick={() => setShowManualModal(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
-                </div>
-                <form onSubmit={handleSaveManual} className="p-5 space-y-4 bg-slate-50/50">
-                   <div>
-                     <label className="block text-xs font-bold text-slate-600 mb-1.5">พนักงาน</label>
-                     <select value={manualForm.employeeId} onChange={e => setManualForm({...manualForm, employeeId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800" disabled={!canManageAllAttendance}>
-                        {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
-                     </select>
-                   </div>
-                   <div className="grid grid-cols-2 gap-3">
-                     <div>
-                       <label className="block text-xs font-bold text-slate-600 mb-1.5">วันที่</label>
-                       <input type="date" required value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
-                     </div>
-                     <div>
-                       <label className="block text-xs font-bold text-slate-600 mb-1.5">เวลา</label>
-                       <input type="time" required value={manualForm.time} onChange={e => setManualForm({...manualForm, time: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-sm font-medium text-slate-800"/>
-                     </div>
-                   </div>
-                   <div>
-                     <label className="block text-xs font-bold text-slate-600 mb-1.5">ประเภทการลงเวลา</label>
-                     <div className="grid grid-cols-3 gap-2">
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkin'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkin' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เข้างาน</button>
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'start_live'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'start_live' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>เริ่มไลฟ์สด</button>
-                       <button type="button" onClick={() => setManualForm({...manualForm, type: 'checkout'})} className={`py-2 px-1 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${manualForm.type === 'checkout' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>ออกงาน</button>
-                     </div>
-                   </div>
-                   
-                   <div className="pt-5 flex flex-col sm:flex-row gap-3 border-t border-slate-200 mt-4">
-                     {isEditingMode && (
-                        <button type="button" onClick={() => handleDeleteManual(manualForm.id).then(() => setShowManualModal(false))} className="w-full sm:w-auto py-2.5 px-4 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition shadow-sm border border-red-100 flex items-center justify-center active:scale-95">
-                          <Trash2 size={16} className="mr-1.5"/> ลบข้อมูล
-                        </button>
-                     )}
-                     <div className="flex w-full gap-3">
-                       <button type="button" onClick={() => setShowManualModal(false)} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition shadow-sm active:scale-95">ยกเลิก</button>
-                       <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-500/30 flex items-center justify-center active:scale-95"><Save size={16} className="mr-1.5"/> บันทึก</button>
-                     </div>
-                   </div>
-                </form>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const EmployeeManagementView = () => {
     const [isAdding, setIsAdding] = useState(false);
@@ -4026,7 +4031,24 @@ export default function App() {
 
         <main className="flex-1 overflow-auto p-3 md:p-6 pb-24 relative w-full">
           <div className="max-w-6xl mx-auto relative w-full">
-            {activeTab === 'attendance' && canAccess('attendance') && <AttendanceView/>}
+            {activeTab === 'attendance' && canAccess('attendance') && <AttendanceView
+              attendanceLogs={attendanceLogs} employees={employees} loggedInUser={loggedInUser}
+              isFaceModelsLoaded={isFaceModelsLoaded} setActiveTab={setActiveTab} canEditTab={canEditTab}
+              getLocalISODate={getLocalISODate} isStockCheckPendingFor={isStockCheckPendingFor}
+              shiftSchedule={shiftSchedule} shiftSwapRequests={shiftSwapRequests} dayTypes={dayTypes} companyHolidays={companyHolidays}
+              attendanceLocalTab={attendanceLocalTab} setAttendanceLocalTab={setAttendanceLocalTab}
+              scheduleMonth={scheduleMonth} setScheduleMonth={setScheduleMonth}
+              selectedScheduleDate={selectedScheduleDate} setSelectedScheduleDate={setSelectedScheduleDate}
+              scheduleShiftPick={scheduleShiftPick} setScheduleShiftPick={setScheduleShiftPick}
+              isRequestingChange={isRequestingChange} setIsRequestingChange={setIsRequestingChange}
+              changeRequestShiftType={changeRequestShiftType} setChangeRequestShiftType={setChangeRequestShiftType}
+              showApprovalPanel={showApprovalPanel} setShowApprovalPanel={setShowApprovalPanel}
+              isEditingDayType={isEditingDayType} setIsEditingDayType={setIsEditingDayType}
+              adminSelectedEmployeeId={adminSelectedEmployeeId} setAdminSelectedEmployeeId={setAdminSelectedEmployeeId}
+              showHolidayPanel={showHolidayPanel} setShowHolidayPanel={setShowHolidayPanel}
+              editingHolidayId={editingHolidayId} setEditingHolidayId={setEditingHolidayId}
+              holidayYearFilter={holidayYearFilter} setHolidayYearFilter={setHolidayYearFilter}
+            />}
             {activeTab === 'employees' && canAccess('employees') && <EmployeeManagementView/>}
              {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardView/>}
             {activeTab === 'products' && canAccess('products') && <ProductsView/>}
