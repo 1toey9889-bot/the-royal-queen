@@ -27,6 +27,27 @@ import * as faceapi from 'face-api.js';
 // ==========================================
 //  โลโก้ The Resilient Clinic 
 // ==========================================
+// ==========================================
+//  พื้นหลังตกแต่งของทั้งระบบ (ไล่เฉดสีอ่อน + วงกลมเบลอ) วางเป็นชั้นล่างสุดแบบ fixed
+//  ใช้ pointer-events-none เพื่อไม่ให้บังการคลิกใดๆ และ -z-10 เพื่อให้อยู่หลังเนื้อหาเสมอ
+// ==========================================
+const AppBackground = () => (
+  <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none" aria-hidden="true">
+    <div className="absolute inset-0 bg-gradient-to-br from-[#eef2ff] via-[#f7fafc] to-[#e0f2fe]"></div>
+    <div className="absolute -top-40 -left-32 w-[30rem] h-[30rem] rounded-full bg-blue-300/25 blur-3xl"></div>
+    <div className="absolute top-1/4 -right-40 w-[28rem] h-[28rem] rounded-full bg-indigo-300/25 blur-3xl"></div>
+    <div className="absolute -bottom-40 left-1/4 w-[26rem] h-[26rem] rounded-full bg-cyan-300/20 blur-3xl"></div>
+    <div className="absolute bottom-1/4 right-1/3 w-[18rem] h-[18rem] rounded-full bg-amber-200/20 blur-3xl"></div>
+  </div>
+);
+
+// ป้ายชื่อผู้พัฒนา มุมขวาล่าง (z ต่ำกว่าโมดัล จึงไม่บังหน้าต่างที่เปิดอยู่)
+const AppCredit = () => (
+  <div className="fixed bottom-2 right-3 z-[30] pointer-events-none select-none text-[10px] md:text-[11px] text-slate-400/90 font-medium tracking-wide">
+    Developed by Chavanakorn Tiathotsanat
+  </div>
+);
+
 const ResilientLogo = ({ className = "", collapsed = false }) => (
   <div className={`bg-gradient-to-br from-[#0A142A] to-[#112044] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 ${className}`}>
     <svg viewBox={collapsed ? "25 15 50 70" : "0 0 320 100"} className="h-full w-auto py-2 drop-shadow-md transition-all duration-500" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3772,7 +3793,9 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen flex items-center justify-center p-4 font-sans relative">
+      <AppBackground/>
+      <AppCredit/>
       <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border border-white/50 p-8 md:p-10 space-y-8">
         <div className="text-center space-y-4">
           <ResilientLogo className="mx-auto h-24 md:h-32 rounded-3xl shadow-xl w-full max-w-[320px]"/>
@@ -4387,7 +4410,8 @@ export default function App() {
 
   if (!isUsersLoaded || isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col space-y-5 font-sans px-4 text-center relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center flex-col space-y-5 font-sans px-4 text-center relative overflow-hidden">
+        <AppBackground/>
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100 rounded-full blur-3xl -mr-20 -mt-20"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-100 rounded-full blur-3xl -ml-20 -mb-20"></div>
         <div className="w-12 h-12 md:w-16 md:h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-lg shadow-blue-500/30 z-10"></div>
@@ -4399,9 +4423,11 @@ export default function App() {
 
   if (isExecutiveView) {
     return (
-      <div className="min-h-screen bg-slate-50/50 font-sans flex flex-col">
+      <div className="min-h-screen font-sans flex flex-col relative">
+        <AppBackground/>
+        <AppCredit/>
         <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
-        <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200 z-[50] sticky top-0">
+        <div className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-white/60 z-[50] sticky top-0">
           <div className="p-4 md:p-6 flex flex-col items-center justify-center space-y-4 max-w-5xl mx-auto w-full">
             <div className="flex items-center space-x-3"><ResilientLogo className="h-14 md:h-16 rounded-2xl shadow-sm px-4 w-[200px] md:w-[250px]"/></div>
              <div className="flex space-x-2 w-full max-w-sm bg-slate-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200 shadow-inner">
@@ -4438,10 +4464,12 @@ export default function App() {
   const navItemInactiveStyle = "text-slate-600 hover:bg-slate-100 hover:text-blue-600 font-medium hover:border-slate-200";
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row font-sans w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row font-sans w-full overflow-hidden relative">
+      <AppBackground/>
+      <AppCredit/>
       <style>{`input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } input[type=number] { -moz-appearance: textfield; }`}</style>
       
-      <div className={`w-full ${isSidebarCollapsed ? 'md:w-[80px]' : 'md:w-64'} bg-white border-b md:border-r border-slate-200 flex-shrink-0 z-[40] relative overflow-hidden transition-all duration-300 ease-in-out`}>
+      <div className={`w-full ${isSidebarCollapsed ? 'md:w-[80px]' : 'md:w-64'} bg-white/80 backdrop-blur-xl border-b md:border-r border-white/60 flex-shrink-0 z-[40] relative overflow-hidden transition-all duration-300 ease-in-out shadow-sm`}>
         <div className="relative z-10 flex flex-col h-full">
           {!isSidebarCollapsed && (
              <div className="p-4 flex items-center justify-center border-b border-slate-100 transition-all duration-300">
@@ -4462,8 +4490,8 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-slate-50">
-        <header className="bg-white h-16 border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full">
+      <div className="flex-1 flex flex-col h-[calc(100vh-120px)] md:h-screen overflow-hidden relative z-[50] w-full bg-transparent">
+        <header className="bg-white/80 backdrop-blur-xl h-16 border-b border-white/60 flex items-center justify-between px-4 md:px-6 flex-shrink-0 z-[60] w-full shadow-sm">
           <div className="flex items-center space-x-3">
              <button 
                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
