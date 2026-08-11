@@ -2393,6 +2393,14 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               applySummaryDelta(batch, getLocalISODate(item.date), -refundedRevenue, -refundedProfit, 0);
 
               const refundedText = Number(refundedRevenue).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              // ข้อมูลออเดอร์เดิมที่ขายไป เพื่อให้ประวัติการคืนตรวจสอบย้อนกลับได้ว่าคืนจากออเดอร์ไหน
+              let saleWhenText = '-';
+              try {
+                const sd = new Date(item.date);
+                if (!isNaN(sd.getTime())) saleWhenText = `${sd.toLocaleDateString('th-TH')} ${sd.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
+              } catch(e) {}
+              const saleStoreText = item.store || '-';
+              const saleSoldByText = item.soldBy || '-';
               // เก็บข้อมูลรายการขายเดิมไว้ด้วย เผื่อกรณีคืนเต็มจำนวนแล้วเอกสารถูกลบ จะได้สร้างกลับคืนได้ตอนยกเลิก
               const originalSaleSnapshot = {
                 orderId: item.orderId || '-',
@@ -2407,8 +2415,8 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                 soldBy: item.soldBy || 'unknown',
                 transactionId: item.transactionId || item.date
               };
-              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน "${returnProductName}" จำนวน ${qtyToReturn} ชิ้น เป็นเงิน ${refundedText} บาท (ออเดอร์ ${item.orderId || '-'})`, timestamp: new Date().toISOString(),
-                meta: { productId: item.productId, qty: qtyToReturn, saleId: item.id, refundedRevenue: refundedRevenue, refundedProfit: refundedProfit, saleDateStr: getLocalISODate(item.date), originalSale: originalSaleSnapshot } });
+              batch.set(doc(collection(db, "audit_logs")), { action: "RETURN_STOCK", user: loggedInUser?.username, details: `ลูกค้ารับคืน "${returnProductName}" จำนวน ${qtyToReturn} ชิ้น เป็นเงิน ${refundedText} บาท | ออเดอร์ ${item.orderId || '-'} | ขายเมื่อ ${saleWhenText} | ร้าน ${saleStoreText} | ผู้ขาย ${saleSoldByText}`, timestamp: new Date().toISOString(),
+                meta: { productId: item.productId, qty: qtyToReturn, saleId: item.id, refundedRevenue: refundedRevenue, refundedProfit: refundedProfit, saleDateStr: getLocalISODate(item.date), orderId: item.orderId || '-', saleDate: item.date, saleStore: saleStoreText, saleSoldBy: saleSoldByText, originalSale: originalSaleSnapshot } });
           }
           await batch.commit();
           alert('ทำรายการคืนสินค้าสำเร็จ');
