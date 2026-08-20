@@ -253,7 +253,7 @@ const HISTORY_ACTION_PERMS = [
 // ประเภทรายการที่ "ยกเลิกย้อนกลับ" ได้ (ต้องมี meta ที่บันทึกโครงสร้างข้อมูลไว้ตอนทำรายการ)
 const CANCELLABLE_STOCK_ACTIONS = ['ADD_STOCK', 'UNBOX_STOCK', 'RETURN_STOCK'];
 
-const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE'];
+const STORE_OPTIONS = ['Shopee(Re)', 'Shopee(Long)', 'Lazada(Re)', 'Lazada(Long)', 'LINE', 'Thaimart'];
 const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
 // ==========================================
@@ -595,7 +595,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
              </div>
              <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1 w-full bg-[#FBF7EE]/60">
                 <div className="grid grid-cols-2 gap-4 text-sm bg-[#FFFDF7] p-4 rounded-2xl border border-[#EADBBB]/60 shadow-sm">
-                   <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">ร้านค้า</span><span className={`inline-block px-3.5 py-1.5 rounded-xl font-black text-xs md:text-sm shadow-sm border ${selectedStore.includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (selectedStore === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{selectedStore}</span></div>
+                   <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">ร้านค้า</span><span className={`inline-block px-3.5 py-1.5 rounded-xl font-black text-xs md:text-sm shadow-sm border ${selectedStore.includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (selectedStore === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : (selectedStore === 'Thaimart' ? 'bg-[#FEECEC] text-[#DC2626] border-[#FBD5D5]' : 'bg-blue-50 text-blue-600 border-blue-100'))}`}>{selectedStore}</span></div>
                    <div><span className="text-slate-500 font-bold block mb-1.5 text-xs uppercase tracking-wider">รหัสออเดอร์</span><span className="font-black text-slate-800 text-sm md:text-base bg-slate-100 px-3 py-1.5 rounded-xl block border border-slate-200 break-words">{orderId || '-'}</span></div>
                 </div>
                 <div>
@@ -705,11 +705,12 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
                  <Store size={18} className="text-orange-500"/>
                  <label className="text-sm font-bold text-slate-700">เลือกร้านค้า</label>
               </div>
-              <div className="grid grid-cols-5 gap-2 w-full">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 w-full">
                  {STORE_OPTIONS.map(s => {
                     const isShopee = s.includes('Shopee');
                     const isLazada = s.includes('Lazada');
                     const isLine = s === 'LINE';
+                    const isThaimart = s === 'Thaimart';
                     const isActive = selectedStore === s;
                     
                     let colorClass = "bg-slate-50 text-slate-500 hover:bg-slate-100 border-transparent hover:border-slate-200";
@@ -717,15 +718,18 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
                        if (isShopee) colorClass = "bg-gradient-to-br from-[#EE4D2D] to-[#d63d1e] text-white shadow-sm border-transparent ring-2 ring-[#EE4D2D]/30 ring-offset-1";
                        else if (isLazada) colorClass = "bg-gradient-to-br from-[#0F146D] to-[#0a0d4a] text-white shadow-sm border-transparent ring-2 ring-[#0F146D]/30 ring-offset-1";
                        else if (isLine) colorClass = "bg-gradient-to-br from-[#00C300] to-[#00a800] text-white shadow-sm border-transparent ring-2 ring-[#00C300]/30 ring-offset-1";
+                       else if (isThaimart) colorClass = "bg-gradient-to-br from-[#E5252A] to-[#B91C1C] text-white shadow-sm border-transparent ring-2 ring-[#E5252A]/30 ring-offset-1";
                        else colorClass = "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm border-transparent ring-2 ring-blue-500/30 ring-offset-1";
                     } else {
                        if (isShopee) colorClass = "bg-[#FFF0ED] text-[#EE4D2D] border-[#FFE4DF]";
                        else if (isLazada) colorClass = "bg-[#F2F3FF] text-[#0F146D] border-[#E6E8FF]";
                        else if (isLine) colorClass = "bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]";
+                       else if (isThaimart) colorClass = "bg-[#FEECEC] text-[#DC2626] border-[#FBD5D5]";
                     }
 
                     return (
                       <button type="button" key={s} onClick={() => setSelectedStore(s)} className={`px-1 py-2 rounded-xl border-2 text-[10px] md:text-xs font-bold transition-all active:scale-95 ${colorClass} flex items-center justify-center text-center whitespace-normal break-words leading-tight w-full min-h-[44px]`}>
+                         {isThaimart && <Store size={12} className="mr-1 shrink-0"/>}
                          {s}
                       </button>
                     )
@@ -889,7 +893,7 @@ const SalesView = ({ products, sales, attendanceLogs, loggedInUser, setActiveTab
                              ) : ''}
                           </td>
                           <td className={`p-2 font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{sale.orderId || '-'}</td>
-                          <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : 'bg-blue-50 text-blue-600 border-blue-100')}`}>{sale.store || '-'}</span></td>
+                          <td className={`p-2 whitespace-nowrap ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${String(sale.store || '').includes('Shopee') ? 'bg-orange-50 text-orange-600 border-orange-100' : (String(sale.store || '') === 'LINE' ? 'bg-[#E5F9E5] text-[#00C300] border-[#CCF2CC]' : (String(sale.store || '') === 'Thaimart' ? 'bg-[#FEECEC] text-[#DC2626] border-[#FBD5D5]' : 'bg-blue-50 text-blue-600 border-blue-100'))}`}>{sale.store || '-'}</span></td>
                           <td className={`p-2 font-medium text-slate-800 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{getProduct(sale.productId)?.name || 'ลบแล้ว'}</td>
                           <td className={`p-2 text-center font-bold text-slate-700 ${isFirstRow ? 'border-t border-slate-100 bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>{sale.quantity}</td>
                           <td className={`p-2 text-right text-slate-700 font-bold whitespace-nowrap border-r border-slate-100 ${isFirstRow ? 'border-t rounded-tr-xl bg-[#FBF7EE]/60' : 'border-t border-slate-50'}`}>฿{formatMoney(sale.total)}</td>
@@ -3000,6 +3004,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                   if (headStore.includes('Shopee')) { gradientHeaderClass = "from-[#FFF0ED] to-white border-[#FFE4DF]"; badgeStoreClass = "bg-[#EE4D2D] text-white border-transparent"; }
                   else if (headStore.includes('Lazada')) { gradientHeaderClass = "from-[#F2F3FF] to-white border-[#E6E8FF]"; badgeStoreClass = "bg-[#0F146D] text-white border-transparent"; }
                   else if (headStore === 'LINE') { gradientHeaderClass = "from-[#E5F9E5] to-white border-[#CCF2CC]"; badgeStoreClass = "bg-[#00C300] text-white border-transparent"; }
+                  else if (headStore === 'Thaimart') { gradientHeaderClass = "from-[#FEECEC] to-white border-[#FBD5D5]"; badgeStoreClass = "bg-[#DC2626] text-white border-transparent"; }
 
                   const orderTotalQty = returnItems.reduce((s, it) => s + (Number(it.quantity) || 0), 0);
                   const orderTotalValue = returnItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
@@ -3461,6 +3466,9 @@ const SalesHistoryView = ({ products, sales, productMap, loggedInUser, getProduc
             } else if (mainStore === 'LINE') {
               gradientHeaderClass = "from-[#E5F9E5] to-white border-[#CCF2CC]";
               badgeStoreClass = "bg-[#00C300] text-white border-transparent";
+            } else if (mainStore === 'Thaimart') {
+              gradientHeaderClass = "from-[#FEECEC] to-white border-[#FBD5D5]";
+              badgeStoreClass = "bg-[#DC2626] text-white border-transparent";
             }
 
             return (
@@ -3957,7 +3965,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.38</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.39</p>
         </div>
       </div>
     </div>
