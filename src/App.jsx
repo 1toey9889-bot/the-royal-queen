@@ -226,7 +226,7 @@ const defaultPermissions = {
   stockDailyCheck: false, stockAssignCheck: false, stockCheckHistory: false,
   // สิทธิ์ดู "ประวัติการทำรายการ" แยกตามประเภทรายการ (เปิดเฉพาะประเภทที่อนุญาตให้ดู)
   histAddStock: false, histOverrideStock: false, histReturnStock: false,
-  histUnboxStock: false, histAssignCheck: false, histCompleteCheck: false, histCancelTxn: false
+  histUnboxStock: false, histAssignCheck: false, histCompleteCheck: false, histCancelTxn: false, histEditTxn: false
 };
 
 // เมนูย่อยในระบบสต๊อก -> คีย์สิทธิ์ (ใช้ทั้งในหน้าตั้งค่าสิทธิ์และตอนตรวจสิทธิ์จริงใน StockView)
@@ -248,6 +248,7 @@ const HISTORY_ACTION_PERMS = [
   { action: 'ASSIGN_STOCK_CHECK', key: 'histAssignCheck', label: 'มอบหมายเช็คสต๊อก' },
   { action: 'COMPLETE_STOCK_CHECK', key: 'histCompleteCheck', label: 'เช็คสต๊อกประจำวัน' },
   { action: 'CANCEL_STOCK_TXN', key: 'histCancelTxn', label: 'ยกเลิกรายการ' },
+  { action: 'EDIT_STOCK_TXN', key: 'histEditTxn', label: 'แก้ไขรายการ' },
 ];
 
 // ประเภทรายการที่ "ยกเลิกย้อนกลับ" ได้ (ต้องมี meta ที่บันทึกโครงสร้างข้อมูลไว้ตอนทำรายการ)
@@ -2251,6 +2252,10 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
 
   // สำหรับหน้าประวัติการเช็คสต๊อกย้อนหลัง (ดูได้ทุกคน)
   const [expandedCheckDate, setExpandedCheckDate] = useState(null);
+
+  // สำหรับแก้ไขรายการย้อนหลังในประวัติการทำรายการ
+  const [editingStockLog, setEditingStockLog] = useState(null);
+  const [editStockForm, setEditStockForm] = useState({ qty: '', amount: '' });
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -2288,12 +2293,163 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
       case 'ASSIGN_STOCK_CHECK': return { label: 'มอบหมายเช็คสต๊อก', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' };
       case 'COMPLETE_STOCK_CHECK': return { label: 'เช็คสต๊อกประจำวัน', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' };
       case 'CANCEL_STOCK_TXN': return { label: 'ยกเลิกรายการ', badgeClass: 'bg-red-50 text-red-700 border-red-200' };
+      case 'EDIT_STOCK_TXN': return { label: 'แก้ไขรายการ', badgeClass: 'bg-yellow-50 text-yellow-700 border-yellow-200' };
       default: return { label: action, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
     }
   };
 
   // สิทธิ์ยกเลิกรายการย้อนกลับ (Admin หรือผู้มีสิทธิ์แก้ไขสต๊อก)
   const canCancelStockTxn = loggedInUser?.role === 'admin' || !!loggedInUser?.permissions?.stockEdit;
+
+  // เปิดฟอร์มแก้ไขรายการย้อนหลัง โดยเติมค่าเดิมจาก meta ที่บันทึกไว้ตอนทำรายการ
+  const openEditStockLog = (log) => {
+    const m = log.meta || {};
+    if (log.action === 'ADD_STOCK') {
+      setEditStockForm({ qty: String(m.qty ?? ''), amount: '' });
+    } else if (log.action === 'UNBOX_STOCK') {
+      setEditStockForm({ qty: String(m.boxQty ?? ''), amount: '' });
+    } else if (log.action === 'RETURN_STOCK') {
+      setEditStockForm({ qty: String(m.qty ?? ''), amount: String(m.refundedRevenue ?? '') });
+    }
+    setEditingStockLog(log);
+  };
+
+  // แก้ไขรายการนำเข้า / แกะกล่อง / ลูกค้าคืนของ ย้อนหลัง
+  // หลักการ: คำนวณเฉพาะ "ส่วนต่าง" จากค่าเดิม แล้วปรับสต๊อก/ยอดขาย/ยอดสรุปให้ตรง
+  // ทั้งหมดอยู่ใน runTransaction เดียว จึงไม่มีทางที่ตัวเลขจะเพี้ยนแม้มีคนขายพร้อมกัน
+  const handleEditStockTransaction = async () => {
+    const log = editingStockLog;
+    if (!log) return;
+    const m = log.meta || {};
+    const newQty = Number(editStockForm.qty);
+    if (!Number.isFinite(newQty) || newQty <= 0) { alert('กรุณาระบุจำนวนให้ถูกต้อง (มากกว่า 0)'); return; }
+
+    setIsProcessing(true);
+    try {
+      await runTransaction(db, async (tx) => {
+        const logRef = doc(db, "audit_logs", log.id);
+        const logSnap = await tx.get(logRef);
+        if (!logSnap.exists()) throw new Error('ไม่พบรายการนี้ในระบบ');
+        if (logSnap.data().cancelled) throw new Error('รายการนี้ถูกยกเลิกไปแล้ว ไม่สามารถแก้ไขได้');
+
+        let newDetails = log.details;
+        let newMeta = { ...m };
+
+        if (log.action === 'ADD_STOCK') {
+          const oldQty = Number(m.qty) || 0;
+          const diff = newQty - oldQty;                   // + = นำเข้าเพิ่ม, - = นำเข้าน้อยลง
+          const pRef = doc(db, "products", m.productId);
+          const pSnap = await tx.get(pRef);
+          if (!pSnap.exists()) throw new Error('ไม่พบสินค้านี้ (อาจถูกลบไปแล้ว)');
+          const cur = Number(pSnap.data().stock) || 0;
+          if (diff < 0 && cur < -diff) throw new Error(`แก้ไขไม่ได้: สต๊อกคงเหลือ ${cur} ไม่พอหักออก ${-diff} (อาจขายออกไปแล้ว)`);
+          if (diff !== 0) tx.update(pRef, { stock: increment(diff) });
+          const pName = pSnap.data().name || '-';
+          newMeta.qty = newQty;
+          newDetails = `นำเข้า "${pName}" เพิ่มสต๊อกเข้า ${newQty} ชิ้น`;
+
+        } else if (log.action === 'UNBOX_STOCK') {
+          const oldBox = Number(m.boxQty) || 0;
+          const oldPanel = Number(m.panelQty) || 0;
+          const ratio = oldBox > 0 ? (oldPanel / oldBox) : 0;
+          if (ratio <= 0) throw new Error('ข้อมูลอัตราแปลงของรายการนี้ไม่สมบูรณ์ ไม่สามารถแก้ไขได้');
+          const newBox = newQty;
+          const newPanel = Math.round(newBox * ratio);
+          const boxDiff = -(newBox - oldBox);             // แกะเพิ่ม = กล่องลดลง
+          const panelDiff = newPanel - oldPanel;
+          const boxRef = doc(db, "products", m.boxProductId);
+          const panelRef = doc(db, "products", m.panelProductId);
+          const boxSnap = await tx.get(boxRef);
+          const panelSnap = await tx.get(panelRef);
+          if (!boxSnap.exists()) throw new Error('ไม่พบสินค้าต้นทาง (กล่อง)');
+          if (!panelSnap.exists()) throw new Error('ไม่พบสินค้าปลายทาง (แผง)');
+          const boxCur = Number(boxSnap.data().stock) || 0;
+          const panelCur = Number(panelSnap.data().stock) || 0;
+          if (boxDiff < 0 && boxCur < -boxDiff) throw new Error(`แก้ไขไม่ได้: สต๊อกกล่องเหลือ ${boxCur} ไม่พอหักออก ${-boxDiff}`);
+          if (panelDiff < 0 && panelCur < -panelDiff) throw new Error(`แก้ไขไม่ได้: สต๊อกแผงเหลือ ${panelCur} ไม่พอหักออก ${-panelDiff}`);
+          if (boxDiff !== 0) tx.update(boxRef, { stock: increment(boxDiff) });
+          if (panelDiff !== 0) tx.update(panelRef, { stock: increment(panelDiff) });
+          newMeta.boxQty = newBox; newMeta.panelQty = newPanel;
+          newDetails = `แกะกล่อง "${boxSnap.data().name || ''}" จำนวน ${newBox} กล่อง แปลงเป็น "${panelSnap.data().name || ''}" จำนวน ${newPanel} แผง (อัตรา ${ratio} แผง/กล่อง)`;
+
+        } else if (log.action === 'RETURN_STOCK') {
+          const oldQty = Number(m.qty) || 0;
+          const oldRefund = Number(m.refundedRevenue) || 0;
+          const orig = m.originalSale;
+          if (!orig) throw new Error('รายการคืนนี้ไม่มีข้อมูลออเดอร์เดิม จึงแก้ไขไม่ได้');
+          if (newQty > Number(orig.quantity)) throw new Error(`แก้ไขไม่ได้: คืน ${newQty} เกินจำนวนที่ขายจริง (${orig.quantity})`);
+          const newRefundRaw = Number(editStockForm.amount);
+          const newRefund = Number.isFinite(newRefundRaw) && editStockForm.amount !== '' ? newRefundRaw : (Number(orig.total) / Number(orig.quantity)) * newQty;
+          if (newRefund < 0) throw new Error('ยอดเงินคืนต้องไม่ติดลบ');
+          if (newRefund > Number(orig.total)) throw new Error(`ยอดคืน ${newRefund.toLocaleString('th-TH')} เกินยอดขายจริงของรายการ (${Number(orig.total).toLocaleString('th-TH')})`);
+
+          const qtyDiff = newQty - oldQty;                // + = คืนเพิ่ม (สต๊อกเพิ่ม)
+          const pRef = doc(db, "products", m.productId);
+          const pSnap = await tx.get(pRef);
+          const saleRef = doc(db, "sales", m.saleId);
+          const saleSnap = await tx.get(saleRef);
+          if (pSnap.exists()) {
+            const cur = Number(pSnap.data().stock) || 0;
+            if (qtyDiff < 0 && cur < -qtyDiff) throw new Error(`แก้ไขไม่ได้: สต๊อกคงเหลือ ${cur} ไม่พอหักออก ${-qtyDiff} (อาจขายออกไปแล้ว)`);
+          }
+
+          // ---------- เขียน ----------
+          if (pSnap.exists() && qtyDiff !== 0) tx.update(pRef, { stock: increment(qtyDiff) });
+
+          // ปรับรายการขายเดิมให้สอดคล้องกับจำนวน/ยอดที่คืนใหม่
+          let targetQty, targetTotal;
+          if (saleSnap.exists()) {
+            targetQty = (Number(saleSnap.data().quantity) || 0) + (oldQty - newQty);
+            targetTotal = (Number(saleSnap.data().total) || 0) + (oldRefund - newRefund);
+          } else {
+            targetQty = Number(orig.quantity) - newQty;
+            targetTotal = Number(orig.total) - newRefund;
+          }
+          if (targetQty <= 0) {
+            if (saleSnap.exists()) tx.delete(saleRef);
+          } else {
+            tx.set(saleRef, { ...orig, quantity: targetQty, total: targetTotal });
+          }
+
+          // คืนยอดสรุปรายวันให้ตรง: เดิมหัก oldRefund ตอนนี้ต้องหัก newRefund
+          const unitCost = Number(orig.unitCost) || 0;
+          const oldProfit = oldRefund - unitCost * oldQty;
+          const newProfit = newRefund - unitCost * newQty;
+          tx.set(doc(db, "daily_summary", m.saleDateStr), {
+            date: m.saleDateStr,
+            totalRevenue: increment(oldRefund - newRefund),
+            totalProfit: increment(oldProfit - newProfit)
+          }, { merge: true });
+
+          newMeta.qty = newQty; newMeta.refundedRevenue = newRefund; newMeta.refundedProfit = newProfit;
+          const refundText = Number(newRefund).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const pName = pSnap.exists() ? (pSnap.data().name || '-') : (m.originalSale?.productName || '-');
+          let whenText = '-';
+          try { const sd = new Date(orig.date); if (!isNaN(sd.getTime())) whenText = `${sd.toLocaleDateString('th-TH')} ${sd.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`; } catch(e) {}
+          newDetails = `ลูกค้ารับคืน "${pName}" จำนวน ${newQty} ชิ้น เป็นเงิน ${refundText} บาท | ออเดอร์ ${orig.orderId || '-'} | ขายเมื่อ ${whenText} | ร้าน ${orig.store || '-'} | ผู้ขาย ${orig.soldBy || '-'}`;
+
+        } else {
+          throw new Error('ประเภทรายการนี้ไม่รองรับการแก้ไข');
+        }
+
+        tx.update(logRef, {
+          details: newDetails,
+          meta: newMeta,
+          editedBy: loggedInUser?.username || 'unknown',
+          editedAt: new Date().toISOString()
+        });
+        tx.set(doc(collection(db, "audit_logs")), {
+          action: "EDIT_STOCK_TXN",
+          user: loggedInUser?.username || 'unknown',
+          details: `แก้ไขรายการ [${getStockActionMeta(log.action).label}] จาก "${log.details}" เป็น "${newDetails}"`,
+          timestamp: new Date().toISOString()
+        });
+      });
+      setEditingStockLog(null);
+      alert('แก้ไขรายการและปรับสต๊อกเรียบร้อยแล้ว');
+    } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
+    setIsProcessing(false);
+  };
 
   // ยกเลิกรายการนำเข้า / แกะกล่อง / ลูกค้าคืนของ แล้วคืนสต๊อกกลับให้ตรงตามเดิม
   // ใช้ runTransaction เพื่อให้อ่านสต๊อกและเขียนกลับอยู่ในชุดเดียวกัน กันกรณีมีคนขาย/แก้สต๊อกพร้อมกัน
@@ -2513,7 +2669,13 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
   const handleSearchReturnOrder = () => {
       const items = sales.filter(s => s.orderId === returnOrderId.trim());
       if (items.length === 0) alert('ไม่พบออเดอร์นี้ในระบบ');
-      setReturnItems(items.map(item => ({...item, returnQty: item.quantity})));
+      // returnAmount = ยอดเงินที่จะคืนจริง เริ่มต้นเท่ากับยอดเต็มของบรรทัดนั้น
+      // พนักงานแก้ได้เอง กรณีตกลงกับลูกค้าคืนไม่เท่าราคาตามสัดส่วน (เช่น หักค่าส่ง/ค่าปรับ)
+      setReturnItems(items.map(item => ({
+        ...item,
+        returnQty: item.quantity,
+        returnAmount: Number(item.total) || 0
+      })));
   };
 
   const handleProcessReturn = async () => {
@@ -2536,12 +2698,20 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
               
               const newQty = item.quantity - qtyToReturn;
               const unitCostForReturn = item.unitCost !== undefined ? Number(item.unitCost) : Number(getProduct(item.productId)?.cost || 0);
-              const refundedRevenue = (Number(item.total) / Number(item.quantity)) * qtyToReturn;
+              // ยอดคืนตามสัดส่วนจำนวน (ค่าเริ่มต้น) แต่ถ้าพนักงานระบุยอดเองให้ใช้ยอดที่ระบุ
+              const proRataRefund = (Number(item.total) / Number(item.quantity)) * qtyToReturn;
+              let refundedRevenue = (item.returnAmount !== undefined && item.returnAmount !== '' && !isNaN(Number(item.returnAmount)))
+                ? Number(item.returnAmount)
+                : proRataRefund;
+              if (refundedRevenue < 0) refundedRevenue = 0;
+              // กันคืนเงินเกินยอดที่ขายจริงในบรรทัดนั้น
+              if (refundedRevenue > Number(item.total)) throw new Error(`ยอดคืนของ "${returnProductName}" เกินยอดขายจริงของรายการนี้ (${Number(item.total).toLocaleString('th-TH')} บาท)`);
               const refundedProfit = refundedRevenue - (unitCostForReturn * qtyToReturn);
               if(newQty === 0) {
                   batch.delete(doc(db, "sales", item.id));
               } else {
-                  const newTotal = (item.total / item.quantity) * newQty;
+                  // ยอดที่เหลือ = ยอดเดิม ลบยอดที่คืนไปจริง (สอดคล้องกันเสมอ)
+                  const newTotal = Number(item.total) - refundedRevenue;
                   batch.update(doc(db, "sales", item.id), { quantity: newQty, total: newTotal });
               }
               // หักยอดขาย/กำไรส่วนที่ลูกค้าคืนออกจากยอดสรุปรายวันของวันที่ขาย
@@ -3010,6 +3180,11 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                   const orderTotalValue = returnItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
                   const refundQty = returnItems.reduce((s, it) => s + (Number(it.returnQty) || 0), 0);
                   const refundValue = returnItems.reduce((s, it) => {
+                    if (!(Number(it.returnQty) > 0)) return s;
+                    // ใช้ยอดที่พนักงานระบุเป็นหลัก ถ้าไม่ได้ระบุค่อยคิดตามสัดส่วน
+                    if (it.returnAmount !== undefined && it.returnAmount !== '' && !isNaN(Number(it.returnAmount))) {
+                      return s + Number(it.returnAmount);
+                    }
                     const q = Number(it.quantity) || 0;
                     return s + (q > 0 ? (Number(it.total) / q) * (Number(it.returnQty) || 0) : 0);
                   }, 0);
@@ -3033,7 +3208,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                             </div>
 
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left min-w-[680px]">
+                                <table className="w-full text-left min-w-[820px]">
                                     <thead>
                                         <tr className="bg-[#FBF7EE]/60 text-slate-400 text-[10px] uppercase border-b border-slate-100">
                                             <th className="px-4 py-2 font-bold min-w-[150px]">รหัสออเดอร์</th>
@@ -3042,6 +3217,7 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                             <th className="px-4 py-2 font-bold text-right w-[100px]">ราคา/ชิ้น</th>
                                             <th className="px-4 py-2 font-bold text-right w-[120px]">ยอดรวมย่อย</th>
                                             <th className="px-4 py-2 font-bold text-center w-[130px]">จำนวนที่จะคืน</th>
+                                            <th className="px-4 py-2 font-bold text-center w-[140px]">ยอดเงินที่คืน</th>
                                         </tr>
                                     </thead>
                                     <tbody className="text-[11px] md:text-xs text-slate-700">
@@ -3057,8 +3233,23 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                                     <td className="px-4 py-2 text-right font-black text-slate-800">฿{formatMoney(item.total)}</td>
                                                     <td className="px-4 py-2 text-center">
                                                         <input type="number" max={qty} min="0" value={item.returnQty}
-                                                            onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnQty = e.target.value; setReturnItems(newItems); }}
+                                                            onChange={(e) => {
+                                                              const newItems = [...returnItems];
+                                                              newItems[idx].returnQty = e.target.value;
+                                                              // ปรับยอดเงินคืนตามสัดส่วนให้อัตโนมัติเมื่อเปลี่ยนจำนวน (พนักงานแก้ยอดทับได้ทีหลัง)
+                                                              const q = Number(e.target.value);
+                                                              const oq = Number(item.quantity) || 0;
+                                                              newItems[idx].returnAmount = (oq > 0 && !isNaN(q))
+                                                                ? Math.round(((Number(item.total) / oq) * q) * 100) / 100
+                                                                : 0;
+                                                              setReturnItems(newItems);
+                                                            }}
                                                             className="w-20 p-2 border-2 border-orange-200 rounded-lg outline-none text-center font-bold focus:border-orange-500"/>
+                                                    </td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <input type="number" min="0" step="0.01" value={item.returnAmount ?? ''}
+                                                            onChange={(e) => { const newItems = [...returnItems]; newItems[idx].returnAmount = e.target.value; setReturnItems(newItems); }}
+                                                            className="w-28 p-2 border-2 border-orange-200 rounded-lg outline-none text-center font-bold focus:border-orange-500"/>
                                                     </td>
                                                 </tr>
                                             );
@@ -3134,14 +3325,22 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                                           {log.cancelled && (
                                             <span className="flex items-center font-bold text-red-500">ยกเลิกโดย {log.cancelledBy || '-'}</span>
                                           )}
+                                          {!log.cancelled && log.editedBy && (
+                                            <span className="flex items-center font-bold text-yellow-600">แก้ไขโดย {log.editedBy}</span>
+                                          )}
                                       </p>
                                   </div>
                                   {log.cancelled ? (
                                       <span className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-red-50 text-red-600 border-red-200">ยกเลิกแล้ว</span>
                                   ) : isCancellable ? (
-                                      <button onClick={() => handleCancelStockTransaction(log)} disabled={isProcessing} className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 transition disabled:opacity-40">
-                                          ยกเลิกรายการ
-                                      </button>
+                                      <div className="shrink-0 flex items-center gap-2">
+                                          <button onClick={() => openEditStockLog(log)} disabled={isProcessing} className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-white hover:bg-blue-50 transition disabled:opacity-40 flex items-center">
+                                              <Edit2 size={12} className="mr-1"/> แก้ไข
+                                          </button>
+                                          <button onClick={() => handleCancelStockTransaction(log)} disabled={isProcessing} className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 transition disabled:opacity-40">
+                                              ยกเลิกรายการ
+                                          </button>
+                                      </div>
                                   ) : null}
                               </div>
                           );
@@ -3149,6 +3348,56 @@ const StockView = ({ products, sales, users, employees, auditLogs, stockChecks, 
                   )}
               </div>
           </div>
+      )}
+
+      {editingStockLog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setEditingStockLog(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-base flex items-center"><Edit2 size={18} className="mr-2"/> แก้ไขรายการย้อนหลัง</h3>
+              <button onClick={() => setEditingStockLog(null)} className="hover:bg-white/20 p-1.5 rounded-lg transition active:scale-95"><X size={20}/></button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+              <div className="bg-white p-3 rounded-xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">รายการเดิม</p>
+                <p className="text-sm font-medium text-slate-700 break-words">{editingStockLog.details}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  {editingStockLog.action === 'UNBOX_STOCK' ? 'จำนวนกล่องที่แกะ' : editingStockLog.action === 'RETURN_STOCK' ? 'จำนวนที่ลูกค้าคืน' : 'จำนวนที่นำเข้า'}
+                </label>
+                <input type="number" min="1" value={editStockForm.qty}
+                  onChange={e => setEditStockForm(prev => ({ ...prev, qty: e.target.value }))}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"/>
+                {editingStockLog.action === 'UNBOX_STOCK' && (
+                  <p className="text-[10px] text-slate-400 mt-1">จำนวนแผงจะคำนวณใหม่ตามอัตราแปลงเดิมโดยอัตโนมัติ</p>
+                )}
+              </div>
+
+              {editingStockLog.action === 'RETURN_STOCK' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">ยอดเงินที่คืน (บาท)</label>
+                  <input type="number" min="0" step="0.01" value={editStockForm.amount}
+                    onChange={e => setEditStockForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"/>
+                  <p className="text-[10px] text-slate-400 mt-1">เว้นว่างไว้ = คิดตามสัดส่วนจำนวนที่คืนโดยอัตโนมัติ</p>
+                </div>
+              )}
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
+                  ระบบจะปรับ<b>เฉพาะส่วนต่าง</b>จากค่าเดิมให้อัตโนมัติ ทั้งสต๊อก ยอดขาย และยอดสรุปรายวัน
+                  หากสต๊อกคงเหลือไม่พอสำหรับการปรับลด ระบบจะแจ้งเตือนและไม่บันทึกให้
+                </p>
+              </div>
+            </div>
+            <div className="p-4 bg-white border-t border-slate-100 flex gap-2 shrink-0">
+              <button onClick={() => setEditingStockLog(null)} disabled={isProcessing} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">ยกเลิก</button>
+              <button onClick={handleEditStockTransaction} disabled={isProcessing} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition disabled:opacity-40">บันทึกการแก้ไข</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {mode === 'view' && (
@@ -3965,7 +4214,7 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
             </div>
             <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
           </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.39</p>
+          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.40</p>
         </div>
       </div>
     </div>
