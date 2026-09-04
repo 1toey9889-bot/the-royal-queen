@@ -2,6 +2,7 @@
 //  1. นำเข้าเครื่องมือและไลบรารีต่างๆ (Imports)
 // ==========================================
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import * as THREE from 'three';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, collection, onSnapshot, addDoc, updateDoc, 
@@ -4179,43 +4180,221 @@ const LoginView = ({ users, employees, setLoggedInUser, setActiveTab }) => {
     else { setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); }
   };
 
+  // 'welcome' = หน้าต้อนรับพร้อมปุ่มเข้าสู่ระบบ, 'form' = ฟอร์มกรอกชื่อผู้ใช้/รหัสผ่าน
+  const [stage, setStage] = useState('welcome');
+  const canvasContainerRef = useRef(null);
+
+  // ==========================================
+  //  ฉากหลัง 3 มิติ: อนุภาคแสงลอยไปมา (Three.js)
+  //  วาดลง <div ref={canvasContainerRef}> ที่ตรึงเต็มจอไว้ด้านหลังเนื้อหา
+  // ==========================================
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    let renderer, scene, camera, particles, geometry, material, spriteTexture;
+    let animationId = null;
+    let disposed = false;
+    let mouseX = 0, mouseY = 0;
+
+    // ห่อการตั้งค่าทั้งหมดด้วย try/catch: ถ้าเบราว์เซอร์ไหนไม่รองรับ WebGL
+    // หน้า login ต้องยังใช้งานได้ปกติ แค่ไม่มีพื้นหลัง 3 มิติเท่านั้น (ไม่ล่มทั้งหน้า)
+    try {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(60, width / height, 1, 3000);
+      camera.position.z = 650;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height);
+      renderer.domElement.style.display = 'block';
+      container.appendChild(renderer.domElement);
+
+      // สร้างสไปรท์วงกลมเรืองแสงด้วย canvas เอง ไม่ต้องพึ่งไฟล์รูปภายนอก
+      const spriteCanvas = document.createElement('canvas');
+      spriteCanvas.width = 64; spriteCanvas.height = 64;
+      const sctx = spriteCanvas.getContext('2d');
+      const grad = sctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.35, 'rgba(255,241,209,0.85)');
+      grad.addColorStop(1, 'rgba(255,241,209,0)');
+      sctx.fillStyle = grad;
+      sctx.fillRect(0, 0, 64, 64);
+      spriteTexture = new THREE.CanvasTexture(spriteCanvas);
+
+      // จำนวนอนุภาค: มากพอให้ดูมีมิติ แต่ไม่มากจนกระทบ performance บนมือถือ
+      const COUNT = window.innerWidth < 768 ? 900 : 1700;
+      const positions = new Float32Array(COUNT * 3);
+      const velocities = new Float32Array(COUNT * 3);
+      const colors = new Float32Array(COUNT * 3);
+
+      const gold = new THREE.Color('#F3D999');
+      const deepGold = new THREE.Color('#CEA85E');
+      const white = new THREE.Color('#FFFFFF');
+      const tmpColor = new THREE.Color();
+
+      const BOUND_X = 900, BOUND_Y_TOP = 600, BOUND_Y_BOTTOM = -600, BOUND_Z = 700;
+
+      for (let i = 0; i < COUNT; i++) {
+        const i3 = i * 3;
+        positions[i3] = (Math.random() - 0.5) * BOUND_X * 2;
+        positions[i3 + 1] = BOUND_Y_BOTTOM + Math.random() * (BOUND_Y_TOP - BOUND_Y_BOTTOM);
+        positions[i3 + 2] = (Math.random() - 0.5) * BOUND_Z * 2;
+
+        velocities[i3] = (Math.random() - 0.5) * 0.12;
+        velocities[i3 + 1] = Math.random() * 0.15 + 0.03; // ลอยขึ้นช้าๆ เหมือนประกายไฟลอย
+        velocities[i3 + 2] = (Math.random() - 0.5) * 0.08;
+
+        tmpColor.copy(Math.random() < 0.12 ? white : gold).lerp(deepGold, Math.random() * 0.7);
+        colors[i3] = tmpColor.r; colors[i3 + 1] = tmpColor.g; colors[i3 + 2] = tmpColor.b;
+      }
+
+      geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      material = new THREE.PointsMaterial({
+        size: 7,
+        map: spriteTexture,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+      });
+
+      particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+
+      const clock = new THREE.Clock();
+
+      const animate = () => {
+        if (disposed) return;
+        animationId = requestAnimationFrame(animate);
+        try {
+          const t = clock.getElapsedTime();
+          const posArr = geometry.attributes.position.array;
+          for (let i = 0; i < COUNT; i++) {
+            const i3 = i * 3;
+            posArr[i3] += velocities[i3] + Math.sin(t * 0.25 + i) * 0.025;
+            posArr[i3 + 1] += velocities[i3 + 1];
+            posArr[i3 + 2] += velocities[i3 + 2];
+
+            if (posArr[i3 + 1] > BOUND_Y_TOP) posArr[i3 + 1] = BOUND_Y_BOTTOM;
+            if (posArr[i3] > BOUND_X) posArr[i3] = -BOUND_X;
+            if (posArr[i3] < -BOUND_X) posArr[i3] = BOUND_X;
+            if (posArr[i3 + 2] > BOUND_Z) posArr[i3 + 2] = -BOUND_Z;
+            if (posArr[i3 + 2] < -BOUND_Z) posArr[i3 + 2] = BOUND_Z;
+          }
+          geometry.attributes.position.needsUpdate = true;
+          particles.rotation.y = t * 0.02;
+
+          // เอฟเฟกต์ parallax ตามเมาส์แบบนุ่มนวล (ไม่กระตุก)
+          camera.position.x += (mouseX * 50 - camera.position.x) * 0.02;
+          camera.position.y += (-mouseY * 50 - camera.position.y) * 0.02;
+          camera.lookAt(scene.position);
+
+          renderer.render(scene, camera);
+        } catch (frameErr) {
+          console.error('พื้นหลัง 3 มิติ: เกิดข้อผิดพลาดระหว่างวาดเฟรม', frameErr);
+        }
+      };
+      animate();
+
+      const handleMouseMove = (e) => {
+        mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+        mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+      };
+      const handleResize = () => {
+        if (!renderer || !camera) return;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      };
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('resize', handleResize);
+
+      return () => {
+        disposed = true;
+        if (animationId) cancelAnimationFrame(animationId);
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('resize', handleResize);
+        geometry.dispose();
+        material.dispose();
+        spriteTexture.dispose();
+        renderer.dispose();
+        if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+      };
+    } catch (setupErr) {
+      // เบราว์เซอร์ไม่รองรับ WebGL หรือเกิดปัญหาตอนตั้งค่า: ปล่อยผ่าน ไม่ให้หน้า login ล่ม
+      console.error('ไม่สามารถแสดงพื้นหลัง 3 มิติได้ (เบราว์เซอร์นี้อาจไม่รองรับ WebGL):', setupErr);
+      return () => {};
+    }
+  }, []);
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 font-sans relative">
-      <AppBackground/>
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 font-sans">
+      {/* พื้นหลังอนุภาคแสง 3 มิติ (Three.js) เต็มจอ อยู่ชั้นล่างสุด */}
+      <div ref={canvasContainerRef} className="fixed inset-0 -z-20"></div>
+      {/* ไล่เฉดกรมท่าทับพื้นหลัง ให้ตัวหนังสือด้านหน้าอ่านง่ายและเข้าธีมบริษัท */}
+      <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0A142A]/95 via-[#0F1B38]/85 to-[#0A142A]/95 pointer-events-none"></div>
+      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_#0A142A_90%)] pointer-events-none"></div>
+
       <AppCredit/>
-      {/* กรอบไล่เฉดสีทอง: ใช้ชั้นนอกเป็น gradient แล้วเว้นขอบ 2px ให้เห็นเป็นเส้นขอบทอง */}
-      <div className="max-w-md w-full rounded-[2.6rem] p-[2px] bg-gradient-to-br from-[#F3D999] via-[#CEA85E] to-[#9A7434] shadow-[0_20px_60px_-15px_rgba(154,116,52,0.45)]">
-        <div className="rounded-[2.5rem] bg-gradient-to-b from-white via-white to-[#FFFBF2] backdrop-blur-xl p-8 md:p-10 space-y-8">
-          <div className="text-center space-y-4">
-            <ResilientLogo className="mx-auto h-24 md:h-32 rounded-3xl shadow-xl w-full max-w-[320px]"/>
-            <div className="flex items-center justify-center gap-3">
-              <span className="h-px w-10 bg-gradient-to-r from-transparent to-[#CEA85E]"></span>
-              <p className="text-sm md:text-base font-semibold tracking-wide text-[#9A7434]">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
-              <span className="h-px w-10 bg-gradient-to-l from-transparent to-[#CEA85E]"></span>
+
+      <div className="relative z-10 w-full max-w-md">
+        {stage === 'welcome' ? (
+          <div className="text-center space-y-8 animate-in fade-in zoom-in-95 duration-700">
+            <ResilientLogo className="mx-auto h-28 md:h-36 rounded-3xl shadow-2xl shadow-black/40 w-full max-w-[320px]"/>
+            <div className="space-y-3">
+              <h1 className="text-2xl md:text-3xl font-bold text-[#F3D999] tracking-wide">ยินดีต้อนรับ</h1>
+              <p className="text-sm md:text-base text-white/60 font-medium leading-relaxed">
+                ระบบจัดการภายในของ The Resilient Clinic<br/>เข้าสู่ระบบเพื่อเริ่มใช้งาน
+              </p>
+            </div>
+            <button onClick={() => setStage('form')} className="group relative px-10 py-4 bg-gradient-to-r from-[#CEA85E] to-[#F3D999] text-[#0A142A] rounded-2xl font-bold text-base shadow-[0_10px_40px_-10px_rgba(206,168,94,0.6)] hover:shadow-[0_15px_50px_-8px_rgba(206,168,94,0.8)] transition-all hover:-translate-y-1 active:translate-y-0">
+              เข้าสู่ระบบ
+              <span className="inline-block ml-2 transition-transform group-hover:translate-x-1">→</span>
+            </button>
+          </div>
+        ) : (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="rounded-[2.6rem] p-[2px] bg-gradient-to-br from-[#F3D999] via-[#CEA85E] to-[#9A7434] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]">
+              <div className="rounded-[2.5rem] bg-[#0A142A]/85 backdrop-blur-2xl p-8 md:p-10 space-y-7 border border-white/5">
+                <div className="text-center space-y-3">
+                  <button onClick={() => setStage('welcome')} className="text-[#CEA85E]/70 hover:text-[#F3D999] text-xs font-bold mb-1 transition-colors inline-flex items-center">← กลับ</button>
+                  <ResilientLogo className="mx-auto h-16 md:h-20 rounded-2xl shadow-lg shadow-black/30 w-full max-w-[220px]"/>
+                  <p className="text-sm text-[#EADBBB]/80 font-semibold tracking-wide">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
+                </div>
+                <form onSubmit={handleLogin} className="space-y-6">
+                  {error && <div className="bg-red-500/10 text-red-300 p-3.5 rounded-2xl text-sm text-center font-bold border border-red-400/30 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">{error}</div>}
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#CEA85E]">ชื่อผู้ใช้งาน</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={20} className="text-[#CEA85E]/80"/></div>
+                        <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-white/10 rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-white/5 hover:bg-white/10 font-medium text-white placeholder:text-white/30" placeholder="admin หรือ user" required autoFocus />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#CEA85E]">รหัสผ่าน</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={20} className="text-[#CEA85E]/80"/></div>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-white/10 rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-white/5 hover:bg-white/10 font-medium text-white placeholder:text-white/30" placeholder="••••••" required />
+                      </div>
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full bg-gradient-to-r from-[#CEA85E] to-[#F3D999] hover:brightness-110 text-[#0A142A] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(206,168,94,0.35)] transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
+                </form>
+                <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#9A7434]">V.41</p>
+              </div>
             </div>
           </div>
-          <form onSubmit={handleLogin} className="space-y-6">
-            {error && <div className="bg-red-50/80 text-red-600 p-3.5 rounded-2xl text-sm text-center font-bold border border-red-100 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">{error}</div>}
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#9A7434]">ชื่อผู้ใช้งาน</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={20} className="text-[#CEA85E]"/></div>
-                  <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-[#EADBBB] rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-[#FFFCF6] hover:bg-white font-medium text-slate-800" placeholder="admin หรือ user" required />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-extrabold mb-2 ml-1 uppercase tracking-[0.15em] text-[#9A7434]">รหัสผ่าน</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={20} className="text-[#CEA85E]"/></div>
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-3.5 border-2 border-[#EADBBB] rounded-2xl focus:ring-4 focus:ring-[#CEA85E]/20 focus:border-[#CEA85E] transition-all text-sm md:text-base outline-none bg-[#FFFCF6] hover:bg-white font-medium text-slate-800" placeholder="••••••" required />
-                </div>
-              </div>
-            </div>
-            <button type="submit" className="w-full bg-gradient-to-r from-[#0A142A] via-[#152747] to-[#0A142A] hover:from-[#152747] hover:via-[#1d3560] hover:to-[#152747] text-[#F3D999] py-4 rounded-2xl text-base font-bold tracking-wide transition-all shadow-[0_8px_30px_rgba(10,20,42,0.35)] border border-[#CEA85E]/40 transform hover:-translate-y-1 active:translate-y-0">เข้าสู่ระบบ</button>
-          </form>
-          <p className="text-center text-[11px] font-bold tracking-[0.2em] text-[#C3A874]">V.40</p>
-        </div>
+        )}
       </div>
     </div>
   );
